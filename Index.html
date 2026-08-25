@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fourball Scorer</title>
+<style>
+  :root{
+    --ink:#1a2420;
+    --paper:#fbfaf7;
+    --line:#d8d3c8;
+    --green:#2f6b4f;
+    --green-dim:#e7efe9;
+    --amber:#b5792f;
+    --red:#a4402f;
+    --muted:#7a746a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:20px 16px 80px;}
+  h1{font-size:1.4rem;margin:0 0 4px;letter-spacing:-0.01em;}
+  h2{font-size:1.05rem;margin:24px 0 10px;color:var(--ink);border-bottom:1px solid var(--line);padding-bottom:6px;}
+  .subtitle{color:var(--muted);font-size:.9rem;margin-bottom:20px;}
+  label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:4px;margin-top:12px;}
+  input[type=text], input[type=number], select{
+    width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;
+    background:#fff;font-size:.95rem;color:var(--ink);
+  }
+  input:focus, select:focus{outline:2px solid var(--green);outline-offset:1px;}
+  button{
+    font-family:inherit;font-size:.9rem;font-weight:600;
+    border:1px solid var(--ink);background:var(--ink);color:var(--paper);
+    padding:9px 16px;border-radius:6px;cursor:pointer;
+  }
+  button.secondary{background:transparent;color:var(--ink);}
+  button.ghost{background:transparent;color:var(--muted);border-color:var(--line);}
+  button:disabled{opacity:.4;cursor:not-allowed;}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+  .card{border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:12px;background:#fff;}
+  table{width:100%;border-collapse:collapse;font-size:.85rem;}
+  th,td{border:1px solid var(--line);padding:5px 6px;text-align:center;}
+  th{background:var(--green-dim);font-weight:600;font-size:.75rem;color:var(--green);}
+  td.name-col, th.name-col{text-align:left;min-width:110px;}
+  .hole-input{width:44px;padding:4px;text-align:center;}
+  .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:.72rem;font-weight:600;}
+  .pill.mode{background:var(--green-dim);color:var(--green);margin:2px 4px 2px 0;}
+  .checkbox-row{display:flex;align-items:center;gap:8px;margin:8px 0;}
+  .checkbox-row input{width:auto;}
+  .link-box{display:flex;gap:8px;align-items:center;background:var(--green-dim);border-radius:8px;padding:10px 12px;margin-top:8px;}
+  .link-box input{background:#fff;font-size:.8rem;}
+  .muted{color:var(--muted);font-size:.82rem;}
+  .team-a{color:var(--green);font-weight:600;}
+  .team-b{color:var(--amber);font-weight:600;}
+  .status-up{color:var(--green);font-weight:700;}
+  .status-down{color:var(--red);font-weight:700;}
+  .status-all-sq{color:var(--muted);font-weight:700;}
+  .leader-row{font-weight:700;}
+  .top-bar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px;}
+  .badge-live{display:inline-flex;align-items:center;gap:6px;font-size:.75rem;color:var(--green);}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 1.6s infinite;}
+  @keyframes pulse{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
+  .hole-nav{display:flex;align-items:center;gap:10px;margin:10px 0;}
+  .hole-nav button{padding:6px 10px;}
+  .hole-nav .current{font-weight:700;font-size:1.05rem;min-width:110px;text-align:center;}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  @media (max-width:600px){.grid-2{grid-template-columns:1fr;}}
+  .config-note{font-size:.78rem;color:var(--muted);border:1px dashed var(--line);padding:8px 10px;border-radius:8px;margin-bottom:16px;}
+  a{color:var(--green);}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+
+<script type="module">
+/* ======================= CONFIG =======================
+   Firebase config is public-by-design (security lives in
+   Firestore rules, not this key) — fine to leave hardcoded
+   once you've filled it in from Project Settings > General
+   > Your apps > SDK setup and configuration.
+*/
+const firebaseConfig = {
+  apiKey: "AIzaSyBXE-xMV0-p1WPt_o5a7NTUnHsJngLK-yc",
+  authDomain: "pk-golf-9ba98.firebaseapp.com",
+  projectId: "pk-golf-9ba98",
+  storageBucket: "pk-golf-9ba98.firebasestorage.app",
+  messagingSenderId: "51812040569",
+  appId: "1:51812040569:web:05e4b66a9480b9793639a8"
+};
+/* ======================================================= */
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getFirestore, collection, doc, setDoc, addDoc, getDoc, getDocs,
+  query, where, onSnapshot, writeBatch, serverTimestamp, limit
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const configured = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith("YOUR_");
+let db = null;
+if (configured){
+  const app = initializeApp(firebaseConfig);
+  db = getFirestore(app);
+}
+
+const GAME_MODES = [
+  { key: "stroke",     label: "Stroke play (gross/net)" },
+  { key: "stableford",  label: "Stableford" },
+  { key: "matchplay",  label: "Match play (2 v 2)" },
+  { key: "alliance",   label: "Alliance (best 2 of 4)" },
+];
+
+/* ---------- scoring helpers ---------- */
+function strokesReceived(hcp, si){
+  hcp = Math.max(0, hcp|0);
+  const base = Math.floor(hcp / 18);
+  const remainder = hcp % 18;
+  return base + (si <= remainder ? 1 : 0);
+}
+function stablefordPoints(par, netStrokes){
+  if (netStrokes == null) return null;
+  const diff = netStrokes - par;
+  return Math.max(2 - diff, 0);
+}
+function fmtDiff(n){
+  if (n > 0) return "+" + n;
+  if (n === 0) return "E";
+  return String(n);
+}
+
+/* ---------- tiny router ---------- */
+function parseHash(){
+  const h = location.hash.replace(/^#\/?/, "");
+  return h.split("/").filter(Boolean);
+}
+window.addEventListener("hashchange", render);
+
+async function render(){
+  const parts = parseHash();
+  const app = document.getElementById("app");
+
+  if (!configured){
+    app.innerHTML = `
+      <h1>⛳ Fourball Scorer</h1>
+      <div class="card">
+        <strong>Setup needed</strong>
+        <p class="muted">Open this file's &lt;script&gt; section and fill in <code>firebaseConfig</code>
+        with your Firebase project's values (Project Settings &gt; General &gt; Your apps), create a
+        Firestore database for the project (test mode is fine to start), apply the security rules
+        from the setup notes, then reload this page.</p>
+      </div>`;
+    return;
+  }
+
+  if (parts[0] === "score" && parts[1]) return renderScorer(parts[1]);
+  if (parts[0] === "spectate" && parts[1]) return renderSpectator(parts[1]);
+  return renderSetup();
+}
+
+/* ============================================================
+   SETUP VIEW — create a round
+   ============================================================ */
+function renderSetup(){
+  const app = document.getElementById("app");
+  app.innerHTML = `
+    <h1>⛳ Fourball Scorer</h1>
+    <p class="subtitle">Set up a round, score it live, share a spectator link.</p>
+
+    <div class="card">
+      <label>Round name</label>
+      <input type="text" id="roundName" placeholder="e.g. Saturday Fourball">
+      <label>Course name</label>
+      <input type="text" id="courseName" placeholder="e.g. Unika Golf Club">
+
+      <h2>Game modes</h2>
+      <div id="modesBox"></div>
+
+      <h2>Players &amp; handicaps</h2>
+      <div id="playersBox"></div>
+
+      <h2>Holes — par &amp; stroke index</h2>
+      <p class="muted">Quick default fills par 4 / sequential SI — edit any cell.</p>
+      <div style="overflow-x:auto"><table id="holesTable"></table></div>
+
+      <div class="row" style="margin-top:16px;">
+        <button id="createBtn">Create round</button>
+        <span id="createMsg" class="muted"></span>
+      </div>
+    </div>
+  `;
+
+  const modesBox = document.getElementById("modesBox");
+  modesBox.innerHTML = GAME_MODES.map(m => `
+    <div class="checkbox-row">
+      <input type="checkbox" class="mode-cb" value="${m.key}" id="mode-${m.key}">
+      <label style="margin:0" for="mode-${m.key}">${m.label}</label>
+    </div>`).join("");
+
+  const playersBox = document.getElementById("playersBox");
+  playersBox.innerHTML = [1,2,3,4].map(i => `
+    <div class="grid-2" style="margin-bottom:8px;">
+      <div>
+        <label>Player ${i} name</label>
+        <input type="text" class="p-name" id="p${i}-name" placeholder="Player ${i}">
+      </div>
+      <div class="row" style="gap:8px;">
+        <div style="flex:1">
+          <label>Playing handicap</label>
+          <input type="number" class="p-hcp" id="p${i}-hcp" value="0">
+        </div>
+        <div style="flex:1">
+          <label>Team (match play)</label>
+          <select class="p-team" id="p${i}-team">
+            <option value="A" ${i<=2?"selected":""}>A</option>
+            <option value="B" ${i>2?"selected":""}>B</option>
+          </select>
+        </div>
+      </div>
+    </div>`).join("");
+
+  const holesTable = document.getElementById("holesTable");
+  function buildHolesTable(){
+    let head = "<tr><th>Hole</th>" + Array.from({length:18},(_,i)=>`<th>${i+1}</th>`).join("") + "</tr>";
+    let parRow = "<tr><td>Par</td>" + Array.from({length:18},(_,i)=>
+      `<td><input class="hole-input h-par" data-hole="${i+1}" type="number" value="4"></td>`).join("") + "</tr>";
+    let siRow = "<tr><td>S.I.</td>" + Array.from({length:18},(_,i)=>
+      `<td><input class="hole-input h-si" data-hole="${i+1}" type="number" value="${i+1}"></td>`).join("") + "</tr>";
+    holesTable.innerHTML = head + parRow + siRow;
+  }
+  buildHolesTable();
+
+  document.getElementById("createBtn").onclick = createRound;
+}
+
+async function createRound(){
+  const msg = document.getElementById("createMsg");
+  const roundName = document.getElementById("roundName").value.trim() || "Fourball";
+  const courseName = document.getElementById("courseName").value.trim() || "Course";
+  const modes = Array.from(document.querySelectorAll(".mode-cb:checked")).map(cb => cb.value);
+  if (modes.length === 0){ msg.textContent = "Pick at least one game mode."; return; }
+
+  const players = [1,2,3,4].map(i => ({
+    name: document.getElementById(`p${i}-name`).value.trim() || `Player ${i}`,
+    playingHandicap: parseInt(document.getElementById(`p${i}-hcp`).value || "0", 10),
+    team: document.getElementById(`p${i}-team`).value,
+    sortOrder: i
+  }));
+
+  const holes = Array.from({length:18},(_,i)=>{
+    const n = i+1;
+    return {
+      holeNumber: n,
+      par: parseInt(document.querySelector(`.h-par[data-hole="${n}"]`).value || "4", 10),
+      strokeIndex: parseInt(document.querySelector(`.h-si[data-hole="${n}"]`).value || String(n), 10),
+    };
+  });
+
+  msg.textContent = "Creating…";
+  try{
+    const spectatorCode = Math.random().toString(36).slice(2,8);
+
+    const roundRef = await addDoc(collection(db, "golf_rounds"), {
+      name: roundName, courseName, gameModes: modes, spectatorCode,
+      status: "active", createdAt: serverTimestamp()
+    });
+
+    const batch = writeBatch(db);
+    holes.forEach(h => {
+      batch.set(doc(db, "golf_rounds", roundRef.id, "holes", String(h.holeNumber)), h);
+    });
+    const playerIds = [];
+    players.forEach(p => {
+      const pRef = doc(collection(db, "golf_rounds", roundRef.id, "players"));
+      playerIds.push(pRef.id);
+      batch.set(pRef, p);
+    });
+    await batch.commit();
+
+    location.hash = `#/score/${roundRef.id}`;
+  } catch(err){
+    msg.textContent = "Error: " + err.message;
+  }
+}
+
+/* ============================================================
+   SCORER VIEW
+   ============================================================ */
+let scorerData = null; // {round, holes, players, scores}
+let scorerHole = 1;
+let scorerUnsub = null;
+
+async function loadRoundBundle(roundId){
+  const roundSnap = await getDoc(doc(db, "golf_rounds", roundId));
+  if (!roundSnap.exists()) return { round: null };
+  const round = { id: roundSnap.id, ...roundSnap.data() };
+
+  const holesSnap = await getDocs(collection(db, "golf_rounds", roundId, "holes"));
+  const holes = holesSnap.docs.map(d => d.data()).sort((a,b)=>a.holeNumber-b.holeNumber);
+
+  const playersSnap = await getDocs(collection(db, "golf_rounds", roundId, "players"));
+  const players = playersSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b)=>a.sortOrder-b.sortOrder);
+
+  const scoresSnap = await getDocs(collection(db, "golf_rounds", roundId, "scores"));
+  const scores = scoresSnap.docs.map(d => d.data());
+
+  return { round, holes, players, scores };
+}
+
+async function renderScorer(roundId){
+  const app = document.getElementById("app");
+  app.innerHTML = `<p class="muted">Loading…</p>`;
+  scorerData = await loadRoundBundle(roundId);
+  if (!scorerData.round){ app.innerHTML = `<p>Round not found.</p>`; return; }
+
+  const spectatorUrl = location.origin + location.pathname + `#/spectate/${scorerData.round.spectatorCode}`;
+
+  app.innerHTML = `
+    <div class="top-bar">
+      <div>
+        <h1>${scorerData.round.name}</h1>
+        <p class="subtitle" style="margin:0">${scorerData.round.courseName}</p>
+      </div>
+      <span class="badge-live"><span class="dot"></span>live</span>
+    </div>
+    <div>${scorerData.round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
+
+    <div class="link-box">
+      <span class="muted">Spectator link:</span>
+      <input type="text" readonly value="${spectatorUrl}" onclick="this.select()">
+      <button class="ghost" id="copyBtn">Copy</button>
+    </div>
+
+    <h2>Enter scores</h2>
+    <div class="hole-nav">
+      <button id="prevHole" class="secondary">&larr;</button>
+      <div class="current" id="holeLabel"></div>
+      <button id="nextHole" class="secondary">&rarr;</button>
+    </div>
+    <div class="card" id="entryCard"></div>
+
+    <h2>Leaderboards</h2>
+    <div id="boards"></div>
+  `;
+
+  document.getElementById("copyBtn").onclick = () => navigator.clipboard.writeText(spectatorUrl);
+  document.getElementById("prevHole").onclick = () => { scorerHole = Math.max(1, scorerHole-1); renderEntry(); };
+  document.getElementById("nextHole").onclick = () => { scorerHole = Math.min(18, scorerHole+1); renderEntry(); };
+
+  renderEntry();
+  renderBoards();
+
+  if (scorerUnsub) scorerUnsub();
+  scorerUnsub = onSnapshot(collection(db, "golf_rounds", roundId, "scores"), snap => {
+    scorerData.scores = snap.docs.map(d => d.data());
+    renderBoards();
+  });
+}
+
+function renderEntry(){
+  const hole = scorerData.holes.find(h => h.holeNumber === scorerHole);
+  document.getElementById("holeLabel").textContent = `Hole ${scorerHole} · Par ${hole.par} · SI ${hole.strokeIndex}`;
+  const card = document.getElementById("entryCard");
+  card.innerHTML = scorerData.players.map(p => {
+    const existing = scorerData.scores.find(s => s.playerId === p.id && s.holeNumber === scorerHole);
+    return `
+      <div class="row" style="justify-content:space-between;margin-bottom:8px;">
+        <span>${p.name} <span class="muted">(hcp ${p.playingHandicap}${p.team ? ", team "+p.team : ""})</span></span>
+        <input type="number" min="1" max="15" class="hole-input score-input" data-player="${p.id}"
+          value="${existing ? existing.grossStrokes : ""}" placeholder="-">
+      </div>`;
+  }).join("");
+  card.querySelectorAll(".score-input").forEach(inp => {
+    inp.addEventListener("change", async (e) => {
+      const val = e.target.value === "" ? null : parseInt(e.target.value, 10);
+      const playerId = e.target.dataset.player;
+      const docId = `${playerId}_${scorerHole}`;
+      await setDoc(doc(db, "golf_rounds", scorerData.round.id, "scores", docId), {
+        playerId, holeNumber: scorerHole, grossStrokes: val, updatedAt: serverTimestamp()
+      });
+      // local echo (snapshot listener will also update this shortly)
+      const idx = scorerData.scores.findIndex(s => s.playerId === playerId && s.holeNumber === scorerHole);
+      const rec = { playerId, holeNumber: scorerHole, grossStrokes: val };
+      if (idx >= 0) scorerData.scores[idx] = rec; else scorerData.scores.push(rec);
+      renderBoards();
+    });
+  });
+}
+
+function renderBoards(){
+  document.getElementById("boards").innerHTML = buildBoardsHtml(scorerData);
+}
+
+/* ============================================================
+   SPECTATOR VIEW (read-only, realtime)
+   ============================================================ */
+let spectatorUnsub = null;
+
+async function renderSpectator(code){
+  const app = document.getElementById("app");
+  app.innerHTML = `<p class="muted">Loading…</p>`;
+
+  const q = query(collection(db, "golf_rounds"), where("spectatorCode", "==", code), limit(1));
+  const snap = await getDocs(q);
+  if (snap.empty){ app.innerHTML = `<p>Round not found.</p>`; return; }
+  const roundId = snap.docs[0].id;
+
+  const bundle = await loadRoundBundle(roundId);
+
+  app.innerHTML = `
+    <div class="top-bar">
+      <div>
+        <h1>${bundle.round.name}</h1>
+        <p class="subtitle" style="margin:0">${bundle.round.courseName}</p>
+      </div>
+      <span class="badge-live"><span class="dot"></span>live</span>
+    </div>
+    <div>${bundle.round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
+    <h2>Leaderboards</h2>
+    <div id="boards">${buildBoardsHtml(bundle)}</div>
+  `;
+
+  if (spectatorUnsub) spectatorUnsub();
+  spectatorUnsub = onSnapshot(collection(db, "golf_rounds", roundId, "scores"), snap => {
+    bundle.scores = snap.docs.map(d => d.data());
+    document.getElementById("boards").innerHTML = buildBoardsHtml(bundle);
+  });
+}
+
+/* ============================================================
+   SCORING ENGINE + BOARD RENDERING (shared by scorer & spectator)
+   ============================================================ */
+function buildBoardsHtml(bundle){
+  const { round, holes, players, scores } = bundle;
+  const scoreMap = {};
+  players.forEach(p => scoreMap[p.id] = {});
+  scores.forEach(s => { if (scoreMap[s.playerId]) scoreMap[s.playerId][s.holeNumber] = s.grossStrokes; });
+
+  const detail = {};
+  players.forEach(p => {
+    detail[p.id] = {};
+    holes.forEach(h => {
+      const gross = scoreMap[p.id][h.holeNumber];
+      if (gross == null){ detail[p.id][h.holeNumber] = { gross:null, net:null, pts:null }; return; }
+      const sr = strokesReceived(p.playingHandicap, h.strokeIndex);
+      const net = gross - sr;
+      const pts = stablefordPoints(h.par, net);
+      detail[p.id][h.holeNumber] = { gross, net, pts, sr };
+    });
+  });
+
+  let html = "";
+  if (round.gameModes.includes("stroke")) html += buildStrokeBoard(players, holes, detail);
+  if (round.gameModes.includes("stableford")) html += buildStablefordBoard(players, holes, detail);
+  if (round.gameModes.includes("matchplay")) html += buildMatchPlayBoard(players, holes, detail);
+  if (round.gameModes.includes("alliance")) html += buildAllianceBoard(players, holes, detail);
+  return html;
+}
+
+function totalsFor(players, holes, detail, field){
+  const totals = {};
+  players.forEach(p => {
+    let sum = 0, count = 0;
+    holes.forEach(h => {
+      const v = detail[p.id][h.holeNumber][field];
+      if (v != null){ sum += v; count++; }
+    });
+    totals[p.id] = { sum, count };
+  });
+  return totals;
+}
+
+function buildStrokeBoard(players, holes, detail){
+  const gross = totalsFor(players, holes, detail, "gross");
+  const net = totalsFor(players, holes, detail, "net");
+  const rows = players.map(p => ({ p, g: gross[p.id], n: net[p.id] }))
+    .sort((a,b) => (a.n.count ? a.n.sum : 999) - (b.n.count ? b.n.sum : 999));
+
+  return `
+  <div class="card">
+    <strong>Stroke play</strong> <span class="muted">— gross / net</span>
+    <table style="margin-top:8px;">
+      <tr><th class="name-col">Player</th><th>Thru</th><th>Gross</th><th>Net</th><th>Net vs par</th></tr>
+      ${rows.map(r => `
+        <tr>
+          <td class="name-col">${r.p.name}</td>
+          <td>${r.g.count}</td>
+          <td>${r.g.count ? r.g.sum : "-"}</td>
+          <td>${r.n.count ? r.n.sum : "-"}</td>
+          <td>${r.n.count ? fmtDiff(r.n.sum - holes.slice(0,r.n.count).reduce((a,h)=>a+h.par,0)) : "-"}</td>
+        </tr>`).join("")}
+    </table>
+  </div>`;
+}
+
+function buildStablefordBoard(players, holes, detail){
+  const pts = totalsFor(players, holes, detail, "pts");
+  const rows = players.map(p => ({ p, s: pts[p.id] })).sort((a,b) => b.s.sum - a.s.sum);
+  return `
+  <div class="card">
+    <strong>Stableford</strong> <span class="muted">— points, higher is better</span>
+    <table style="margin-top:8px;">
+      <tr><th class="name-col">Player</th><th>Thru</th><th>Points</th></tr>
+      ${rows.map((r,i) => `
+        <tr class="${i===0 && r.s.count ? 'leader-row' : ''}">
+          <td class="name-col">${r.p.name}</td>
+          <td>${r.s.count}</td>
+          <td>${r.s.count ? r.s.sum : "-"}</td>
+        </tr>`).join("")}
+    </table>
+  </div>`;
+}
+
+function buildMatchPlayBoard(players, holes, detail){
+  const teamA = players.filter(p => p.team === "A");
+  const teamB = players.filter(p => p.team === "B");
+  if (teamA.length === 0 || teamB.length === 0){
+    return `<div class="card"><strong>Match play</strong><p class="muted">Needs players on both Team A and Team B.</p></div>`;
+  }
+  let holesUp = 0, holesPlayed = 0;
+  for (const h of holes){
+    const aNets = teamA.map(p => detail[p.id][h.holeNumber].net).filter(v => v != null);
+    const bNets = teamB.map(p => detail[p.id][h.holeNumber].net).filter(v => v != null);
+    if (aNets.length < teamA.length || bNets.length < teamB.length) break;
+    const aBest = Math.min(...aNets), bBest = Math.min(...bNets);
+    holesPlayed++;
+    if (aBest < bBest) holesUp++;
+    else if (bBest < aBest) holesUp--;
+  }
+  const remaining = 18 - holesPlayed;
+  let statusText, statusClass;
+  if (holesPlayed === 0){ statusText = "Not started"; statusClass = "status-all-sq"; }
+  else if (Math.abs(holesUp) > remaining){
+    statusText = `${Math.abs(holesUp)} & ${remaining} — Team ${holesUp>0?'A':'B'} wins`;
+    statusClass = holesUp>0 ? "status-up" : "status-down";
+  } else if (holesUp === 0){ statusText = "All square"; statusClass = "status-all-sq"; }
+  else { statusText = `Team ${holesUp>0?'A':'B'} ${Math.abs(holesUp)} up`; statusClass = holesUp>0 ? "status-up" : "status-down"; }
+
+  return `
+  <div class="card">
+    <strong>Match play</strong>
+    <span class="muted">— <span class="team-a">Team A</span>: ${teamA.map(p=>p.name).join(", ")}
+    vs <span class="team-b">Team B</span>: ${teamB.map(p=>p.name).join(", ")} · better-ball net</span>
+    <p class="${statusClass}" style="font-size:1.1rem;margin:10px 0 0;">${statusText}</p>
+    <p class="muted" style="margin:2px 0 0;">Through ${holesPlayed} hole${holesPlayed===1?"":"s"}</p>
+  </div>`;
+}
+
+function buildAllianceBoard(players, holes, detail){
+  let total = 0, thru = 0;
+  for (const h of holes){
+    const pts = players.map(p => detail[p.id][h.holeNumber].pts).filter(v => v != null);
+    if (pts.length < players.length) continue;
+    pts.sort((a,b)=>b-a);
+    total += pts[0] + pts[1];
+    thru++;
+  }
+  return `
+  <div class="card">
+    <strong>Alliance</strong> <span class="muted">— best 2 of 4 net-stableford scores per hole</span>
+    <p style="font-size:1.1rem;margin:10px 0 0;">${thru ? total + " points" : "Not started"} <span class="muted" style="font-size:.85rem;">(thru ${thru})</span></p>
+  </div>`;
+}
+
+render();
+</script>
+</body>
+</html>
