@@ -1551,10 +1551,24 @@ function buildAllianceBoard(bundle, detail){
   const data = computeAllianceData(bundle, detail);
   const thru = data.filter(d => d.teamPts != null).length;
   const total = data.reduce((a,d) => a + (d.teamPts || 0), 0);
+
+  const grossTotals = totalsFor(players, bundle.holes, detail, "gross");
+  const ptsTotals = totalsFor(players, bundle.holes, detail, "pts");
+
   return `
   <div class="card">
     <strong>Alliance</strong> <span class="muted">— best ${n} of ${players.length} net-stableford scores per hole</span>
     <p style="font-size:1.1rem;margin:10px 0 4px;">${thru ? total + " points" : "Not started"} <span class="muted" style="font-size:.85rem;">(thru ${thru})</span></p>
+    <table style="margin-top:8px;">
+      <tr><th class="name-col">Player</th><th>Thru</th><th>Gross</th><th>Points</th></tr>
+      ${players.map(p => `
+        <tr>
+          <td class="name-col">${playerLink(p)}</td>
+          <td>${grossTotals[p.id].count}</td>
+          <td>${grossTotals[p.id].count ? grossTotals[p.id].sum : "-"}</td>
+          <td>${ptsTotals[p.id].count ? ptsTotals[p.id].sum : "-"}</td>
+        </tr>`).join("")}
+    </table>
     <div class="team-scorecard-link">Fourball: ${players.map(p=>p.name).join(", ")} — view full scorecard</div>
   </div>`;
 }
