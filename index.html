@@ -117,8 +117,8 @@ const firebaseConfig = {
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getFirestore, collection, doc, setDoc, addDoc, getDoc, getDocs, updateDoc,
-  query, where, onSnapshot, writeBatch, serverTimestamp, limit
+  getFirestore, collection, doc, setDoc, addDoc, getDoc, getDocs, updateDoc, deleteDoc,
+  query, where, orderBy, onSnapshot, writeBatch, serverTimestamp, limit
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const configured = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith("YOUR_");
@@ -151,6 +151,33 @@ function fmtDiff(n){
   if (n > 0) return "+" + n;
   if (n === 0) return "E";
   return String(n);
+}
+
+/* ---------- course database (golf_courses) ---------- */
+function slugify(name){
+  return (name || "course").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "course";
+}
+async function saveCourseToDatabase(courseName, holes){
+  const slug = slugify(courseName);
+  await setDoc(doc(db, "golf_courses", slug), {
+    name: courseName,
+    holes: holes.map(h => ({ holeNumber: h.holeNumber, par: h.par, strokeIndex: h.strokeIndex })),
+    updatedAt: serverTimestamp()
+  });
+}
+async function loadCoursesList(){
+  const snap = await getDocs(collection(db, "golf_courses"));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => a.name.localeCompare(b.name));
+}
+async function loadRoundsList(){
+  try{
+    const snap = await getDocs(query(collection(db, "golf_rounds"), orderBy("createdAt", "desc"), limit(25)));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch(err){
+    // orderBy needs the field on every doc; fall back to unordered if that ever fails
+    const snap = await getDocs(collection(db, "golf_rounds"));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  }
 }
 
 /* ---------- shared header ---------- */
@@ -212,7 +239,15 @@ function renderSetup(){
   app.innerHTML = `
     ${renderAppHeader("Fourball Scorer", "Set up a round, score it live, share a spectator link.")}
     <div class="content">
+
+    <h2>Existing rounds</h2>
+    <div class="card" id="roundsListCard"><p class="muted">Loading…</p></div>
+
+    <h2>New round</h2>
     <div class="card">
+      <label>Load saved course (optional)</label>
+      <select id="savedCourseSelect"><option value="">— none —</option></select>
+
       <label>Round name</label>
       <input type="text" id="roundName" placeholder="e.g. Saturday Fourball">
       <label>Course name</label>
@@ -235,7 +270,7 @@ function renderSetup(){
       <div id="playersBox"></div>
 
       <h2>Holes — par &amp; stroke index</h2>
-      <p class="muted">Quick default fills par 4 / sequential SI — edit any cell.</p>
+      <p class="muted">Quick default fills par 4 / sequential SI — edit any cell, or load a saved course above.</p>
       <div style="overflow-x:auto"><table id="holesTable"></table></div>
 
       <div class="row" style="margin-top:16px;">
@@ -245,6 +280,42 @@ function renderSetup(){
     </div>
     </div>
   `;
+
+  loadRoundsList().then(rounds => {
+    const card = document.getElementById("roundsListCard");
+    if (rounds.length === 0){ card.innerHTML = `<p class="muted">No rounds yet — create one below.</p>`; return; }
+    card.innerHTML = rounds.map(r => `
+      <div class="row round-item" data-round="${r.id}" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer;">
+        <div>
+          <strong>${r.name}</strong>
+          <div class="muted" style="font-size:.78rem;">${r.courseName || ""}${r.roundDate ? " · " + r.roundDate : ""}</div>
+        </div>
+        <span class="pill mode" style="background:${r.status==='finished' ? 'var(--green-dim)' : 'var(--gold-dim)'};">${r.status === "finished" ? "Final" : "Active"}</span>
+      </div>`).join("");
+    card.querySelectorAll(".round-item").forEach(el => {
+      el.addEventListener("click", () => { location.hash = `#/score/${el.dataset.round}`; });
+    });
+  });
+
+  loadCoursesList().then(courses => {
+    const select = document.getElementById("savedCourseSelect");
+    courses.forEach(c => {
+      const opt = document.createElement("option");
+      opt.value = c.id; opt.textContent = c.name;
+      select.appendChild(opt);
+    });
+    select.addEventListener("change", () => {
+      const course = courses.find(c => c.id === select.value);
+      if (!course) return;
+      document.getElementById("courseName").value = course.name;
+      course.holes.forEach(h => {
+        const parCell = document.querySelector(`.h-par[data-hole="${h.holeNumber}"]`);
+        const siCell = document.querySelector(`.h-si[data-hole="${h.holeNumber}"]`);
+        if (parCell) parCell.value = h.par;
+        if (siCell) siCell.value = h.strokeIndex;
+      });
+    });
+  });
 
   const modesBox = document.getElementById("modesBox");
   modesBox.innerHTML = GAME_MODES.map(m => `
@@ -334,6 +405,7 @@ async function createRound(){
       batch.set(pRef, p);
     });
     await batch.commit();
+    await saveCourseToDatabase(courseName, holes);
 
     location.hash = `#/score/${roundRef.id}`;
   } catch(err){
@@ -365,11 +437,14 @@ async function loadRoundBundle(roundId){
   return { round, holes, players, scores };
 }
 
+let scheduleEditMode = false;
+
 async function renderScorer(roundId){
   const app = document.getElementById("app");
   app.innerHTML = `<p class="muted">Loading…</p>`;
   scorerData = await loadRoundBundle(roundId);
   if (!scorerData.round){ app.innerHTML = `<p>Round not found.</p>`; return; }
+  scheduleEditMode = false;
 
   const spectatorUrl = location.origin + location.pathname + `#/spectate/${scorerData.round.spectatorCode}`;
   const finished = scorerData.round.status === "finished";
@@ -383,13 +458,13 @@ async function renderScorer(roundId){
     </div>
     <div class="content">
 
-    <div id="scheduleTab" style="display:none;">
-      ${buildScheduleHtml(scorerData, spectatorUrl)}
-    </div>
+    <div id="scheduleTab" style="display:none;"></div>
 
     <div id="scoreTab">
       <div>${scorerData.round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
-      ${finished ? `<div class="card" style="text-align:center;border-color:var(--green);"><strong>Round finished</strong><p class="muted" style="margin:4px 0 0;">Scores are locked. See the Leaderboards tab for final results.</p></div>` : ""}
+      ${finished
+        ? `<div class="card" style="text-align:center;border-color:var(--green);"><strong>Round finished</strong><p class="muted" style="margin:4px 0 0;">Scores are locked. See the Leaderboards tab for final results.</p></div>`
+        : `<div class="row" style="margin:10px 0;"><button id="finishBtn" style="background:var(--red);border-color:var(--red);">Finish round</button></div>`}
       <div class="hole-nav">
         <button id="prevHole" class="secondary">&larr;</button>
         <div class="current" id="holeLabel"></div>
@@ -410,12 +485,10 @@ async function renderScorer(roundId){
   document.getElementById("tabBoardsBtn").onclick = () => switchScorerTab("boards");
   document.getElementById("prevHole").onclick = () => { scorerHole = Math.max(1, scorerHole-1); renderEntry(); };
   document.getElementById("nextHole").onclick = () => { scorerHole = Math.min(18, scorerHole+1); renderEntry(); };
-
-  const copyBtn = document.getElementById("copyBtn");
-  if (copyBtn) copyBtn.onclick = () => navigator.clipboard.writeText(spectatorUrl);
   const finishBtn = document.getElementById("finishBtn");
   if (finishBtn) finishBtn.onclick = () => finishRound(roundId);
 
+  renderScheduleTab(spectatorUrl);
   renderEntry();
   renderBoards();
 
@@ -426,9 +499,30 @@ async function renderScorer(roundId){
   });
 }
 
-function buildScheduleHtml(bundle, spectatorUrl){
+/* ---------- Schedule tab: view mode + edit mode ---------- */
+function renderScheduleTab(spectatorUrl){
+  const tab = document.getElementById("scheduleTab");
+  tab.innerHTML = scheduleEditMode ? buildScheduleEditHtml(scorerData) : buildScheduleViewHtml(scorerData, spectatorUrl);
+
+  if (!scheduleEditMode){
+    const copyBtn = document.getElementById("copyBtn");
+    if (copyBtn) copyBtn.onclick = () => navigator.clipboard.writeText(spectatorUrl);
+    document.getElementById("editScheduleBtn").onclick = () => { scheduleEditMode = true; renderScheduleTab(spectatorUrl); };
+    document.getElementById("deleteRoundBtn").onclick = () => deleteRound(scorerData.round.id);
+  } else {
+    document.getElementById("cancelEditBtn").onclick = () => { scheduleEditMode = false; renderScheduleTab(spectatorUrl); };
+    document.getElementById("saveScheduleBtn").onclick = () => saveSchedule(spectatorUrl);
+  }
+}
+
+function buildScheduleViewHtml(bundle, spectatorUrl){
   const { round, holes, players } = bundle;
   return `
+    <div class="row" style="justify-content:flex-end;gap:8px;margin-top:8px;">
+      <button class="secondary" id="editScheduleBtn">Edit</button>
+      <button id="deleteRoundBtn" style="background:var(--red);border-color:var(--red);">Delete round</button>
+    </div>
+
     <h2>Round details</h2>
     <div class="card">
       <div class="grid-2">
@@ -460,13 +554,97 @@ function buildScheduleHtml(bundle, spectatorUrl){
         <tr><td>S.I.</td>${holes.map(h=>`<td>${h.strokeIndex}</td>`).join("")}</tr>
       </table>
     </div>
-
-    ${round.status !== "finished" ? `
-      <div class="row" style="margin:16px 0;">
-        <button id="finishBtn" style="background:var(--red);border-color:var(--red);">Finish round</button>
-      </div>
-    ` : `<p class="muted">This round is finished — scores are locked.</p>`}
   `;
+}
+
+function buildScheduleEditHtml(bundle){
+  const { round, holes } = bundle;
+  return `
+    <h2>Edit round details</h2>
+    <div class="card">
+      <label>Course name</label>
+      <input type="text" id="editCourseName" value="${round.courseName}">
+      <div class="grid-2">
+        <div>
+          <label>Date</label>
+          <input type="text" id="editRoundDate" value="${round.roundDate || ""}">
+        </div>
+        <div>
+          <label>Tee time</label>
+          <input type="text" id="editTeeTime" value="${round.teeTime || ""}">
+        </div>
+      </div>
+    </div>
+
+    <h2>Holes — par &amp; stroke index</h2>
+    <p class="muted">Saving updates this round and your saved course database.</p>
+    <div class="card" style="overflow-x:auto;">
+      <table>
+        <tr><th>Hole</th>${holes.map(h=>`<th>${h.holeNumber}</th>`).join("")}</tr>
+        <tr><td>Par</td>${holes.map(h=>`<td><input class="hole-input h-par-edit" data-hole="${h.holeNumber}" type="number" value="${h.par}"></td>`).join("")}</tr>
+        <tr><td>S.I.</td>${holes.map(h=>`<td><input class="hole-input h-si-edit" data-hole="${h.holeNumber}" type="number" value="${h.strokeIndex}"></td>`).join("")}</tr>
+      </table>
+    </div>
+
+    <div class="row" style="margin:16px 0;">
+      <button id="saveScheduleBtn">Save changes</button>
+      <button class="secondary" id="cancelEditBtn">Cancel</button>
+      <span id="scheduleMsg" class="muted"></span>
+    </div>
+  `;
+}
+
+async function saveSchedule(spectatorUrl){
+  const msg = document.getElementById("scheduleMsg");
+  const courseName = document.getElementById("editCourseName").value.trim() || scorerData.round.courseName;
+  const roundDate = document.getElementById("editRoundDate").value.trim();
+  const teeTime = document.getElementById("editTeeTime").value.trim();
+  const holes = scorerData.holes.map(h => ({
+    holeNumber: h.holeNumber,
+    par: parseInt(document.querySelector(`.h-par-edit[data-hole="${h.holeNumber}"]`).value || h.par, 10),
+    strokeIndex: parseInt(document.querySelector(`.h-si-edit[data-hole="${h.holeNumber}"]`).value || h.strokeIndex, 10),
+  }));
+
+  msg.textContent = "Saving…";
+  try{
+    await updateDoc(doc(db, "golf_rounds", scorerData.round.id), { courseName, roundDate, teeTime });
+    const batch = writeBatch(db);
+    holes.forEach(h => batch.set(doc(db, "golf_rounds", scorerData.round.id, "holes", String(h.holeNumber)), h));
+    await batch.commit();
+    await saveCourseToDatabase(courseName, holes);
+
+    scorerData.round.courseName = courseName;
+    scorerData.round.roundDate = roundDate;
+    scorerData.round.teeTime = teeTime;
+    scorerData.holes = holes;
+    scheduleEditMode = false;
+
+    // header shows course name in the subtitle — refresh the whole scorer view
+    await renderScorer(scorerData.round.id);
+    switchScorerTab("schedule");
+  } catch(err){
+    msg.textContent = "Error: " + err.message;
+  }
+}
+
+async function deleteRound(roundId){
+  if (!confirm("Delete this round permanently? This removes all scores, players and hole data. This cannot be undone.")) return;
+  try{
+    const [holesSnap, playersSnap, scoresSnap] = await Promise.all([
+      getDocs(collection(db, "golf_rounds", roundId, "holes")),
+      getDocs(collection(db, "golf_rounds", roundId, "players")),
+      getDocs(collection(db, "golf_rounds", roundId, "scores")),
+    ]);
+    const batch = writeBatch(db);
+    holesSnap.docs.forEach(d => batch.delete(d.ref));
+    playersSnap.docs.forEach(d => batch.delete(d.ref));
+    scoresSnap.docs.forEach(d => batch.delete(d.ref));
+    batch.delete(doc(db, "golf_rounds", roundId));
+    await batch.commit();
+    location.hash = "";
+  } catch(err){
+    alert("Couldn't delete round: " + err.message);
+  }
 }
 
 async function finishRound(roundId){
