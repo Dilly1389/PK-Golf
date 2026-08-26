@@ -185,6 +185,8 @@ const GAME_MODES = [
   { key: "stableford",  label: "Stableford" },
   { key: "matchplay",  label: "Match play (2 v 2)" },
   { key: "alliance",   label: "Alliance" },
+  { key: "bbb",        label: "Bingo Bango Bongo" },
+  { key: "piekfyn",    label: "Piekfyn Kompetisie" },
 ];
 
 const TEE_BOXES = ["White", "Yellow", "Red", "Blue", "Black", "Gold"];
@@ -291,6 +293,34 @@ async function render(){
 /* ============================================================
    SETUP VIEW — create a round
    ============================================================ */
+function refreshPairingOptions(){
+  const box = document.getElementById("pairingOptions");
+  if (!box) return;
+  const positions = [1,2,3,4].map(i => ({
+    pos: i,
+    name: document.getElementById(`p${i}-name`).value.trim() || `Player ${i}`,
+    team: document.getElementById(`p${i}-team`).value
+  }));
+  const teamA = positions.filter(p => p.team === "A");
+  const teamB = positions.filter(p => p.team === "B");
+  if (teamA.length !== 2 || teamB.length !== 2){
+    box.innerHTML = `<p class="muted" style="font-size:.78rem;">Piekfyn needs exactly 2 players on Team A and 2 on Team B (set above).</p>`;
+    return;
+  }
+  const [a1, a2] = teamA, [b1, b2] = teamB;
+  const opt1 = [{a:a1.pos,b:b1.pos},{a:a2.pos,b:b2.pos}];
+  const opt2 = [{a:a1.pos,b:b2.pos},{a:a2.pos,b:b1.pos}];
+  box.innerHTML = `
+    <div class="checkbox-row">
+      <input type="radio" name="pairingChoice" id="pairing1" value='${JSON.stringify(opt1)}' checked>
+      <label style="margin:0" for="pairing1">${a1.name} vs ${b1.name} &nbsp;·&nbsp; ${a2.name} vs ${b2.name}</label>
+    </div>
+    <div class="checkbox-row">
+      <input type="radio" name="pairingChoice" id="pairing2" value='${JSON.stringify(opt2)}'>
+      <label style="margin:0" for="pairing2">${a1.name} vs ${b2.name} &nbsp;·&nbsp; ${a2.name} vs ${b1.name}</label>
+    </div>`;
+}
+
 function renderSetup(){
   const app = document.getElementById("app");
   app.innerHTML = `
@@ -425,9 +455,27 @@ function renderSetup(){
         <option value="3">Best 3 of 4</option>
         <option value="4">Best 4 of 4 (all)</option>
       </select>
+    </div>
+    <div id="piekfynOptions" style="display:none;margin:8px 0 0 26px;">
+      <div class="grid-2">
+        <div>
+          <label>Team A name</label>
+          <input type="text" id="teamAName" placeholder="e.g. The Eagles">
+        </div>
+        <div>
+          <label>Team B name</label>
+          <input type="text" id="teamBName" placeholder="e.g. The Birdies">
+        </div>
+      </div>
+      <label>Individual match pairings</label>
+      <div id="pairingOptions"></div>
     </div>`;
   document.getElementById("mode-alliance").addEventListener("change", (e) => {
     document.getElementById("allianceOptions").style.display = e.target.checked ? "" : "none";
+  });
+  document.getElementById("mode-piekfyn").addEventListener("change", (e) => {
+    document.getElementById("piekfynOptions").style.display = e.target.checked ? "" : "none";
+    if (e.target.checked) refreshPairingOptions();
   });
 
   const playersBox = document.getElementById("playersBox");
@@ -443,7 +491,7 @@ function renderSetup(){
           <input type="number" class="p-hcp" id="p${i}-hcp" value="0">
         </div>
         <div style="flex:1">
-          <label>Team (match play)</label>
+          <label>Team (match play / Piekfyn)</label>
           <select class="p-team" id="p${i}-team">
             <option value="A" ${i<=2?"selected":""}>A</option>
             <option value="B" ${i>2?"selected":""}>B</option>
@@ -451,6 +499,11 @@ function renderSetup(){
         </div>
       </div>
     </div>`).join("");
+
+  [1,2,3,4].forEach(i => {
+    document.getElementById(`p${i}-name`).addEventListener("input", refreshPairingOptions);
+    document.getElementById(`p${i}-team`).addEventListener("change", refreshPairingOptions);
+  });
 
   const holesTable = document.getElementById("holesTable");
   function buildHolesTable(){
@@ -477,6 +530,24 @@ async function createRound(){
   if (modes.length === 0){ msg.textContent = "Pick at least one game mode."; return; }
   const allianceCount = parseInt(document.getElementById("allianceCount").value, 10);
 
+  let teamAName = null, teamBName = null, piekfynPairs = null;
+  if (modes.includes("piekfyn")){
+    const teamACount = [1,2,3,4].filter(i => document.getElementById(`p${i}-team`).value === "A").length;
+    const teamBCount = [1,2,3,4].filter(i => document.getElementById(`p${i}-team`).value === "B").length;
+    if (teamACount !== 2 || teamBCount !== 2){
+      msg.textContent = "Piekfyn Kompetisie needs exactly 2 players on Team A and 2 on Team B.";
+      return;
+    }
+    const selectedRadio = document.querySelector('input[name="pairingChoice"]:checked');
+    if (!selectedRadio){
+      msg.textContent = "Couldn't read the pairing choice — check the Piekfyn options above.";
+      return;
+    }
+    teamAName = document.getElementById("teamAName").value.trim() || "Team A";
+    teamBName = document.getElementById("teamBName").value.trim() || "Team B";
+    piekfynPairs = JSON.parse(selectedRadio.value);
+  }
+
   const players = [1,2,3,4].map(i => ({
     name: document.getElementById(`p${i}-name`).value.trim() || `Player ${i}`,
     playingHandicap: parseInt(document.getElementById(`p${i}-hcp`).value || "0", 10),
@@ -498,7 +569,8 @@ async function createRound(){
     const spectatorCode = Math.random().toString(36).slice(2,8);
 
     const roundRef = await addDoc(collection(db, "golf_rounds"), {
-      name: roundName, courseName, roundDate, teeTime, teeBox, gameModes: modes, allianceCount, spectatorCode,
+      name: roundName, courseName, roundDate, teeTime, teeBox, gameModes: modes, allianceCount,
+      teamAName, teamBName, piekfynPairs, spectatorCode,
       status: "active", deleted: false, createdAt: serverTimestamp()
     });
 
@@ -528,6 +600,7 @@ let scorerData = null; // {round, holes, players, scores}
 let scorerHole = 1;
 let currentBundle = null; // whichever bundle (scorer or spectator) is currently on screen — used for scorecard lookups
 let scorerUnsub = null;
+let scorerBbbUnsub = null;
 
 async function loadRoundBundle(roundId){
   const roundSnap = await getDoc(doc(db, "golf_rounds", roundId));
@@ -543,7 +616,10 @@ async function loadRoundBundle(roundId){
   const scoresSnap = await getDocs(collection(db, "golf_rounds", roundId, "scores"));
   const scores = scoresSnap.docs.map(d => d.data());
 
-  return { round, holes, players, scores };
+  const bbbSnap = await getDocs(collection(db, "golf_rounds", roundId, "bbb"));
+  const bbb = bbbSnap.docs.map(d => d.data());
+
+  return { round, holes, players, scores, bbb };
 }
 
 let scheduleEditMode = false;
@@ -616,6 +692,13 @@ async function renderScorer(roundId){
     scorerData.scores = snap.docs.map(d => d.data());
     renderBoards();
   });
+
+  if (scorerBbbUnsub) scorerBbbUnsub();
+  scorerBbbUnsub = onSnapshot(collection(db, "golf_rounds", roundId, "bbb"), snap => {
+    scorerData.bbb = snap.docs.map(d => d.data());
+    renderEntry();
+    renderBoards();
+  });
 }
 
 /* ---------- Schedule tab: view mode + edit mode ---------- */
@@ -635,6 +718,11 @@ function renderScheduleTab(spectatorUrl){
   } else {
     document.getElementById("cancelEditBtn").onclick = () => { scheduleEditMode = false; renderScheduleTab(spectatorUrl); };
     document.getElementById("saveScheduleBtn").onclick = () => saveSchedule(spectatorUrl);
+    if (scorerData.round.gameModes.includes("piekfyn")){
+      document.querySelectorAll(".edit-p-name, .edit-p-team").forEach(el => {
+        el.addEventListener(el.tagName === "SELECT" ? "change" : "input", refreshEditPairingOptions);
+      });
+    }
   }
 }
 
@@ -682,6 +770,7 @@ function buildScheduleViewHtml(bundle, spectatorUrl){
         <div><span class="muted">Tee box</span><br><strong>${round.teeBox || "-"}</strong></div>
       </div>
       <div style="margin-top:10px;">${round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
+      ${round.gameModes.includes("piekfyn") ? `<div class="muted" style="margin-top:8px;font-size:.85rem;">Piekfyn teams: <strong style="color:var(--ink);">${round.teamAName || "Team A"}</strong> vs <strong style="color:var(--ink);">${round.teamBName || "Team B"}</strong></div>` : ""}
     </div>
 
     <div class="link-box">
@@ -709,6 +798,83 @@ function buildScheduleViewHtml(bundle, spectatorUrl){
   `;
 }
 
+function buildEditPairingRadios(positions, currentPairs){
+  const teamA = positions.filter(p => p.team === "A");
+  const teamB = positions.filter(p => p.team === "B");
+  if (teamA.length !== 2 || teamB.length !== 2){
+    return `<p class="muted" style="font-size:.78rem;">Piekfyn needs exactly 2 players on Team A and 2 on Team B (set below).</p>`;
+  }
+  const [a1,a2] = teamA, [b1,b2] = teamB;
+  const opt1 = [{a:a1.sortOrder,b:b1.sortOrder},{a:a2.sortOrder,b:b2.sortOrder}];
+  const opt2 = [{a:a1.sortOrder,b:b2.sortOrder},{a:a2.sortOrder,b:b1.sortOrder}];
+  const opt1Checked = currentPairs ? JSON.stringify(currentPairs) === JSON.stringify(opt1) : true;
+  return `
+    <div class="checkbox-row">
+      <input type="radio" name="editPairingChoice" id="editPairing1" value='${JSON.stringify(opt1)}' ${opt1Checked ? "checked" : ""}>
+      <label style="margin:0" for="editPairing1">${a1.name} vs ${b1.name} &nbsp;·&nbsp; ${a2.name} vs ${b2.name}</label>
+    </div>
+    <div class="checkbox-row">
+      <input type="radio" name="editPairingChoice" id="editPairing2" value='${JSON.stringify(opt2)}' ${!opt1Checked ? "checked" : ""}>
+      <label style="margin:0" for="editPairing2">${a1.name} vs ${b2.name} &nbsp;·&nbsp; ${a2.name} vs ${b1.name}</label>
+    </div>`;
+}
+
+function refreshEditPairingOptions(){
+  const box = document.getElementById("editPairingBox");
+  if (!box) return;
+  const positions = scorerData.players.map(p => ({
+    sortOrder: p.sortOrder,
+    name: (document.querySelector(`.edit-p-name[data-id="${p.id}"]`) || {}).value?.trim() || p.name,
+    team: (document.querySelector(`.edit-p-team[data-id="${p.id}"]`) || {}).value || p.team
+  }));
+  box.innerHTML = buildEditPairingRadios(positions, null);
+}
+
+function buildPiekfynEditSection(bundle){
+  const { round, players } = bundle;
+  if (!round.gameModes.includes("piekfyn")) return "";
+  const positions = players.map(p => ({ sortOrder: p.sortOrder, name: p.name, team: p.team }));
+  return `
+    <h2>Piekfyn Kompetisie</h2>
+    <div class="card">
+      <div class="grid-2">
+        <div><label>Team A name</label><input type="text" id="editTeamAName" value="${round.teamAName || "Team A"}"></div>
+        <div><label>Team B name</label><input type="text" id="editTeamBName" value="${round.teamBName || "Team B"}"></div>
+      </div>
+      <label>Individual match pairings</label>
+      <div id="editPairingBox">${buildEditPairingRadios(positions, round.piekfynPairs)}</div>
+      <p class="muted" style="font-size:.75rem;margin-top:6px;">Pairings update automatically if you change player teams below.</p>
+    </div>`;
+}
+
+function buildPlayersEditSection(bundle){
+  const { players } = bundle;
+  return `
+    <h2>Players</h2>
+    <div class="card">
+      ${players.map(p => `
+        <div class="grid-2" style="margin-bottom:8px;">
+          <div>
+            <label>Name</label>
+            <input type="text" class="edit-p-name" data-id="${p.id}" value="${p.name}">
+          </div>
+          <div class="row" style="gap:8px;">
+            <div style="flex:1">
+              <label>Playing handicap</label>
+              <input type="number" class="edit-p-hcp" data-id="${p.id}" value="${p.playingHandicap}">
+            </div>
+            <div style="flex:1">
+              <label>Team</label>
+              <select class="edit-p-team" data-id="${p.id}">
+                <option value="A" ${p.team==="A"?"selected":""}>A</option>
+                <option value="B" ${p.team==="B"?"selected":""}>B</option>
+              </select>
+            </div>
+          </div>
+        </div>`).join("")}
+    </div>`;
+}
+
 function buildScheduleEditHtml(bundle){
   const { round, holes } = bundle;
   return `
@@ -731,6 +897,9 @@ function buildScheduleEditHtml(bundle){
         </div>
       </div>
     </div>
+
+    ${buildPlayersEditSection(bundle)}
+    ${buildPiekfynEditSection(bundle)}
 
     <h2>Holes — par &amp; stroke index</h2>
     <p class="muted">Saving updates this round and your saved course database.</p>
@@ -762,19 +931,43 @@ async function saveSchedule(spectatorUrl){
     strokeIndex: parseInt(document.querySelector(`.h-si-edit[data-hole="${h.holeNumber}"]`).value || h.strokeIndex, 10),
   }));
 
+  const players = scorerData.players.map(p => ({
+    id: p.id,
+    name: document.querySelector(`.edit-p-name[data-id="${p.id}"]`).value.trim() || p.name,
+    playingHandicap: parseInt(document.querySelector(`.edit-p-hcp[data-id="${p.id}"]`).value || p.playingHandicap, 10),
+    team: document.querySelector(`.edit-p-team[data-id="${p.id}"]`).value,
+  }));
+
+  const updates = { courseName, roundDate, teeTime, teeBox };
+  if (scorerData.round.gameModes.includes("piekfyn")){
+    const teamAEl = document.getElementById("editTeamAName");
+    const teamBEl = document.getElementById("editTeamBName");
+    if (teamAEl && teamBEl){
+      updates.teamAName = teamAEl.value.trim() || "Team A";
+      updates.teamBName = teamBEl.value.trim() || "Team B";
+    }
+    const pairingEl = document.querySelector('input[name="editPairingChoice"]:checked');
+    if (pairingEl) updates.piekfynPairs = JSON.parse(pairingEl.value);
+  }
+
   msg.textContent = "Saving…";
   try{
-    await updateDoc(doc(db, "golf_rounds", scorerData.round.id), { courseName, roundDate, teeTime, teeBox });
+    await updateDoc(doc(db, "golf_rounds", scorerData.round.id), updates);
+
     const batch = writeBatch(db);
     holes.forEach(h => batch.set(doc(db, "golf_rounds", scorerData.round.id, "holes", String(h.holeNumber)), h));
+    players.forEach(p => batch.update(doc(db, "golf_rounds", scorerData.round.id, "players", p.id), {
+      name: p.name, playingHandicap: p.playingHandicap, team: p.team
+    }));
     await batch.commit();
     await saveCourseToDatabase(courseName, holes);
 
-    scorerData.round.courseName = courseName;
-    scorerData.round.roundDate = roundDate;
-    scorerData.round.teeTime = teeTime;
-    scorerData.round.teeBox = teeBox;
+    Object.assign(scorerData.round, updates);
     scorerData.holes = holes;
+    scorerData.players = scorerData.players.map(p => {
+      const updated = players.find(pl => pl.id === p.id);
+      return updated ? { ...p, ...updated } : p;
+    });
     scheduleEditMode = false;
 
     // header shows course name in the subtitle — refresh the whole scorer view
@@ -878,6 +1071,71 @@ function renderEntry(){
       saveScore(btn.dataset.player, n);
     });
   });
+
+  if (scorerData.round.gameModes.includes("bbb")){
+    renderBBBPicker(finished);
+  }
+}
+
+const BBB_CATEGORIES = [
+  { key: "bingo", label: "Bingo", hint: "First on the green" },
+  { key: "bango", label: "Bango", hint: "Closest to the pin once all on" },
+  { key: "bongo", label: "Bongo", hint: "First to hole out" },
+];
+
+function getBBBForHole(holeNumber){
+  const existing = (scorerData.bbb || []).find(b => b.holeNumber === holeNumber);
+  return existing || { holeNumber, bingo: null, bango: null, bongo: null };
+}
+
+function renderBBBPicker(finished){
+  const card = document.getElementById("entryCard");
+  const rec = getBBBForHole(scorerHole);
+
+  const html = `
+    <div class="card" style="padding:12px;border-color:var(--gold);">
+      <strong>Bingo Bango Bongo</strong>
+      ${BBB_CATEGORIES.map(cat => `
+        <div style="margin-top:10px;">
+          <div class="muted" style="font-size:.78rem;margin-bottom:4px;"><strong style="color:var(--ink);">${cat.label}</strong> — ${cat.hint}</div>
+          <div class="row" style="gap:6px;flex-wrap:nowrap;">
+            ${scorerData.players.map(p => {
+              const isActive = rec[cat.key] === p.id;
+              return `<button type="button" class="bbb-pick" data-cat="${cat.key}" data-player="${p.id}"
+                style="flex:1;min-width:0;padding:8px 2px;font-size:.75rem;
+                background:${isActive ? "var(--gold)" : "#fff"};
+                color:${isActive ? "var(--green-dark)" : "var(--ink)"};
+                border:1px solid ${isActive ? "var(--gold)" : "var(--line)"};
+                border-radius:8px;font-weight:${isActive ? "800" : "500"};" ${finished ? "disabled" : ""}>
+                ${p.name}
+              </button>`;
+            }).join("")}
+          </div>
+        </div>`).join("")}
+    </div>`;
+
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = html;
+  card.appendChild(wrapper.firstElementChild);
+
+  card.querySelectorAll(".bbb-pick").forEach(btn => {
+    btn.addEventListener("click", () => saveBBB(btn.dataset.cat, btn.dataset.player));
+  });
+}
+
+async function saveBBB(category, playerId){
+  const rec = getBBBForHole(scorerHole);
+  const newVal = rec[category] === playerId ? null : playerId; // tap again to clear
+  const updated = { ...rec, [category]: newVal };
+
+  await setDoc(doc(db, "golf_rounds", scorerData.round.id, "bbb", String(scorerHole)), updated, { merge: true });
+
+  const idx = (scorerData.bbb || []).findIndex(b => b.holeNumber === scorerHole);
+  if (!scorerData.bbb) scorerData.bbb = [];
+  if (idx >= 0) scorerData.bbb[idx] = updated; else scorerData.bbb.push(updated);
+
+  renderEntry();
+  renderBoards();
 }
 
 async function saveScore(playerId, val){
@@ -901,6 +1159,7 @@ function renderBoards(){
    SPECTATOR VIEW (read-only, realtime)
    ============================================================ */
 let spectatorUnsub = null;
+let spectatorBbbUnsub = null;
 
 async function renderSpectator(code){
   const app = document.getElementById("app");
@@ -927,6 +1186,13 @@ async function renderSpectator(code){
   if (spectatorUnsub) spectatorUnsub();
   spectatorUnsub = onSnapshot(collection(db, "golf_rounds", roundId, "scores"), snap => {
     bundle.scores = snap.docs.map(d => d.data());
+    currentBundle = bundle;
+    document.getElementById("boards").innerHTML = buildBoardsHtml(bundle);
+  });
+
+  if (spectatorBbbUnsub) spectatorBbbUnsub();
+  spectatorBbbUnsub = onSnapshot(collection(db, "golf_rounds", roundId, "bbb"), snap => {
+    bundle.bbb = snap.docs.map(d => d.data());
     currentBundle = bundle;
     document.getElementById("boards").innerHTML = buildBoardsHtml(bundle);
   });
@@ -965,6 +1231,8 @@ function buildBoardsHtml(bundle){
   if (round.gameModes.includes("stableford")) html += buildStablefordBoard(players, holes, detail);
   if (round.gameModes.includes("matchplay")) html += buildMatchPlayBoard(players, holes, detail);
   if (round.gameModes.includes("alliance")) html += buildAllianceBoard(bundle, detail);
+  if (round.gameModes.includes("bbb")) html += buildBBBBoard(bundle);
+  if (round.gameModes.includes("piekfyn")) html += buildPiekfynBoard(bundle, detail);
   return html;
 }
 
@@ -1089,6 +1357,129 @@ function buildAllianceBoard(bundle, detail){
     <strong>Alliance</strong> <span class="muted">— best ${n} of ${players.length} net-stableford scores per hole</span>
     <p style="font-size:1.1rem;margin:10px 0 4px;">${thru ? total + " points" : "Not started"} <span class="muted" style="font-size:.85rem;">(thru ${thru})</span></p>
     <div class="team-scorecard-link">Fourball: ${players.map(p=>p.name).join(", ")} — view full scorecard</div>
+  </div>`;
+}
+
+function buildBBBBoard(bundle){
+  const { players, bbb } = bundle;
+  const totals = {};
+  players.forEach(p => totals[p.id] = { bingo: 0, bango: 0, bongo: 0 });
+  let holesRecorded = 0;
+  (bbb || []).forEach(rec => {
+    let any = false;
+    BBB_CATEGORIES.forEach(cat => {
+      if (rec[cat.key] && totals[rec[cat.key]]){ totals[rec[cat.key]][cat.key]++; any = true; }
+    });
+    if (any) holesRecorded++;
+  });
+  const rows = players.map(p => {
+    const t = totals[p.id];
+    return { p, total: t.bingo + t.bango + t.bongo, t };
+  }).sort((a,b) => b.total - a.total);
+
+  return `
+  <div class="card">
+    <strong>Bingo Bango Bongo</strong> <span class="muted">— 1 point each for first on green, closest once all on, first to hole out</span>
+    <table style="margin-top:8px;">
+      <tr><th class="name-col">Player</th><th>Bingo</th><th>Bango</th><th>Bongo</th><th>Total</th></tr>
+      ${rows.map((r,i) => `
+        <tr class="${i===0 && r.total>0 ? 'leader-row' : ''}">
+          <td class="name-col">${playerLink(r.p)}</td>
+          <td>${r.t.bingo}</td>
+          <td>${r.t.bango}</td>
+          <td>${r.t.bongo}</td>
+          <td><strong>${r.total}</strong></td>
+        </tr>`).join("")}
+    </table>
+    <p class="muted" style="font-size:.75rem;margin-top:6px;">${holesRecorded} hole${holesRecorded===1?"":"s"} recorded</p>
+  </div>`;
+}
+
+/* ---------- Piekfyn Kompetisie: 2 singles matches + 1 team match, 1pt win / 0.5pt halve ---------- */
+function computeMatch(holes, detail, sideAPlayers, sideBPlayers){
+  let holesUp = 0, holesPlayed = 0;
+  for (const h of holes){
+    const aNets = sideAPlayers.map(p => detail[p.id][h.holeNumber].net).filter(v => v != null);
+    const bNets = sideBPlayers.map(p => detail[p.id][h.holeNumber].net).filter(v => v != null);
+    if (aNets.length < sideAPlayers.length || bNets.length < sideBPlayers.length) break;
+    const aBest = Math.min(...aNets), bBest = Math.min(...bNets);
+    holesPlayed++;
+    if (aBest < bBest) holesUp++;
+    else if (bBest < aBest) holesUp--;
+  }
+  const remaining = 18 - holesPlayed;
+  let decided = false, winner = null, statusText;
+  if (holesPlayed === 0){
+    statusText = "Not started";
+  } else if (Math.abs(holesUp) > remaining){
+    decided = true;
+    winner = holesUp > 0 ? "A" : "B";
+    statusText = `${Math.abs(holesUp)} & ${remaining}`;
+  } else if (holesPlayed === 18){
+    decided = true;
+    if (holesUp === 0){ winner = null; statusText = "Halved"; }
+    else { winner = holesUp > 0 ? "A" : "B"; statusText = `${Math.abs(holesUp)} up`; }
+  } else {
+    statusText = holesUp === 0 ? `All square thru ${holesPlayed}` : `${holesUp > 0 ? "A" : "B"} ${Math.abs(holesUp)} up thru ${holesPlayed}`;
+  }
+  return { holesUp, holesPlayed, decided, winner, statusText };
+}
+
+function buildPiekfynBoard(bundle, detail){
+  const { round, holes, players } = bundle;
+  const teamAName = round.teamAName || "Team A";
+  const teamBName = round.teamBName || "Team B";
+  const pairs = round.piekfynPairs || [];
+  const byOrder = {};
+  players.forEach(p => byOrder[p.sortOrder] = p);
+
+  const matches = pairs.map(pair => {
+    const pA = byOrder[pair.a], pB = byOrder[pair.b];
+    if (!pA || !pB) return null;
+    return { pA, pB, m: computeMatch(holes, detail, [pA], [pB]) };
+  }).filter(Boolean);
+
+  const teamAPlayers = players.filter(p => p.team === "A");
+  const teamBPlayers = players.filter(p => p.team === "B");
+  const teamMatch = computeMatch(holes, detail, teamAPlayers, teamBPlayers);
+
+  let teamAPts = 0, teamBPts = 0;
+  function tally(m){
+    if (!m.decided) return;
+    if (m.winner === "A") teamAPts += 1;
+    else if (m.winner === "B") teamBPts += 1;
+    else { teamAPts += 0.5; teamBPts += 0.5; }
+  }
+  matches.forEach(({m}) => tally(m));
+  tally(teamMatch);
+
+  function statusClass(m){
+    if (m.decided) return m.winner === null ? "status-all-sq" : (m.winner === "A" ? "status-up" : "status-down");
+    if (m.holesPlayed === 0) return "status-all-sq";
+    return m.holesUp === 0 ? "status-all-sq" : (m.holesUp > 0 ? "status-up" : "status-down");
+  }
+  function matchLine(label, m){
+    return `<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);">
+      <span>${label}</span>
+      <span class="${statusClass(m)}">${m.statusText}</span>
+    </div>`;
+  }
+
+  const decidedCount = matches.filter(({m}) => m.decided).length + (teamMatch.decided ? 1 : 0);
+
+  return `
+  <div class="card">
+    <strong>Piekfyn Kompetisie</strong> <span class="muted">— ${teamAName} vs ${teamBName}</span>
+    <div style="margin-top:8px;">
+      ${matches.map(({pA,pB,m}) => matchLine(`${playerLink(pA)} vs ${playerLink(pB)}`, m)).join("")}
+      ${matchLine(`${teamAName} vs ${teamBName} (fourball)`, teamMatch)}
+    </div>
+    <p style="font-size:1.2rem;margin:12px 0 0;text-align:center;">
+      <strong>${teamAName} ${teamAPts}</strong> — <strong>${teamBPts} ${teamBName}</strong>
+    </p>
+    <p class="muted" style="text-align:center;font-size:.78rem;margin-top:2px;">
+      ${decidedCount < 3 ? `${decidedCount} of 3 matches decided` : (teamAPts>teamBPts ? `${teamAName} win` : teamAPts<teamBPts ? `${teamBName} win` : "Tied — halved competition")}
+    </p>
   </div>`;
 }
 
