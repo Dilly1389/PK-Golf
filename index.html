@@ -190,6 +190,7 @@ const GAME_MODES = [
   { key: "stroke",     label: "Stroke play (gross/net)" },
   { key: "stableford",  label: "Stableford" },
   { key: "matchplay",  label: "Match play (2 v 2)" },
+  { key: "betterball", label: "Betterball Stableford" },
   { key: "alliance",   label: "Alliance" },
   { key: "bbb",        label: "Bingo Bango Bongo" },
   { key: "piekfyn",    label: "Piekfyn Kompetisie" },
@@ -501,6 +502,13 @@ function renderSetup(){
         <option value="4">Best 4 of 4 (all)</option>
       </select>
     </div>
+    <div id="scrambleDriveOptions" style="display:none;margin:8px 0 0 26px;">
+      <div class="checkbox-row">
+        <input type="checkbox" id="scrambleDriveCb">
+        <label style="margin:0" for="scrambleDriveCb">Scramble drive</label>
+      </div>
+      <p class="muted" style="font-size:.75rem;margin-top:2px;">Lets you record whose tee shot the team played from each hole — shown as a note on the scorecard, doesn't change scoring.</p>
+    </div>
     <div id="piekfynOptions" style="display:none;margin:8px 0 0 26px;">
       <div class="grid-2">
         <div>
@@ -527,9 +535,11 @@ function renderSetup(){
   function updateModeVisibility(){
     const selected = document.querySelector('input[name="gameMode"]:checked').value;
     const isAlliance = selected === "alliance";
+    const isBetterball = selected === "betterball";
     const isPiekfyn = selected === "piekfyn";
-    const isTeamMode = selected === "matchplay" || selected === "piekfyn";
+    const isTeamMode = selected === "matchplay" || selected === "piekfyn" || selected === "betterball";
     document.getElementById("allianceOptions").style.display = isAlliance ? "" : "none";
+    document.getElementById("scrambleDriveOptions").style.display = (isAlliance || isBetterball) ? "" : "none";
     document.getElementById("piekfynOptions").style.display = isPiekfyn ? "" : "none";
     if (isPiekfyn){ refreshPairingOptions(); populateCompetitionsList(); }
     [1,2,3,4].forEach(i => {
@@ -594,6 +604,7 @@ async function createRound(){
   const modes = Array.from(document.querySelectorAll(".mode-cb:checked")).map(cb => cb.value);
   if (modes.length === 0){ msg.textContent = "Pick at least one game mode."; return; }
   const allianceCount = parseInt(document.getElementById("allianceCount").value, 10);
+  const scrambleDrive = (modes.includes("alliance") || modes.includes("betterball")) && document.getElementById("scrambleDriveCb").checked;
 
   let teamAName = null, teamBName = null, piekfynPairs = null, fourballCount = 1;
   if (modes.includes("piekfyn")){
@@ -643,7 +654,7 @@ async function createRound(){
     const spectatorCode = Math.random().toString(36).slice(2,8);
 
     const roundRef = await addDoc(collection(db, "golf_rounds"), {
-      name: roundName, courseName, roundDate, teeTime, teeBox, gameModes: modes, allianceCount,
+      name: roundName, courseName, roundDate, teeTime, teeBox, gameModes: modes, allianceCount, scrambleDrive,
       teamAName, teamBName, piekfynPairs, spectatorCode,
       status: "active", deleted: false, createdAt: serverTimestamp()
     });
@@ -722,6 +733,7 @@ let scorerHole = 1;
 let currentBundle = null; // whichever bundle (scorer or spectator) is currently on screen — used for scorecard lookups
 let scorerUnsub = null;
 let scorerBbbUnsub = null;
+let scorerScrambleUnsub = null;
 
 async function loadRoundBundle(roundId){
   const roundSnap = await getDoc(doc(db, "golf_rounds", roundId));
@@ -740,7 +752,10 @@ async function loadRoundBundle(roundId){
   const bbbSnap = await getDocs(collection(db, "golf_rounds", roundId, "bbb"));
   const bbb = bbbSnap.docs.map(d => d.data());
 
-  return { round, holes, players, scores, bbb };
+  const scrambleSnap = await getDocs(collection(db, "golf_rounds", roundId, "scrambleDrives"));
+  const scrambleDrives = scrambleSnap.docs.map(d => d.data());
+
+  return { round, holes, players, scores, bbb, scrambleDrives };
 }
 
 let scheduleEditMode = false;
@@ -817,6 +832,13 @@ async function renderScorer(roundId){
   if (scorerBbbUnsub) scorerBbbUnsub();
   scorerBbbUnsub = onSnapshot(collection(db, "golf_rounds", roundId, "bbb"), snap => {
     scorerData.bbb = snap.docs.map(d => d.data());
+    renderEntry();
+    renderBoards();
+  });
+
+  if (scorerScrambleUnsub) scorerScrambleUnsub();
+  scorerScrambleUnsub = onSnapshot(collection(db, "golf_rounds", roundId, "scrambleDrives"), snap => {
+    scorerData.scrambleDrives = snap.docs.map(d => d.data());
     renderEntry();
     renderBoards();
   });
@@ -925,6 +947,13 @@ async function renderScoringOnly(roundId){
     renderEntry();
     renderBoards();
   });
+
+  if (scorerScrambleUnsub) scorerScrambleUnsub();
+  scorerScrambleUnsub = onSnapshot(collection(db, "golf_rounds", roundId, "scrambleDrives"), snap => {
+    scorerData.scrambleDrives = snap.docs.map(d => d.data());
+    renderEntry();
+    renderBoards();
+  });
 }
 
 /* ---------- Schedule tab: view mode + edit mode ---------- */
@@ -1029,7 +1058,7 @@ function buildPiekfynEditSection(bundle){
 
 function buildPlayersEditSection(bundle){
   const { round, players } = bundle;
-  const isTeamMode = round.gameModes.includes("matchplay") || round.gameModes.includes("piekfyn");
+  const isTeamMode = round.gameModes.includes("matchplay") || round.gameModes.includes("piekfyn") || round.gameModes.includes("betterball");
   return `
     <h2>Players</h2>
     <div class="card">
@@ -1266,6 +1295,67 @@ function renderEntry(){
   if (scorerData.round.gameModes.includes("bbb")){
     renderBBBPicker(finished);
   }
+  if (scorerData.round.scrambleDrive){
+    renderScrambleDrivePicker(finished);
+  }
+}
+
+function getScrambleDriveForHole(holeNumber){
+  return (scorerData.scrambleDrives || []).find(s => s.holeNumber === holeNumber) || null;
+}
+
+function renderScrambleDrivePicker(finished){
+  const card = document.getElementById("entryCard");
+  const current = getScrambleDriveForHole(scorerHole);
+
+  const html = `
+    <div class="card" style="padding:12px;border-color:var(--gold);">
+      <strong>Scramble drive</strong>
+      <div class="muted" style="font-size:.78rem;margin-bottom:4px;">Whose tee shot did the team play from?</div>
+      <div class="row" style="gap:6px;flex-wrap:nowrap;">
+        ${scorerData.players.map(p => {
+          const isActive = current && current.playerId === p.id;
+          return `<button type="button" class="scramble-pick" data-player="${p.id}"
+            style="flex:1;min-width:0;padding:8px 2px;font-size:.78rem;
+            background:${isActive ? "var(--gold)" : "#fff"};
+            color:${isActive ? "var(--green-dark)" : "var(--ink)"};
+            border:1px solid ${isActive ? "var(--gold)" : "var(--line)"};
+            border-radius:8px;font-weight:${isActive ? "800" : "500"};" ${finished ? "disabled" : ""}>
+            ${p.name}
+          </button>`;
+        }).join("")}
+      </div>
+    </div>`;
+
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = html;
+  card.appendChild(wrapper.firstElementChild);
+
+  card.querySelectorAll(".scramble-pick").forEach(btn => {
+    btn.addEventListener("click", () => saveScrambleDrive(btn.dataset.player));
+  });
+}
+
+async function saveScrambleDrive(playerId){
+  const current = getScrambleDriveForHole(scorerHole);
+  const newPlayerId = current && current.playerId === playerId ? null : playerId;
+  const rec = { holeNumber: scorerHole, playerId: newPlayerId };
+
+  if (newPlayerId === null){
+    await deleteDoc(doc(db, "golf_rounds", scorerData.round.id, "scrambleDrives", String(scorerHole)));
+  } else {
+    await setDoc(doc(db, "golf_rounds", scorerData.round.id, "scrambleDrives", String(scorerHole)), rec);
+  }
+
+  if (!scorerData.scrambleDrives) scorerData.scrambleDrives = [];
+  const idx = scorerData.scrambleDrives.findIndex(s => s.holeNumber === scorerHole);
+  if (newPlayerId === null){
+    if (idx >= 0) scorerData.scrambleDrives.splice(idx, 1);
+  } else {
+    if (idx >= 0) scorerData.scrambleDrives[idx] = rec; else scorerData.scrambleDrives.push(rec);
+  }
+  renderEntry();
+  renderBoards();
 }
 
 const BBB_CATEGORIES = [
@@ -1360,6 +1450,7 @@ function renderBoards(){
    ============================================================ */
 let spectatorUnsub = null;
 let spectatorBbbUnsub = null;
+let spectatorScrambleUnsub = null;
 
 async function renderSpectator(code){
   const app = document.getElementById("app");
@@ -1393,6 +1484,13 @@ async function renderSpectator(code){
   if (spectatorBbbUnsub) spectatorBbbUnsub();
   spectatorBbbUnsub = onSnapshot(collection(db, "golf_rounds", roundId, "bbb"), snap => {
     bundle.bbb = snap.docs.map(d => d.data());
+    currentBundle = bundle;
+    document.getElementById("boards").innerHTML = buildBoardsHtml(bundle);
+  });
+
+  if (spectatorScrambleUnsub) spectatorScrambleUnsub();
+  spectatorScrambleUnsub = onSnapshot(collection(db, "golf_rounds", roundId, "scrambleDrives"), snap => {
+    bundle.scrambleDrives = snap.docs.map(d => d.data());
     currentBundle = bundle;
     document.getElementById("boards").innerHTML = buildBoardsHtml(bundle);
   });
@@ -1569,6 +1667,7 @@ function buildBoardsHtml(bundle){
   if (round.gameModes.includes("stroke")) html += buildStrokeBoard(players, holes, detail);
   if (round.gameModes.includes("stableford")) html += buildStablefordBoard(players, holes, detail);
   if (round.gameModes.includes("matchplay")) html += buildMatchPlayBoard(players, holes, detail);
+  if (round.gameModes.includes("betterball")) html += buildBetterballBoard(bundle, detail);
   if (round.gameModes.includes("alliance")) html += buildAllianceBoard(bundle, detail);
   if (round.gameModes.includes("bbb")) html += buildBBBBoard(bundle);
   if (round.gameModes.includes("piekfyn")) html += buildPiekfynBoard(bundle, detail);
@@ -1665,6 +1764,52 @@ function buildMatchPlayBoard(players, holes, detail){
     vs <span class="team-b">Team B</span>: ${teamB.map(p=>playerLink(p)).join(", ")} · better-ball net</span>
     <p class="${statusClass}" style="font-size:1.1rem;margin:10px 0 0;">${statusText}</p>
     <p class="muted" style="margin:2px 0 0;">Through ${holesPlayed} hole${holesPlayed===1?"":"s"}</p>
+  </div>`;
+}
+
+function computeBetterballData(bundle, detail){
+  const { players, holes } = bundle;
+  const teamA = players.filter(p => p.team === "A");
+  const teamB = players.filter(p => p.team === "B");
+  function bestFor(teamPlayers, holeNumber){
+    let best = null, bestPlayerId = null;
+    teamPlayers.forEach(p => {
+      const v = detail[p.id][holeNumber].pts;
+      if (v != null && (best == null || v > best)){ best = v; bestPlayerId = p.id; }
+    });
+    return { best, bestPlayerId };
+  }
+  return holes.map(h => ({
+    holeNumber: h.holeNumber,
+    teamA: bestFor(teamA, h.holeNumber),
+    teamB: bestFor(teamB, h.holeNumber),
+  }));
+}
+
+function buildBetterballBoard(bundle, detail){
+  const { players } = bundle;
+  const teamA = players.filter(p => p.team === "A");
+  const teamB = players.filter(p => p.team === "B");
+  if (teamA.length === 0 || teamB.length === 0){
+    return `<div class="card"><strong>Betterball Stableford</strong><p class="muted">Needs players on both Team A and Team B.</p></div>`;
+  }
+  const data = computeBetterballData(bundle, detail);
+  const thruA = data.filter(d => d.teamA.best != null).length;
+  const thruB = data.filter(d => d.teamB.best != null).length;
+  const totalA = data.reduce((a,d) => a + (d.teamA.best || 0), 0);
+  const totalB = data.reduce((a,d) => a + (d.teamB.best || 0), 0);
+
+  return `
+  <div class="card">
+    <strong>Betterball Stableford</strong>
+    <span class="muted">— <span class="team-a">Team A</span>: ${teamA.map(p=>playerLink(p)).join(", ")}
+    vs <span class="team-b">Team B</span>: ${teamB.map(p=>playerLink(p)).join(", ")} · best net-Stableford score of the pair counts</span>
+    <table style="margin-top:8px;">
+      <tr><th class="name-col">Team</th><th>Thru</th><th>Points</th></tr>
+      <tr><td class="name-col team-a">Team A</td><td>${thruA}</td><td>${thruA ? totalA : "-"}</td></tr>
+      <tr><td class="name-col team-b">Team B</td><td>${thruB}</td><td>${thruB ? totalB : "-"}</td></tr>
+    </table>
+    <div class="team-scorecard-link" data-betterball-link="1">View full scorecard</div>
   </div>`;
 }
 
@@ -1883,9 +2028,9 @@ function openScorecard(playerId){
           <thead>
             <tr>
               <th class="label-col">Hole</th>
-              ${front.map(h=>`<th>${h.holeNumber}</th>`).join("")}
+              ${front.map(h=>`<th>${h.holeNumber}${scrambleHoleMark(currentBundle, h.holeNumber)}</th>`).join("")}
               <th class="agg-col">OUT</th>
-              ${back.map(h=>`<th>${h.holeNumber}</th>`).join("")}
+              ${back.map(h=>`<th>${h.holeNumber}${scrambleHoleMark(currentBundle, h.holeNumber)}</th>`).join("")}
               <th class="agg-col">IN</th>
               <th class="agg-col">TOTAL</th>
             </tr>
@@ -1942,6 +2087,7 @@ function openScorecard(playerId){
           <div><div class="val">${countEntered(holes,player,detail,"net") ? sumField(holes,player,detail,"net") : "-"}</div><div class="lbl">Net</div></div>
           ${showPts ? `<div><div class="val">${countEntered(holes,player,detail,"pts") ? sumField(holes,player,detail,"pts") : "-"}</div><div class="lbl">Points</div></div>` : ""}
         </div>
+        ${scrambleLegend(currentBundle)}
       </div>
     </div>
   `;
@@ -1958,6 +2104,19 @@ function openScorecard(playerId){
 function closeScorecard(){
   const overlay = document.getElementById("scorecardOverlay");
   if (overlay) overlay.remove();
+}
+
+function scrambleHoleMark(bundle, holeNumber){
+  const rec = (bundle.scrambleDrives || []).find(s => s.holeNumber === holeNumber);
+  return rec ? `<span title="Scramble drive">*</span>` : "";
+}
+function scrambleLegend(bundle){
+  const recs = (bundle.scrambleDrives || []).slice().sort((a,b) => a.holeNumber - b.holeNumber);
+  if (recs.length === 0) return "";
+  const byId = {};
+  bundle.players.forEach(p => byId[p.id] = p.name);
+  const parts = recs.map(r => `Hole ${r.holeNumber}: ${byId[r.playerId] || "?"}`);
+  return `<p class="muted" style="font-size:.72rem;margin-top:8px;">* Scramble drive — ${parts.join(" · ")}</p>`;
 }
 
 function openTeamScorecard(){
@@ -2019,9 +2178,9 @@ function openTeamScorecard(){
           <thead>
             <tr>
               <th class="label-col">Player</th>
-              ${front.map(h=>`<th>${h.holeNumber}</th>`).join("")}
+              ${front.map(h=>`<th>${h.holeNumber}${scrambleHoleMark(currentBundle, h.holeNumber)}</th>`).join("")}
               <th class="agg-col">OUT</th>
-              ${back.map(h=>`<th>${h.holeNumber}</th>`).join("")}
+              ${back.map(h=>`<th>${h.holeNumber}${scrambleHoleMark(currentBundle, h.holeNumber)}</th>`).join("")}
               <th class="agg-col">IN</th>
               <th class="agg-col">TOTAL</th>
             </tr>
@@ -2058,41 +2217,4 @@ function openTeamScorecard(){
 
         <div class="scorecard-summary">
           <div><div class="val">${thru}/18</div><div class="lbl">Thru</div></div>
-          <div><div class="val">${thru ? total : "-"}</div><div class="lbl">Alliance points</div></div>
-        </div>
-      </div>
-    </div>
-  `;
-
-  const wrapper = document.createElement("div");
-  wrapper.innerHTML = html;
-  document.body.appendChild(wrapper.firstElementChild);
-
-  const overlay = document.getElementById("scorecardOverlay");
-  document.getElementById("scorecardCloseBtn").onclick = closeScorecard;
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeScorecard(); });
-}
-
-document.addEventListener("click", (e) => {
-  const link = e.target.closest(".player-name-link");
-  if (link){ openScorecard(link.dataset.player); return; }
-  const standingsLink = e.target.closest("[data-standings-link]");
-  if (standingsLink){ location.hash = `#/standings/${standingsLink.dataset.standingsLink}`; return; }
-  const teamLink = e.target.closest(".team-scorecard-link");
-  if (teamLink){ openTeamScorecard(); }
-});
-
-function updateConnIndicator(){
-  const el = document.getElementById("connIndicator");
-  if (!el) return;
-  const online = navigator.onLine;
-  el.className = "conn-indicator " + (online ? "conn-online" : "conn-offline");
-  el.innerHTML = `<span class="conn-dot"></span>${online ? "Connected" : "Offline"}`;
-}
-window.addEventListener("online", updateConnIndicator);
-window.addEventListener("offline", updateConnIndicator);
-
-render();
-</script>
-</body>
-</html>
+          <div><div class="val">${thru ? tota
