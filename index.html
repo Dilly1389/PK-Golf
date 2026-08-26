@@ -1170,8 +1170,12 @@ async function finishRound(roundId){
 }
 
 function switchScorerTab(which){
+  const scheduleTab = document.getElementById("scheduleTab");
+  if (scheduleTab) scheduleTab.style.display = which === "schedule" ? "" : "none";
   document.getElementById("scoreTab").style.display = which === "score" ? "" : "none";
   document.getElementById("boardsTab").style.display = which === "boards" ? "" : "none";
+  const tabScheduleBtn = document.getElementById("tabScheduleBtn");
+  if (tabScheduleBtn) tabScheduleBtn.classList.toggle("active", which === "schedule");
   document.getElementById("tabScoreBtn").classList.toggle("active", which === "score");
   document.getElementById("tabBoardsBtn").classList.toggle("active", which === "boards");
 }
