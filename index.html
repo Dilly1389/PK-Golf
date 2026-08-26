@@ -80,6 +80,8 @@
   .hole-nav .current{font-weight:700;font-size:1.05rem;min-width:110px;text-align:center;color:var(--green-dark);}
   .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
   @media (max-width:600px){.grid-2{grid-template-columns:1fr;}}
+  .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+  @media (max-width:600px){.grid-3{grid-template-columns:1fr;}}
   .config-note{font-size:.78rem;color:var(--muted);border:1px dashed var(--line);padding:8px 10px;border-radius:8px;margin-bottom:16px;}
   a{color:var(--green-light);}
 
@@ -134,6 +136,11 @@ const GAME_MODES = [
   { key: "matchplay",  label: "Match play (2 v 2)" },
   { key: "alliance",   label: "Alliance (best 2 of 4)" },
 ];
+
+const TEE_BOXES = ["White", "Yellow", "Red", "Blue", "Black", "Gold"];
+function teeBoxOptions(selected){
+  return TEE_BOXES.map(t => `<option value="${t}" ${t === selected ? "selected" : ""}>${t}</option>`).join("");
+}
 
 /* ---------- scoring helpers ---------- */
 function strokesReceived(hcp, si){
@@ -252,7 +259,7 @@ function renderSetup(){
       <input type="text" id="roundName" placeholder="e.g. Saturday Fourball">
       <label>Course name</label>
       <input type="text" id="courseName" placeholder="e.g. Unika Golf Club">
-      <div class="grid-2">
+      <div class="grid-3">
         <div>
           <label>Date</label>
           <input type="text" id="roundDate" placeholder="e.g. 2026-08-29" value="${new Date().toISOString().slice(0,10)}">
@@ -260,6 +267,10 @@ function renderSetup(){
         <div>
           <label>Tee time</label>
           <input type="text" id="teeTime" placeholder="e.g. 07:30">
+        </div>
+        <div>
+          <label>Tee box</label>
+          <select id="teeBox">${teeBoxOptions("White")}</select>
         </div>
       </div>
 
@@ -283,17 +294,50 @@ function renderSetup(){
 
   loadRoundsList().then(rounds => {
     const card = document.getElementById("roundsListCard");
-    if (rounds.length === 0){ card.innerHTML = `<p class="muted">No rounds yet — create one below.</p>`; return; }
-    card.innerHTML = rounds.map(r => `
-      <div class="row round-item" data-round="${r.id}" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer;">
-        <div>
+    const active = rounds.filter(r => !r.deleted);
+    const deleted = rounds.filter(r => r.deleted);
+
+    const itemHtml = (r, isDeleted) => `
+      <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);${isDeleted ? "opacity:.6;" : ""}">
+        <div class="round-item" data-round="${r.id}" style="cursor:${isDeleted ? "default" : "pointer"};flex:1;">
           <strong>${r.name}</strong>
-          <div class="muted" style="font-size:.78rem;">${r.courseName || ""}${r.roundDate ? " · " + r.roundDate : ""}</div>
+          <div class="muted" style="font-size:.78rem;">${r.courseName || ""}${r.roundDate ? " · " + r.roundDate : ""}${r.teeBox ? " · " + r.teeBox + " tees" : ""}</div>
         </div>
-        <span class="pill mode" style="background:${r.status==='finished' ? 'var(--green-dim)' : 'var(--gold-dim)'};">${r.status === "finished" ? "Final" : "Active"}</span>
-      </div>`).join("");
+        ${isDeleted
+          ? `<button class="ghost restore-item" data-round="${r.id}" style="font-size:.75rem;padding:4px 10px;">Restore</button>`
+          : `<span class="pill mode" style="background:${r.status==='finished' ? 'var(--green-dim)' : 'var(--gold-dim)'};">${r.status === "finished" ? "Final" : "Active"}</span>`}
+      </div>`;
+
+    let html = active.length === 0
+      ? `<p class="muted">No rounds yet — create one below.</p>`
+      : active.map(r => itemHtml(r, false)).join("");
+
+    if (deleted.length > 0){
+      html += `
+        <div style="margin-top:10px;">
+          <button class="ghost" id="toggleDeletedBtn" style="font-size:.75rem;padding:4px 10px;">Show deleted (${deleted.length})</button>
+          <div id="deletedList" style="display:none;margin-top:8px;">${deleted.map(r => itemHtml(r, true)).join("")}</div>
+        </div>`;
+    }
+    card.innerHTML = html;
+
     card.querySelectorAll(".round-item").forEach(el => {
       el.addEventListener("click", () => { location.hash = `#/score/${el.dataset.round}`; });
+    });
+    const toggleBtn = document.getElementById("toggleDeletedBtn");
+    if (toggleBtn){
+      toggleBtn.onclick = () => {
+        const list = document.getElementById("deletedList");
+        const showing = list.style.display !== "none";
+        list.style.display = showing ? "none" : "";
+        toggleBtn.textContent = showing ? `Show deleted (${deleted.length})` : "Hide deleted";
+      };
+    }
+    card.querySelectorAll(".restore-item").forEach(btn => {
+      btn.onclick = async () => {
+        await updateDoc(doc(db, "golf_rounds", btn.dataset.round), { deleted: false, deletedAt: null });
+        renderSetup();
+      };
     });
   });
 
@@ -366,6 +410,7 @@ async function createRound(){
   const courseName = document.getElementById("courseName").value.trim() || "Course";
   const roundDate = document.getElementById("roundDate").value.trim();
   const teeTime = document.getElementById("teeTime").value.trim();
+  const teeBox = document.getElementById("teeBox").value;
   const modes = Array.from(document.querySelectorAll(".mode-cb:checked")).map(cb => cb.value);
   if (modes.length === 0){ msg.textContent = "Pick at least one game mode."; return; }
 
@@ -390,8 +435,8 @@ async function createRound(){
     const spectatorCode = Math.random().toString(36).slice(2,8);
 
     const roundRef = await addDoc(collection(db, "golf_rounds"), {
-      name: roundName, courseName, roundDate, teeTime, gameModes: modes, spectatorCode,
-      status: "active", createdAt: serverTimestamp()
+      name: roundName, courseName, roundDate, teeTime, teeBox, gameModes: modes, spectatorCode,
+      status: "active", deleted: false, createdAt: serverTimestamp()
     });
 
     const batch = writeBatch(db);
@@ -458,6 +503,14 @@ async function renderScorer(roundId){
     </div>
     <div class="content">
 
+    ${scorerData.round.deleted ? `
+      <div class="card" style="border-color:var(--red);background:var(--gold-dim);text-align:center;">
+        <strong>This round has been deleted</strong>
+        <p class="muted" style="margin:4px 0 10px;">It's hidden from your rounds list but hasn't been erased.</p>
+        <button id="restoreBannerBtn">Restore round</button>
+      </div>
+    ` : ""}
+
     <div id="scheduleTab" style="display:none;"></div>
 
     <div id="scoreTab">
@@ -487,6 +540,8 @@ async function renderScorer(roundId){
   document.getElementById("nextHole").onclick = () => { scorerHole = Math.min(18, scorerHole+1); renderEntry(); };
   const finishBtn = document.getElementById("finishBtn");
   if (finishBtn) finishBtn.onclick = () => finishRound(roundId);
+  const restoreBannerBtn = document.getElementById("restoreBannerBtn");
+  if (restoreBannerBtn) restoreBannerBtn.onclick = () => restoreRound(roundId);
 
   renderScheduleTab(spectatorUrl);
   renderEntry();
@@ -508,7 +563,8 @@ function renderScheduleTab(spectatorUrl){
     const copyBtn = document.getElementById("copyBtn");
     if (copyBtn) copyBtn.onclick = () => navigator.clipboard.writeText(spectatorUrl);
     document.getElementById("editScheduleBtn").onclick = () => { scheduleEditMode = true; renderScheduleTab(spectatorUrl); };
-    document.getElementById("deleteRoundBtn").onclick = () => deleteRound(scorerData.round.id);
+    const deleteBtn = document.getElementById("deleteRoundBtn");
+    if (deleteBtn) deleteBtn.onclick = () => deleteRound(scorerData.round.id);
   } else {
     document.getElementById("cancelEditBtn").onclick = () => { scheduleEditMode = false; renderScheduleTab(spectatorUrl); };
     document.getElementById("saveScheduleBtn").onclick = () => saveSchedule(spectatorUrl);
@@ -520,14 +576,15 @@ function buildScheduleViewHtml(bundle, spectatorUrl){
   return `
     <div class="row" style="justify-content:flex-end;gap:8px;margin-top:8px;">
       <button class="secondary" id="editScheduleBtn">Edit</button>
-      <button id="deleteRoundBtn" style="background:var(--red);border-color:var(--red);">Delete round</button>
+      ${!round.deleted ? `<button id="deleteRoundBtn" style="background:var(--red);border-color:var(--red);">Delete round</button>` : ""}
     </div>
 
     <h2>Round details</h2>
     <div class="card">
-      <div class="grid-2">
+      <div class="grid-3">
         <div><span class="muted">Course</span><br><strong>${round.courseName}</strong></div>
         <div><span class="muted">Date</span><br><strong>${round.roundDate || "-"}${round.teeTime ? " · " + round.teeTime : ""}</strong></div>
+        <div><span class="muted">Tee box</span><br><strong>${round.teeBox || "-"}</strong></div>
       </div>
       <div style="margin-top:10px;">${round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
     </div>
@@ -564,7 +621,7 @@ function buildScheduleEditHtml(bundle){
     <div class="card">
       <label>Course name</label>
       <input type="text" id="editCourseName" value="${round.courseName}">
-      <div class="grid-2">
+      <div class="grid-3">
         <div>
           <label>Date</label>
           <input type="text" id="editRoundDate" value="${round.roundDate || ""}">
@@ -572,6 +629,10 @@ function buildScheduleEditHtml(bundle){
         <div>
           <label>Tee time</label>
           <input type="text" id="editTeeTime" value="${round.teeTime || ""}">
+        </div>
+        <div>
+          <label>Tee box</label>
+          <select id="editTeeBox">${teeBoxOptions(round.teeBox || "White")}</select>
         </div>
       </div>
     </div>
@@ -599,6 +660,7 @@ async function saveSchedule(spectatorUrl){
   const courseName = document.getElementById("editCourseName").value.trim() || scorerData.round.courseName;
   const roundDate = document.getElementById("editRoundDate").value.trim();
   const teeTime = document.getElementById("editTeeTime").value.trim();
+  const teeBox = document.getElementById("editTeeBox").value;
   const holes = scorerData.holes.map(h => ({
     holeNumber: h.holeNumber,
     par: parseInt(document.querySelector(`.h-par-edit[data-hole="${h.holeNumber}"]`).value || h.par, 10),
@@ -607,7 +669,7 @@ async function saveSchedule(spectatorUrl){
 
   msg.textContent = "Saving…";
   try{
-    await updateDoc(doc(db, "golf_rounds", scorerData.round.id), { courseName, roundDate, teeTime });
+    await updateDoc(doc(db, "golf_rounds", scorerData.round.id), { courseName, roundDate, teeTime, teeBox });
     const batch = writeBatch(db);
     holes.forEach(h => batch.set(doc(db, "golf_rounds", scorerData.round.id, "holes", String(h.holeNumber)), h));
     await batch.commit();
@@ -616,6 +678,7 @@ async function saveSchedule(spectatorUrl){
     scorerData.round.courseName = courseName;
     scorerData.round.roundDate = roundDate;
     scorerData.round.teeTime = teeTime;
+    scorerData.round.teeBox = teeBox;
     scorerData.holes = holes;
     scheduleEditMode = false;
 
@@ -628,23 +691,19 @@ async function saveSchedule(spectatorUrl){
 }
 
 async function deleteRound(roundId){
-  if (!confirm("Delete this round permanently? This removes all scores, players and hole data. This cannot be undone.")) return;
+  if (!confirm("Delete this round? It'll be hidden from your rounds list, but can be restored later.")) return;
   try{
-    const [holesSnap, playersSnap, scoresSnap] = await Promise.all([
-      getDocs(collection(db, "golf_rounds", roundId, "holes")),
-      getDocs(collection(db, "golf_rounds", roundId, "players")),
-      getDocs(collection(db, "golf_rounds", roundId, "scores")),
-    ]);
-    const batch = writeBatch(db);
-    holesSnap.docs.forEach(d => batch.delete(d.ref));
-    playersSnap.docs.forEach(d => batch.delete(d.ref));
-    scoresSnap.docs.forEach(d => batch.delete(d.ref));
-    batch.delete(doc(db, "golf_rounds", roundId));
-    await batch.commit();
+    await updateDoc(doc(db, "golf_rounds", roundId), { deleted: true, deletedAt: serverTimestamp() });
     location.hash = "";
   } catch(err){
     alert("Couldn't delete round: " + err.message);
   }
+}
+
+async function restoreRound(roundId){
+  await updateDoc(doc(db, "golf_rounds", roundId), { deleted: false, deletedAt: null });
+  scorerData.round.deleted = false;
+  renderScorer(roundId);
 }
 
 async function finishRound(roundId){
