@@ -296,6 +296,7 @@ async function render(){
   }
 
   if (parts[0] === "score" && parts[1]) return renderScorer(parts[1]);
+  if (parts[0] === "play" && parts[1]) return renderScoringOnly(parts[1]);
   if (parts[0] === "spectate" && parts[1]) return renderSpectator(parts[1]);
   if (parts[0] === "competition" && parts[1]) return renderCompetition(parts[1]);
   if (parts[0] === "standings" && parts[1]) return renderStandings(parts[1]);
@@ -744,6 +745,108 @@ async function renderScorer(roundId){
   app.innerHTML = `
     ${renderAppHeader(scorerData.round.name, scorerData.round.courseName, finished ? "final" : "live")}
     <div class="tab-bar">
+      <button class="tab-btn" id="tabScheduleBtn">Schedule</button>
+      <button class="tab-btn active" id="tabScoreBtn">Score</button>
+      <button class="tab-btn" id="tabBoardsBtn">Leaderboards</button>
+    </div>
+    <div class="content">
+
+    ${scorerData.round.deleted ? `
+      <div class="card" style="border-color:var(--red);background:var(--gold-dim);text-align:center;">
+        <strong>This round has been deleted</strong>
+        <p class="muted" style="margin:4px 0 10px;">It's hidden from your rounds list but hasn't been erased.</p>
+        <button id="restoreBannerBtn">Restore round</button>
+      </div>
+    ` : ""}
+
+    <div id="scheduleTab" style="display:none;"></div>
+
+    <div id="scoreTab">
+      <div>${scorerData.round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
+      ${finished
+        ? `<div class="card" style="text-align:center;border-color:var(--green);"><strong>Round finished</strong><p class="muted" style="margin:4px 0 0;">Scores are locked. See the Leaderboards tab for final results.</p></div>`
+        : `<div class="row" style="margin:10px 0;"><button id="finishBtn" style="background:var(--red);border-color:var(--red);">Finish round</button></div>`}
+      <div class="hole-nav">
+        <button id="prevHole" class="secondary">&larr;</button>
+        <div class="current" id="holeLabel"></div>
+        <button id="nextHole" class="secondary">&rarr;</button>
+      </div>
+      <div id="entryCard"></div>
+    </div>
+
+    <div id="boardsTab" style="display:none;">
+      <h2>Leaderboards</h2>
+      <div id="boards"></div>
+    </div>
+    </div>
+  `;
+
+  document.getElementById("tabScheduleBtn").onclick = () => switchScorerTab("schedule");
+  document.getElementById("tabScoreBtn").onclick = () => switchScorerTab("score");
+  document.getElementById("tabBoardsBtn").onclick = () => switchScorerTab("boards");
+  document.getElementById("prevHole").onclick = () => { scorerHole = Math.max(1, scorerHole-1); renderEntry(); };
+  document.getElementById("nextHole").onclick = () => { scorerHole = Math.min(18, scorerHole+1); renderEntry(); };
+  const finishBtn = document.getElementById("finishBtn");
+  if (finishBtn) finishBtn.onclick = () => finishRound(roundId);
+  const restoreBannerBtn = document.getElementById("restoreBannerBtn");
+  if (restoreBannerBtn) restoreBannerBtn.onclick = () => restoreRound(roundId);
+
+  renderScheduleTab(spectatorUrl);
+  renderEntry();
+  renderBoards();
+
+  if (scorerUnsub) scorerUnsub();
+  scorerUnsub = onSnapshot(collection(db, "golf_rounds", roundId, "scores"), snap => {
+    scorerData.scores = snap.docs.map(d => d.data());
+    renderBoards();
+  });
+
+  if (scorerBbbUnsub) scorerBbbUnsub();
+  scorerBbbUnsub = onSnapshot(collection(db, "golf_rounds", roundId, "bbb"), snap => {
+    scorerData.bbb = snap.docs.map(d => d.data());
+    renderEntry();
+    renderBoards();
+  });
+}
+
+/* ---------- Schedule tab: view mode + edit mode ---------- */
+function renderScheduleTab(spectatorUrl){
+  currentBundle = scorerData;
+  const tab = document.getElementById("scheduleTab");
+  tab.innerHTML = scheduleEditMode ? buildScheduleEditHtml(scorerData) : buildScheduleViewHtml(scorerData, spectatorUrl);
+
+  if (!scheduleEditMode){
+    const copyBtn = document.getElementById("copyBtn");
+    if (copyBtn) copyBtn.onclick = () => navigator.clipboard.writeText(spectatorUrl);
+    const copyScoreBtn = document.getElementById("copyScoreLinkBtn");
+    if (copyScoreBtn) copyScoreBtn.onclick = () => navigator.clipboard.writeText(copyScoreBtn.dataset.url);
+    document.getElementById("editScheduleBtn").onclick = () => { scheduleEditMode = true; renderScheduleTab(spectatorUrl); };
+    const deleteBtn = document.getElementById("deleteRoundBtn");
+    if (deleteBtn) deleteBtn.onclick = () => deleteRound(scorerData.round.id);
+  } else {
+    document.getElementById("cancelEditBtn").onclick = () => { scheduleEditMode = false; renderScheduleTab(spectatorUrl); };
+    document.getElementById("saveScheduleBtn").onclick = () => saveSchedule(spectatorUrl);
+    if (scorerData.round.gameModes.includes("piekfyn")){
+      document.querySelectorAll(".edit-p-name, .edit-p-team").forEach(el => {
+        el.addEventListener(el.tagName === "SELECT" ? "change" : "input", refreshEditPairingOptions);
+      });
+    }
+  }
+}
+
+async function renderScoringOnly(roundId){
+  const app = document.getElementById("app");
+  app.innerHTML = `<p class="muted">Loading…</p>`;
+  scorerData = await loadRoundBundle(roundId);
+  if (!scorerData.round){ app.innerHTML = `<p>Round not found.</p>`; return; }
+  scheduleEditMode = false;
+
+  const spectatorUrl = location.origin + location.pathname + `#/spectate/${scorerData.round.spectatorCode}`;
+  const finished = scorerData.round.status === "finished";
+
+  app.innerHTML = `
+    ${renderAppHeader(scorerData.round.name, scorerData.round.courseName, finished ? "final" : "live")}
+    <div class="tab-bar">
       <button class="tab-btn active" id="tabScoreBtn">Score</button>
       <button class="tab-btn" id="tabBoardsBtn">Leaderboards</button>
     </div>
@@ -812,28 +915,6 @@ async function renderScorer(roundId){
 }
 
 /* ---------- Schedule tab: view mode + edit mode ---------- */
-function renderScheduleTab(spectatorUrl){
-  currentBundle = scorerData;
-  const tab = document.getElementById("scheduleTab");
-  tab.innerHTML = scheduleEditMode ? buildScheduleEditHtml(scorerData) : buildScheduleViewHtml(scorerData, spectatorUrl);
-
-  if (!scheduleEditMode){
-    const copyBtn = document.getElementById("copyBtn");
-    if (copyBtn) copyBtn.onclick = () => navigator.clipboard.writeText(spectatorUrl);
-    document.getElementById("editScheduleBtn").onclick = () => { scheduleEditMode = true; renderScheduleTab(spectatorUrl); };
-    const deleteBtn = document.getElementById("deleteRoundBtn");
-    if (deleteBtn) deleteBtn.onclick = () => deleteRound(scorerData.round.id);
-  } else {
-    document.getElementById("cancelEditBtn").onclick = () => { scheduleEditMode = false; renderScheduleTab(spectatorUrl); };
-    document.getElementById("saveScheduleBtn").onclick = () => saveSchedule(spectatorUrl);
-    if (scorerData.round.gameModes.includes("piekfyn")){
-      document.querySelectorAll(".edit-p-name, .edit-p-team").forEach(el => {
-        el.addEventListener(el.tagName === "SELECT" ? "change" : "input", refreshEditPairingOptions);
-      });
-    }
-  }
-}
-
 function buildScheduleViewHtml(bundle, spectatorUrl){
   const { round, holes, players } = bundle;
   return `
@@ -851,6 +932,12 @@ function buildScheduleViewHtml(bundle, spectatorUrl){
       </div>
       <div style="margin-top:10px;">${round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
       ${round.gameModes.includes("piekfyn") ? `<div class="muted" style="margin-top:8px;font-size:.85rem;">Piekfyn teams: <strong style="color:var(--ink);">${round.teamAName || "Team A"}</strong> vs <strong style="color:var(--ink);">${round.teamBName || "Team B"}</strong></div>` : ""}
+    </div>
+
+    <div class="link-box">
+      <span class="muted">Scoring link (share this to score):</span>
+      <input type="text" readonly value="${location.origin + location.pathname}#/play/${round.id}" onclick="this.select()">
+      <button class="ghost" id="copyScoreLinkBtn" data-url="${location.origin + location.pathname}#/play/${round.id}">Copy</button>
     </div>
 
     <div class="link-box">
@@ -1321,7 +1408,7 @@ async function renderCompetition(competitionId){
       const pts = computePiekfynPoints(bundle, detail);
       teamATotal += pts.teamAPts;
       teamBTotal += pts.teamBPts;
-      const scoreUrl = location.origin + location.pathname + `#/score/${bundle.round.id}`;
+      const scoreUrl = location.origin + location.pathname + `#/play/${bundle.round.id}`;
       return `
         <div class="card">
           <div class="row" style="justify-content:space-between;">
@@ -1485,7 +1572,7 @@ function totalsFor(players, holes, detail, field){
 }
 
 function playerLink(p){
-  return `<span class="player-name-link" data-player="${p.id}">${p.name}</span>`;
+  return `<span class="player-name-link" data-player="${p.id}">${p.name}</span><span class="muted" style="font-size:.72rem;font-weight:400;"> (${p.playingHandicap})</span>`;
 }
 
 function buildStrokeBoard(players, holes, detail){
