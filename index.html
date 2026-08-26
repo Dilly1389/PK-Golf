@@ -338,9 +338,6 @@ function renderSetup(){
     ${renderAppHeader("PK Golf", "Set up a round, score it live, share a spectator link.")}
     <div class="content">
 
-    <h2>Competitions</h2>
-    <div class="card" id="competitionsListCard"><p class="muted">Loading…</p></div>
-
     <h2>Existing rounds</h2>
     <div class="card" id="roundsListCard"><p class="muted">Loading…</p></div>
 
@@ -368,7 +365,7 @@ function renderSetup(){
         </div>
       </div>
 
-      <h2>Game modes</h2>
+      <h2>Game mode</h2>
       <div id="modesBox"></div>
 
       <h2>Players &amp; handicaps</h2>
@@ -386,21 +383,24 @@ function renderSetup(){
     </div>
   `;
 
-  loadCompetitionsList().then(comps => {
+  function populateCompetitionsList(){
     const card = document.getElementById("competitionsListCard");
-    if (comps.length === 0){ card.innerHTML = `<p class="muted">No competitions yet — check "Piekfyn Kompetisie" with more than 1 fourball below to start one.</p>`; return; }
-    card.innerHTML = comps.map(c => `
-      <div class="row comp-item" data-comp="${c.id}" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer;">
-        <div>
-          <strong>${c.name}</strong>
-          <div class="muted" style="font-size:.78rem;">${c.teamAName || "Team A"} vs ${c.teamBName || "Team B"} · ${c.fourballCount} fourball${c.fourballCount>1?"s":""}${c.courseName ? " · " + c.courseName : ""}</div>
-        </div>
-        <span class="pill mode" style="background:var(--gold-dim);">View</span>
-      </div>`).join("");
-    card.querySelectorAll(".comp-item").forEach(el => {
-      el.addEventListener("click", () => { location.hash = `#/competition/${el.dataset.comp}`; });
+    if (!card) return;
+    loadCompetitionsList().then(comps => {
+      if (comps.length === 0){ card.innerHTML = `<p class="muted">No competitions yet — create one below by naming more than 1 fourball.</p>`; return; }
+      card.innerHTML = comps.map(c => `
+        <div class="row comp-item" data-comp="${c.id}" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer;">
+          <div>
+            <strong>${c.name}</strong>
+            <div class="muted" style="font-size:.78rem;">${c.teamAName || "Team A"} vs ${c.teamBName || "Team B"} · ${c.fourballCount} fourball${c.fourballCount>1?"s":""}${c.courseName ? " · " + c.courseName : ""}</div>
+          </div>
+          <span class="pill mode" style="background:var(--gold-dim);">View</span>
+        </div>`).join("");
+      card.querySelectorAll(".comp-item").forEach(el => {
+        el.addEventListener("click", () => { location.hash = `#/competition/${el.dataset.comp}`; });
+      });
     });
-  });
+  }
 
   loadRoundsList().then(rounds => {
     const card = document.getElementById("roundsListCard");
@@ -472,9 +472,9 @@ function renderSetup(){
   });
 
   const modesBox = document.getElementById("modesBox");
-  modesBox.innerHTML = GAME_MODES.map(m => `
+  modesBox.innerHTML = GAME_MODES.map((m,i) => `
     <div class="checkbox-row">
-      <input type="checkbox" class="mode-cb" value="${m.key}" id="mode-${m.key}">
+      <input type="radio" name="gameMode" class="mode-cb" value="${m.key}" id="mode-${m.key}" ${i===0?"checked":""}>
       <label style="margin:0" for="mode-${m.key}">${m.label}</label>
     </div>`).join("") + `
     <div id="allianceOptions" style="display:none;margin:8px 0 0 26px;">
@@ -504,13 +504,26 @@ function renderSetup(){
       <p class="muted" style="font-size:.75rem;margin-top:4px;">The players and pairings below are for Fourball 1. Extra fourballs are created with placeholder players you edit afterward from each one's Schedule tab.</p>
       <label>Fourball 1 — individual match pairings</label>
       <div id="pairingOptions"></div>
+
+      <h2>Competitions</h2>
+      <div class="card" id="competitionsListCard"><p class="muted">Loading…</p></div>
     </div>`;
-  document.getElementById("mode-alliance").addEventListener("change", (e) => {
-    document.getElementById("allianceOptions").style.display = e.target.checked ? "" : "none";
-  });
-  document.getElementById("mode-piekfyn").addEventListener("change", (e) => {
-    document.getElementById("piekfynOptions").style.display = e.target.checked ? "" : "none";
-    if (e.target.checked) refreshPairingOptions();
+
+  function updateModeVisibility(){
+    const selected = document.querySelector('input[name="gameMode"]:checked').value;
+    const isAlliance = selected === "alliance";
+    const isPiekfyn = selected === "piekfyn";
+    const isTeamMode = selected === "matchplay" || selected === "piekfyn";
+    document.getElementById("allianceOptions").style.display = isAlliance ? "" : "none";
+    document.getElementById("piekfynOptions").style.display = isPiekfyn ? "" : "none";
+    if (isPiekfyn){ refreshPairingOptions(); populateCompetitionsList(); }
+    [1,2,3,4].forEach(i => {
+      const col = document.getElementById(`teamCol-${i}`);
+      if (col) col.style.display = isTeamMode ? "" : "none";
+    });
+  }
+  document.querySelectorAll('input[name="gameMode"]').forEach(radio => {
+    radio.addEventListener("change", updateModeVisibility);
   });
 
   const playersBox = document.getElementById("playersBox");
@@ -525,8 +538,8 @@ function renderSetup(){
           <label>Playing handicap</label>
           <input type="number" class="p-hcp" id="p${i}-hcp" value="0">
         </div>
-        <div style="flex:1">
-          <label>Team (match play / Piekfyn)</label>
+        <div style="flex:1;display:none;" id="teamCol-${i}">
+          <label>Team</label>
           <select class="p-team" id="p${i}-team">
             <option value="A" ${i<=2?"selected":""}>A</option>
             <option value="B" ${i>2?"selected":""}>B</option>
@@ -539,6 +552,8 @@ function renderSetup(){
     document.getElementById(`p${i}-name`).addEventListener("input", refreshPairingOptions);
     document.getElementById(`p${i}-team`).addEventListener("change", refreshPairingOptions);
   });
+
+  updateModeVisibility();
 
   const holesTable = document.getElementById("holesTable");
   function buildHolesTable(){
@@ -939,7 +954,8 @@ function buildPiekfynEditSection(bundle){
 }
 
 function buildPlayersEditSection(bundle){
-  const { players } = bundle;
+  const { round, players } = bundle;
+  const isTeamMode = round.gameModes.includes("matchplay") || round.gameModes.includes("piekfyn");
   return `
     <h2>Players</h2>
     <div class="card">
@@ -954,7 +970,7 @@ function buildPlayersEditSection(bundle){
               <label>Playing handicap</label>
               <input type="number" class="edit-p-hcp" data-id="${p.id}" value="${p.playingHandicap}">
             </div>
-            <div style="flex:1">
+            <div style="flex:1;${isTeamMode ? "" : "display:none;"}">
               <label>Team</label>
               <select class="edit-p-team" data-id="${p.id}">
                 <option value="A" ${p.team==="A"?"selected":""}>A</option>
