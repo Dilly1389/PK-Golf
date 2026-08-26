@@ -117,7 +117,7 @@ const firebaseConfig = {
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getFirestore, collection, doc, setDoc, addDoc, getDoc, getDocs,
+  getFirestore, collection, doc, setDoc, addDoc, getDoc, getDocs, updateDoc,
   query, where, onSnapshot, writeBatch, serverTimestamp, limit
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -154,7 +154,13 @@ function fmtDiff(n){
 }
 
 /* ---------- shared header ---------- */
-function renderAppHeader(title, subtitle, showLive){
+function renderAppHeader(title, subtitle, badge){
+  // badge: "live" | "final" | undefined
+  const badgeHtml = badge === "live"
+    ? `<span class="badge-live"><span class="dot"></span>live</span>`
+    : badge === "final"
+      ? `<span class="badge-live" style="color:#fff;opacity:.85;"><span class="dot" style="animation:none;background:#fff;"></span>final</span>`
+      : "";
   return `
     <div class="app-header">
       <div class="top-bar">
@@ -162,7 +168,7 @@ function renderAppHeader(title, subtitle, showLive){
           <h1>⛳ ${title}</h1>
           <p class="subtitle">${subtitle || ""}</p>
         </div>
-        ${showLive ? `<span class="badge-live"><span class="dot"></span>live</span>` : ""}
+        ${badgeHtml}
       </div>
     </div>`;
 }
@@ -211,6 +217,16 @@ function renderSetup(){
       <input type="text" id="roundName" placeholder="e.g. Saturday Fourball">
       <label>Course name</label>
       <input type="text" id="courseName" placeholder="e.g. Unika Golf Club">
+      <div class="grid-2">
+        <div>
+          <label>Date</label>
+          <input type="text" id="roundDate" placeholder="e.g. 2026-08-29" value="${new Date().toISOString().slice(0,10)}">
+        </div>
+        <div>
+          <label>Tee time</label>
+          <input type="text" id="teeTime" placeholder="e.g. 07:30">
+        </div>
+      </div>
 
       <h2>Game modes</h2>
       <div id="modesBox"></div>
@@ -277,6 +293,8 @@ async function createRound(){
   const msg = document.getElementById("createMsg");
   const roundName = document.getElementById("roundName").value.trim() || "Fourball";
   const courseName = document.getElementById("courseName").value.trim() || "Course";
+  const roundDate = document.getElementById("roundDate").value.trim();
+  const teeTime = document.getElementById("teeTime").value.trim();
   const modes = Array.from(document.querySelectorAll(".mode-cb:checked")).map(cb => cb.value);
   if (modes.length === 0){ msg.textContent = "Pick at least one game mode."; return; }
 
@@ -301,7 +319,7 @@ async function createRound(){
     const spectatorCode = Math.random().toString(36).slice(2,8);
 
     const roundRef = await addDoc(collection(db, "golf_rounds"), {
-      name: roundName, courseName, gameModes: modes, spectatorCode,
+      name: roundName, courseName, roundDate, teeTime, gameModes: modes, spectatorCode,
       status: "active", createdAt: serverTimestamp()
     });
 
@@ -354,30 +372,30 @@ async function renderScorer(roundId){
   if (!scorerData.round){ app.innerHTML = `<p>Round not found.</p>`; return; }
 
   const spectatorUrl = location.origin + location.pathname + `#/spectate/${scorerData.round.spectatorCode}`;
+  const finished = scorerData.round.status === "finished";
 
   app.innerHTML = `
-    ${renderAppHeader(scorerData.round.name, scorerData.round.courseName, true)}
+    ${renderAppHeader(scorerData.round.name, scorerData.round.courseName, finished ? "final" : "live")}
     <div class="tab-bar">
+      <button class="tab-btn" id="tabScheduleBtn">Schedule</button>
       <button class="tab-btn active" id="tabScoreBtn">Score</button>
       <button class="tab-btn" id="tabBoardsBtn">Leaderboards</button>
     </div>
     <div class="content">
-    <div>${scorerData.round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
 
-    <div class="link-box">
-      <span class="muted">Spectator link:</span>
-      <input type="text" readonly value="${spectatorUrl}" onclick="this.select()">
-      <button class="ghost" id="copyBtn">Copy</button>
+    <div id="scheduleTab" style="display:none;">
+      ${buildScheduleHtml(scorerData, spectatorUrl)}
     </div>
 
     <div id="scoreTab">
-      <h2>Enter scores</h2>
+      <div>${scorerData.round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
+      ${finished ? `<div class="card" style="text-align:center;border-color:var(--green);"><strong>Round finished</strong><p class="muted" style="margin:4px 0 0;">Scores are locked. See the Leaderboards tab for final results.</p></div>` : ""}
       <div class="hole-nav">
         <button id="prevHole" class="secondary">&larr;</button>
         <div class="current" id="holeLabel"></div>
         <button id="nextHole" class="secondary">&rarr;</button>
       </div>
-      <div class="card" id="entryCard"></div>
+      <div id="entryCard"></div>
     </div>
 
     <div id="boardsTab" style="display:none;">
@@ -387,12 +405,16 @@ async function renderScorer(roundId){
     </div>
   `;
 
-  document.getElementById("copyBtn").onclick = () => navigator.clipboard.writeText(spectatorUrl);
+  document.getElementById("tabScheduleBtn").onclick = () => switchScorerTab("schedule");
+  document.getElementById("tabScoreBtn").onclick = () => switchScorerTab("score");
+  document.getElementById("tabBoardsBtn").onclick = () => switchScorerTab("boards");
   document.getElementById("prevHole").onclick = () => { scorerHole = Math.max(1, scorerHole-1); renderEntry(); };
   document.getElementById("nextHole").onclick = () => { scorerHole = Math.min(18, scorerHole+1); renderEntry(); };
 
-  document.getElementById("tabScoreBtn").onclick = () => switchScorerTab("score");
-  document.getElementById("tabBoardsBtn").onclick = () => switchScorerTab("boards");
+  const copyBtn = document.getElementById("copyBtn");
+  if (copyBtn) copyBtn.onclick = () => navigator.clipboard.writeText(spectatorUrl);
+  const finishBtn = document.getElementById("finishBtn");
+  if (finishBtn) finishBtn.onclick = () => finishRound(roundId);
 
   renderEntry();
   renderBoards();
@@ -404,41 +426,138 @@ async function renderScorer(roundId){
   });
 }
 
+function buildScheduleHtml(bundle, spectatorUrl){
+  const { round, holes, players } = bundle;
+  return `
+    <h2>Round details</h2>
+    <div class="card">
+      <div class="grid-2">
+        <div><span class="muted">Course</span><br><strong>${round.courseName}</strong></div>
+        <div><span class="muted">Date</span><br><strong>${round.roundDate || "-"}${round.teeTime ? " · " + round.teeTime : ""}</strong></div>
+      </div>
+      <div style="margin-top:10px;">${round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
+    </div>
+
+    <div class="link-box">
+      <span class="muted">Spectator link:</span>
+      <input type="text" readonly value="${spectatorUrl}" onclick="this.select()">
+      <button class="ghost" id="copyBtn">Copy</button>
+    </div>
+
+    <h2>Players</h2>
+    <div class="card">
+      <table>
+        <tr><th class="name-col">Name</th><th>Handicap</th><th>Team</th></tr>
+        ${players.map(p => `<tr><td class="name-col">${p.name}</td><td>${p.playingHandicap}</td><td>${p.team || "-"}</td></tr>`).join("")}
+      </table>
+    </div>
+
+    <h2>Holes — par &amp; stroke index</h2>
+    <div class="card" style="overflow-x:auto;">
+      <table>
+        <tr><th>Hole</th>${holes.map(h=>`<th>${h.holeNumber}</th>`).join("")}</tr>
+        <tr><td>Par</td>${holes.map(h=>`<td>${h.par}</td>`).join("")}</tr>
+        <tr><td>S.I.</td>${holes.map(h=>`<td>${h.strokeIndex}</td>`).join("")}</tr>
+      </table>
+    </div>
+
+    ${round.status !== "finished" ? `
+      <div class="row" style="margin:16px 0;">
+        <button id="finishBtn" style="background:var(--red);border-color:var(--red);">Finish round</button>
+      </div>
+    ` : `<p class="muted">This round is finished — scores are locked.</p>`}
+  `;
+}
+
+async function finishRound(roundId){
+  if (!confirm("Finish this round? Scores will be locked from further entry.")) return;
+  await updateDoc(doc(db, "golf_rounds", roundId), { status: "finished" });
+  scorerData.round.status = "finished";
+  renderScorer(roundId);
+}
+
 function switchScorerTab(which){
+  document.getElementById("scheduleTab").style.display = which === "schedule" ? "" : "none";
   document.getElementById("scoreTab").style.display = which === "score" ? "" : "none";
   document.getElementById("boardsTab").style.display = which === "boards" ? "" : "none";
+  document.getElementById("tabScheduleBtn").classList.toggle("active", which === "schedule");
   document.getElementById("tabScoreBtn").classList.toggle("active", which === "score");
   document.getElementById("tabBoardsBtn").classList.toggle("active", which === "boards");
 }
 
+const SCORE_LABELS = { "-2":"Eagle", "-1":"Birdie", "0":"Par", "1":"Bogey", "2":"Dbl", "3":"Tpl+" };
+
 function renderEntry(){
   const hole = scorerData.holes.find(h => h.holeNumber === scorerHole);
+  const finished = scorerData.round.status === "finished";
   document.getElementById("holeLabel").textContent = `Hole ${scorerHole} · Par ${hole.par} · SI ${hole.strokeIndex}`;
   const card = document.getElementById("entryCard");
+
+  const chipOffsets = [-2,-1,0,1,2,3];
+
   card.innerHTML = scorerData.players.map(p => {
     const existing = scorerData.scores.find(s => s.playerId === p.id && s.holeNumber === scorerHole);
+    const currentVal = existing ? existing.grossStrokes : null;
+
+    // running gross total through holes entered so far
+    let total = 0, thru = 0;
+    scorerData.holes.forEach(h => {
+      const s = scorerData.scores.find(sc => sc.playerId === p.id && sc.holeNumber === h.holeNumber);
+      if (s && s.grossStrokes != null){ total += s.grossStrokes; thru++; }
+    });
+
+    const chips = chipOffsets.map(off => {
+      const val = Math.max(1, hole.par + off);
+      const isActive = currentVal === val;
+      return `<button type="button" class="score-chip" data-player="${p.id}" data-val="${val}"
+        style="flex:1;min-width:0;padding:10px 2px;font-size:.95rem;
+        background:${isActive ? "var(--green-dark)" : "#fff"};
+        color:${isActive ? "#fff" : "var(--ink)"};
+        border:1px solid ${isActive ? "var(--green-dark)" : "var(--line)"};
+        border-radius:8px;" ${finished ? "disabled" : ""}>
+        <div style="font-weight:700;">${val}</div>
+        <div style="font-size:.62rem;opacity:.75;">${SCORE_LABELS[String(off)]}</div>
+      </button>`;
+    }).join("");
+
     return `
-      <div class="row" style="justify-content:space-between;margin-bottom:8px;">
-        <span>${p.name} <span class="muted">(hcp ${p.playingHandicap}${p.team ? ", team "+p.team : ""})</span></span>
-        <input type="number" min="1" max="15" class="hole-input score-input" data-player="${p.id}"
-          value="${existing ? existing.grossStrokes : ""}" placeholder="-">
+      <div class="card" style="padding:12px;">
+        <div class="row" style="justify-content:space-between;margin-bottom:8px;">
+          <strong>${p.name}</strong>
+          <span class="muted">hcp ${p.playingHandicap}${p.team ? " · team "+p.team : ""} · thru ${thru}: ${thru ? total : "-"}</span>
+        </div>
+        <div class="row" style="gap:6px;flex-wrap:nowrap;">${chips}</div>
+        <div class="row" style="margin-top:6px;">
+          <button type="button" class="ghost custom-btn" data-player="${p.id}" style="font-size:.75rem;padding:4px 10px;" ${finished ? "disabled" : ""}>Other score…</button>
+          ${currentVal != null ? `<span class="muted" style="font-size:.75rem;">Entered: ${currentVal}</span>` : ""}
+        </div>
       </div>`;
   }).join("");
-  card.querySelectorAll(".score-input").forEach(inp => {
-    inp.addEventListener("change", async (e) => {
-      const val = e.target.value === "" ? null : parseInt(e.target.value, 10);
-      const playerId = e.target.dataset.player;
-      const docId = `${playerId}_${scorerHole}`;
-      await setDoc(doc(db, "golf_rounds", scorerData.round.id, "scores", docId), {
-        playerId, holeNumber: scorerHole, grossStrokes: val, updatedAt: serverTimestamp()
-      });
-      // local echo (snapshot listener will also update this shortly)
-      const idx = scorerData.scores.findIndex(s => s.playerId === playerId && s.holeNumber === scorerHole);
-      const rec = { playerId, holeNumber: scorerHole, grossStrokes: val };
-      if (idx >= 0) scorerData.scores[idx] = rec; else scorerData.scores.push(rec);
-      renderBoards();
+
+  card.querySelectorAll(".score-chip").forEach(btn => {
+    btn.addEventListener("click", () => saveScore(btn.dataset.player, parseInt(btn.dataset.val, 10)));
+  });
+  card.querySelectorAll(".custom-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const val = prompt("Enter gross strokes for this hole:");
+      if (val === null || val.trim() === "") return;
+      const n = parseInt(val, 10);
+      if (!Number.isFinite(n) || n < 1) return;
+      saveScore(btn.dataset.player, n);
     });
   });
+}
+
+async function saveScore(playerId, val){
+  const docId = `${playerId}_${scorerHole}`;
+  await setDoc(doc(db, "golf_rounds", scorerData.round.id, "scores", docId), {
+    playerId, holeNumber: scorerHole, grossStrokes: val, updatedAt: serverTimestamp()
+  });
+  const idx = scorerData.scores.findIndex(s => s.playerId === playerId && s.holeNumber === scorerHole);
+  const rec = { playerId, holeNumber: scorerHole, grossStrokes: val };
+  if (idx >= 0) scorerData.scores[idx] = rec; else scorerData.scores.push(rec);
+  renderEntry();
+  renderBoards();
 }
 
 function renderBoards(){
@@ -462,9 +581,10 @@ async function renderSpectator(code){
   const bundle = await loadRoundBundle(roundId);
 
   app.innerHTML = `
-    ${renderAppHeader(bundle.round.name, bundle.round.courseName, true)}
+    ${renderAppHeader(bundle.round.name, bundle.round.courseName, bundle.round.status === "finished" ? "final" : "live")}
     <div class="content">
     <div>${bundle.round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
+    ${bundle.round.status === "finished" ? `<div class="card" style="text-align:center;border-color:var(--green);"><strong>Final result</strong></div>` : ""}
     <h2>Leaderboards</h2>
     <div id="boards">${buildBoardsHtml(bundle)}</div>
     </div>
