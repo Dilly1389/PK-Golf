@@ -1167,7 +1167,15 @@ function renderEntry(){
   }).join("");
 
   card.querySelectorAll(".score-chip").forEach(btn => {
-    btn.addEventListener("click", () => saveScore(btn.dataset.player, parseInt(btn.dataset.val, 10)));
+    btn.addEventListener("click", () => {
+      const val = parseInt(btn.dataset.val, 10);
+      const already = scorerData.scores.find(s => s.playerId === btn.dataset.player && s.holeNumber === scorerHole);
+      if (already && already.grossStrokes === val){
+        clearScore(btn.dataset.player);
+      } else {
+        saveScore(btn.dataset.player, val);
+      }
+    });
   });
   card.querySelectorAll(".custom-btn").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -1253,6 +1261,15 @@ async function saveScore(playerId, val){
   const idx = scorerData.scores.findIndex(s => s.playerId === playerId && s.holeNumber === scorerHole);
   const rec = { playerId, holeNumber: scorerHole, grossStrokes: val };
   if (idx >= 0) scorerData.scores[idx] = rec; else scorerData.scores.push(rec);
+  renderEntry();
+  renderBoards();
+}
+
+async function clearScore(playerId){
+  const docId = `${playerId}_${scorerHole}`;
+  await deleteDoc(doc(db, "golf_rounds", scorerData.round.id, "scores", docId));
+  const idx = scorerData.scores.findIndex(s => s.playerId === playerId && s.holeNumber === scorerHole);
+  if (idx >= 0) scorerData.scores.splice(idx, 1);
   renderEntry();
   renderBoards();
 }
