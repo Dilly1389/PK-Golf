@@ -298,6 +298,7 @@ async function render(){
   if (parts[0] === "score" && parts[1]) return renderScorer(parts[1]);
   if (parts[0] === "spectate" && parts[1]) return renderSpectator(parts[1]);
   if (parts[0] === "competition" && parts[1]) return renderCompetition(parts[1]);
+  if (parts[0] === "standings" && parts[1]) return renderStandings(parts[1]);
   return renderSetup();
 }
 
@@ -743,7 +744,6 @@ async function renderScorer(roundId){
   app.innerHTML = `
     ${renderAppHeader(scorerData.round.name, scorerData.round.courseName, finished ? "final" : "live")}
     <div class="tab-bar">
-      <button class="tab-btn" id="tabScheduleBtn">Schedule</button>
       <button class="tab-btn active" id="tabScoreBtn">Score</button>
       <button class="tab-btn" id="tabBoardsBtn">Leaderboards</button>
     </div>
@@ -757,10 +757,13 @@ async function renderScorer(roundId){
       </div>
     ` : ""}
 
-    <div id="scheduleTab" style="display:none;"></div>
-
     <div id="scoreTab">
       <div>${scorerData.round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
+      <div class="link-box">
+        <span class="muted">Spectator link:</span>
+        <input type="text" readonly value="${spectatorUrl}" onclick="this.select()">
+        <button class="ghost" id="copyBtn">Copy</button>
+      </div>
       ${finished
         ? `<div class="card" style="text-align:center;border-color:var(--green);"><strong>Round finished</strong><p class="muted" style="margin:4px 0 0;">Scores are locked. See the Leaderboards tab for final results.</p></div>`
         : `<div class="row" style="margin:10px 0;"><button id="finishBtn" style="background:var(--red);border-color:var(--red);">Finish round</button></div>`}
@@ -779,17 +782,18 @@ async function renderScorer(roundId){
     </div>
   `;
 
-  document.getElementById("tabScheduleBtn").onclick = () => switchScorerTab("schedule");
   document.getElementById("tabScoreBtn").onclick = () => switchScorerTab("score");
   document.getElementById("tabBoardsBtn").onclick = () => switchScorerTab("boards");
   document.getElementById("prevHole").onclick = () => { scorerHole = Math.max(1, scorerHole-1); renderEntry(); };
   document.getElementById("nextHole").onclick = () => { scorerHole = Math.min(18, scorerHole+1); renderEntry(); };
+  const copyBtn = document.getElementById("copyBtn");
+  if (copyBtn) copyBtn.onclick = () => navigator.clipboard.writeText(spectatorUrl);
   const finishBtn = document.getElementById("finishBtn");
   if (finishBtn) finishBtn.onclick = () => finishRound(roundId);
   const restoreBannerBtn = document.getElementById("restoreBannerBtn");
   if (restoreBannerBtn) restoreBannerBtn.onclick = () => restoreRound(roundId);
 
-  renderScheduleTab(spectatorUrl);
+  currentBundle = scorerData;
   renderEntry();
   renderBoards();
 
@@ -816,11 +820,9 @@ function renderScheduleTab(spectatorUrl){
   if (!scheduleEditMode){
     const copyBtn = document.getElementById("copyBtn");
     if (copyBtn) copyBtn.onclick = () => navigator.clipboard.writeText(spectatorUrl);
-    document.getElementById("newRoundBtn").onclick = () => { location.hash = ""; };
     document.getElementById("editScheduleBtn").onclick = () => { scheduleEditMode = true; renderScheduleTab(spectatorUrl); };
     const deleteBtn = document.getElementById("deleteRoundBtn");
     if (deleteBtn) deleteBtn.onclick = () => deleteRound(scorerData.round.id);
-    populateOpenRoundsList(scorerData.round.id);
   } else {
     document.getElementById("cancelEditBtn").onclick = () => { scheduleEditMode = false; renderScheduleTab(spectatorUrl); };
     document.getElementById("saveScheduleBtn").onclick = () => saveSchedule(spectatorUrl);
@@ -832,40 +834,12 @@ function renderScheduleTab(spectatorUrl){
   }
 }
 
-async function populateOpenRoundsList(currentRoundId){
-  const card = document.getElementById("openRoundsList");
-  if (!card) return;
-  const rounds = await loadRoundsList();
-  const open = rounds.filter(r => !r.deleted && r.status !== "finished" && r.id !== currentRoundId);
-  if (open.length === 0){
-    card.innerHTML = `<p class="muted">No other open rounds.</p>`;
-    return;
-  }
-  card.innerHTML = open.map(r => `
-    <div class="row round-item" data-round="${r.id}" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer;">
-      <div>
-        <strong>${r.name}</strong>
-        <div class="muted" style="font-size:.78rem;">${r.courseName || ""}${r.roundDate ? " · " + r.roundDate : ""}${r.teeBox ? " · " + r.teeBox + " tees" : ""}</div>
-      </div>
-      <span class="pill mode" style="background:var(--gold-dim);">Active</span>
-    </div>`).join("");
-  card.querySelectorAll(".round-item").forEach(el => {
-    el.addEventListener("click", () => { location.hash = `#/score/${el.dataset.round}`; });
-  });
-}
-
 function buildScheduleViewHtml(bundle, spectatorUrl){
   const { round, holes, players } = bundle;
   return `
-    <h2>Open rounds</h2>
-    <div class="card" id="openRoundsList"><p class="muted">Loading…</p></div>
-
-    <div class="row" style="justify-content:space-between;gap:8px;margin-top:8px;flex-wrap:wrap;">
-      <button class="ghost" id="newRoundBtn">+ Schedule new round</button>
-      <div class="row" style="gap:8px;">
-        <button class="secondary" id="editScheduleBtn">Edit</button>
-        ${!round.deleted ? `<button id="deleteRoundBtn" style="background:var(--red);border-color:var(--red);">Delete round</button>` : ""}
-      </div>
+    <div class="row" style="justify-content:flex-end;gap:8px;margin-top:8px;">
+      <button class="secondary" id="editScheduleBtn">Edit</button>
+      ${!round.deleted ? `<button id="deleteRoundBtn" style="background:var(--red);border-color:var(--red);">Delete round</button>` : ""}
     </div>
 
     <h2>Round details</h2>
@@ -1109,10 +1083,8 @@ async function finishRound(roundId){
 }
 
 function switchScorerTab(which){
-  document.getElementById("scheduleTab").style.display = which === "schedule" ? "" : "none";
   document.getElementById("scoreTab").style.display = which === "score" ? "" : "none";
   document.getElementById("boardsTab").style.display = which === "boards" ? "" : "none";
-  document.getElementById("tabScheduleBtn").classList.toggle("active", which === "schedule");
   document.getElementById("tabScoreBtn").classList.toggle("active", which === "score");
   document.getElementById("tabBoardsBtn").classList.toggle("active", which === "boards");
 }
@@ -1397,6 +1369,70 @@ async function renderCompetition(competitionId){
   );
 }
 
+/* Read-only standings — safe to link from within a fourball's own scoring flow.
+   Shows the overall points and each fourball's line score, but never another
+   fourball's scoring link, so one group can't see or touch another's scores. */
+async function renderStandings(competitionId){
+  const app = document.getElementById("app");
+  app.innerHTML = `<p class="muted">Loading…</p>`;
+
+  const compSnap = await getDoc(doc(db, "golf_competitions", competitionId));
+  if (!compSnap.exists()){ app.innerHTML = `<p>Competition not found.</p>`; return; }
+  const comp = { id: compSnap.id, ...compSnap.data() };
+
+  const roundsSnap = await getDocs(query(collection(db, "golf_rounds"), where("competitionId", "==", competitionId)));
+  const fourballRounds = roundsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+    .filter(r => !r.deleted)
+    .sort((a,b) => (a.fourballIndex||0) - (b.fourballIndex||0));
+
+  const bundles = await Promise.all(fourballRounds.map(r => loadRoundBundle(r.id)));
+
+  function renderBody(){
+    let teamATotal = 0, teamBTotal = 0;
+    const rows = bundles.map((bundle, idx) => {
+      const detail = computeDetail(bundle);
+      const pts = computePiekfynPoints(bundle, detail);
+      teamATotal += pts.teamAPts;
+      teamBTotal += pts.teamBPts;
+      return `
+        <div class="card">
+          <div class="row" style="justify-content:space-between;">
+            <strong>Fourball ${bundle.round.fourballIndex || idx+1}</strong>
+            <span class="muted">${pts.decidedCount} of 3 decided</span>
+          </div>
+          <p class="muted" style="margin:4px 0 8px;">${bundle.players.map(p=>p.name).join(", ")}</p>
+          <p style="font-size:1.1rem;margin:0;text-align:center;">
+            <strong>${comp.teamAName || "Team A"} ${pts.teamAPts}</strong> — <strong>${pts.teamBPts} ${comp.teamBName || "Team B"}</strong>
+          </p>
+        </div>`;
+    }).join("");
+
+    document.getElementById("standingsBody").innerHTML = `
+      <p style="font-size:1.6rem;margin:0 0 4px;text-align:center;">
+        <strong>${comp.teamAName || "Team A"} ${teamATotal}</strong> — <strong>${teamBTotal} ${comp.teamBName || "Team B"}</strong>
+      </p>
+      <p class="muted" style="text-align:center;font-size:.82rem;margin-bottom:16px;">out of ${fourballRounds.length * 3} points across ${fourballRounds.length} fourball${fourballRounds.length===1?"":"s"}</p>
+      ${rows || `<p class="muted">No fourballs found for this competition.</p>`}
+    `;
+  }
+
+  app.innerHTML = `
+    ${renderAppHeader(comp.name, `${comp.teamAName || "Team A"} vs ${comp.teamBName || "Team B"}`, "live")}
+    <div class="content">
+    <div id="standingsBody"><p class="muted">Loading…</p></div>
+    </div>
+  `;
+  renderBody();
+
+  if (competitionUnsubs.length) competitionUnsubs.forEach(u => u());
+  competitionUnsubs = fourballRounds.map(r =>
+    onSnapshot(collection(db, "golf_rounds", r.id, "scores"), snap => {
+      const idx = bundles.findIndex(b => b.round.id === r.id);
+      if (idx >= 0){ bundles[idx].scores = snap.docs.map(d => d.data()); renderBody(); }
+    })
+  );
+}
+
 /* ============================================================
    SCORING ENGINE + BOARD RENDERING (shared by scorer & spectator)
    ============================================================ */
@@ -1551,24 +1587,10 @@ function buildAllianceBoard(bundle, detail){
   const data = computeAllianceData(bundle, detail);
   const thru = data.filter(d => d.teamPts != null).length;
   const total = data.reduce((a,d) => a + (d.teamPts || 0), 0);
-
-  const grossTotals = totalsFor(players, bundle.holes, detail, "gross");
-  const ptsTotals = totalsFor(players, bundle.holes, detail, "pts");
-
   return `
   <div class="card">
     <strong>Alliance</strong> <span class="muted">— best ${n} of ${players.length} net-stableford scores per hole</span>
     <p style="font-size:1.1rem;margin:10px 0 4px;">${thru ? total + " points" : "Not started"} <span class="muted" style="font-size:.85rem;">(thru ${thru})</span></p>
-    <table style="margin-top:8px;">
-      <tr><th class="name-col">Player</th><th>Thru</th><th>Gross</th><th>Points</th></tr>
-      ${players.map(p => `
-        <tr>
-          <td class="name-col">${playerLink(p)}</td>
-          <td>${grossTotals[p.id].count}</td>
-          <td>${grossTotals[p.id].count ? grossTotals[p.id].sum : "-"}</td>
-          <td>${ptsTotals[p.id].count ? ptsTotals[p.id].sum : "-"}</td>
-        </tr>`).join("")}
-    </table>
     <div class="team-scorecard-link">Fourball: ${players.map(p=>p.name).join(", ")} — view full scorecard</div>
   </div>`;
 }
@@ -1690,7 +1712,7 @@ function buildPiekfynBoard(bundle, detail){
   return `
   <div class="card">
     <strong>Piekfyn Kompetisie</strong> <span class="muted">— ${teamAName} vs ${teamBName}</span>
-    ${round.competitionId ? `<div class="team-scorecard-link" data-competition-link="${round.competitionId}">Part of a multi-fourball competition — view overall standings</div>` : ""}
+    ${round.competitionId ? `<div class="team-scorecard-link" data-standings-link="${round.competitionId}">Part of a multi-fourball competition — view overall standings</div>` : ""}
     <div style="margin-top:8px;">
       ${matches.map(({pA,pB,m}) => matchLine(`${playerLink(pA)} vs ${playerLink(pB)}`, m)).join("")}
       ${matchLine(`${teamAName} vs ${teamBName} (fourball)`, teamMatch)}
@@ -1901,6 +1923,14 @@ function openTeamScorecard(){
             </tr>
           </thead>
           <tbody>
+            <tr>
+              <td class="label-col">S.I.</td>
+              ${front.map(h=>`<td>${h.strokeIndex}</td>`).join("")}
+              <td class="agg-col">-</td>
+              ${back.map(h=>`<td>${h.strokeIndex}</td>`).join("")}
+              <td class="agg-col">-</td>
+              <td class="agg-col">-</td>
+            </tr>
             ${players.map(p => `
             <tr>
               <td class="label-col">${p.name}</td>
@@ -1942,8 +1972,8 @@ function openTeamScorecard(){
 document.addEventListener("click", (e) => {
   const link = e.target.closest(".player-name-link");
   if (link){ openScorecard(link.dataset.player); return; }
-  const compLink = e.target.closest("[data-competition-link]");
-  if (compLink){ location.hash = `#/competition/${compLink.dataset.competitionLink}`; return; }
+  const standingsLink = e.target.closest("[data-standings-link]");
+  if (standingsLink){ location.hash = `#/standings/${standingsLink.dataset.standingsLink}`; return; }
   const teamLink = e.target.closest(".team-scorecard-link");
   if (teamLink){ openTeamScorecard(); }
 });
