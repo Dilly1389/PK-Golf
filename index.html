@@ -99,6 +99,14 @@
   /* clickable player names */
   .player-name-link{color:var(--green-light);cursor:pointer;font-weight:700;text-decoration:underline;text-decoration-style:dotted;}
   .player-name-link:hover{color:var(--green-dark);}
+  .team-scorecard-link{color:var(--green-light);cursor:pointer;font-weight:700;text-decoration:underline;text-decoration-style:dotted;margin-top:6px;font-size:.85rem;}
+  .team-scorecard-link:hover{color:var(--green-dark);}
+  .circled-score{
+    display:inline-flex;align-items:center;justify-content:center;
+    min-width:22px;height:22px;border-radius:50%;
+    border:2px solid var(--green-dark);background:var(--gold-dim);
+    font-weight:800;padding:0 2px;
+  }
 
   /* individual scorecard modal */
   .scorecard-overlay{
@@ -406,7 +414,19 @@ function renderSetup(){
     <div class="checkbox-row">
       <input type="checkbox" class="mode-cb" value="${m.key}" id="mode-${m.key}">
       <label style="margin:0" for="mode-${m.key}">${m.label}</label>
-    </div>`).join("");
+    </div>`).join("") + `
+    <div id="allianceOptions" style="display:none;margin:8px 0 0 26px;">
+      <label>Alliance — scores to count per hole</label>
+      <select id="allianceCount">
+        <option value="1">Best 1 of 4</option>
+        <option value="2" selected>Best 2 of 4</option>
+        <option value="3">Best 3 of 4</option>
+        <option value="4">Best 4 of 4 (all)</option>
+      </select>
+    </div>`;
+  document.getElementById("mode-alliance").addEventListener("change", (e) => {
+    document.getElementById("allianceOptions").style.display = e.target.checked ? "" : "none";
+  });
 
   const playersBox = document.getElementById("playersBox");
   playersBox.innerHTML = [1,2,3,4].map(i => `
@@ -453,6 +473,7 @@ async function createRound(){
   const teeBox = document.getElementById("teeBox").value;
   const modes = Array.from(document.querySelectorAll(".mode-cb:checked")).map(cb => cb.value);
   if (modes.length === 0){ msg.textContent = "Pick at least one game mode."; return; }
+  const allianceCount = parseInt(document.getElementById("allianceCount").value, 10);
 
   const players = [1,2,3,4].map(i => ({
     name: document.getElementById(`p${i}-name`).value.trim() || `Player ${i}`,
@@ -475,7 +496,7 @@ async function createRound(){
     const spectatorCode = Math.random().toString(36).slice(2,8);
 
     const roundRef = await addDoc(collection(db, "golf_rounds"), {
-      name: roundName, courseName, roundDate, teeTime, teeBox, gameModes: modes, spectatorCode,
+      name: roundName, courseName, roundDate, teeTime, teeBox, gameModes: modes, allianceCount, spectatorCode,
       status: "active", deleted: false, createdAt: serverTimestamp()
     });
 
@@ -915,7 +936,7 @@ function buildBoardsHtml(bundle){
   if (round.gameModes.includes("stroke")) html += buildStrokeBoard(players, holes, detail);
   if (round.gameModes.includes("stableford")) html += buildStablefordBoard(players, holes, detail);
   if (round.gameModes.includes("matchplay")) html += buildMatchPlayBoard(players, holes, detail);
-  if (round.gameModes.includes("alliance")) html += buildAllianceBoard(players, holes, detail);
+  if (round.gameModes.includes("alliance")) html += buildAllianceBoard(bundle, detail);
   return html;
 }
 
@@ -1012,19 +1033,34 @@ function buildMatchPlayBoard(players, holes, detail){
   </div>`;
 }
 
-function buildAllianceBoard(players, holes, detail){
-  let total = 0, thru = 0;
-  for (const h of holes){
-    const pts = players.map(p => detail[p.id][h.holeNumber].pts).filter(v => v != null);
-    if (pts.length < players.length) continue;
-    pts.sort((a,b)=>b-a);
-    total += pts[0] + pts[1];
-    thru++;
-  }
+function computeAllianceData(bundle, detail){
+  const { players, holes, round } = bundle;
+  const n = Math.max(1, Math.min(round.allianceCount || 2, players.length));
+  return holes.map(h => {
+    const entries = players.map(p => ({ playerId: p.id, pts: detail[p.id][h.holeNumber].pts }));
+    const allEntered = entries.every(e => e.pts != null);
+    const counted = new Set();
+    let teamPts = null;
+    if (allEntered){
+      const sorted = [...entries].sort((a,b) => b.pts - a.pts);
+      teamPts = sorted.slice(0, n).reduce((a,e) => a + e.pts, 0);
+      sorted.slice(0, n).forEach(e => counted.add(e.playerId));
+    }
+    return { holeNumber: h.holeNumber, entries, counted, teamPts };
+  });
+}
+
+function buildAllianceBoard(bundle, detail){
+  const { players, round } = bundle;
+  const n = Math.max(1, Math.min(round.allianceCount || 2, players.length));
+  const data = computeAllianceData(bundle, detail);
+  const thru = data.filter(d => d.teamPts != null).length;
+  const total = data.reduce((a,d) => a + (d.teamPts || 0), 0);
   return `
   <div class="card">
-    <strong>Alliance</strong> <span class="muted">— best 2 of 4 net-stableford scores per hole</span>
-    <p style="font-size:1.1rem;margin:10px 0 0;">${thru ? total + " points" : "Not started"} <span class="muted" style="font-size:.85rem;">(thru ${thru})</span></p>
+    <strong>Alliance</strong> <span class="muted">— best ${n} of ${players.length} net-stableford scores per hole</span>
+    <p style="font-size:1.1rem;margin:10px 0 4px;">${thru ? total + " points" : "Not started"} <span class="muted" style="font-size:.85rem;">(thru ${thru})</span></p>
+    <div class="team-scorecard-link">Fourball: ${players.map(p=>p.name).join(", ")} — view full scorecard</div>
   </div>`;
 }
 
@@ -1158,9 +1194,112 @@ function closeScorecard(){
   if (overlay) overlay.remove();
 }
 
+function openTeamScorecard(){
+  if (!currentBundle) return;
+  const { round, holes, players } = currentBundle;
+  const detail = computeDetail(currentBundle);
+  const n = Math.max(1, Math.min(round.allianceCount || 2, players.length));
+  const data = computeAllianceData(currentBundle, detail); // per-hole: {holeNumber, entries, counted, teamPts}
+  const byHole = {};
+  data.forEach(d => byHole[d.holeNumber] = d);
+
+  const front = holes.filter(h => h.holeNumber <= 9);
+  const back = holes.filter(h => h.holeNumber > 9);
+
+  function ptsCell(playerId, h){
+    const d = byHole[h.holeNumber];
+    const entry = d.entries.find(e => e.playerId === playerId);
+    const val = entry ? entry.pts : null;
+    if (val == null) return `<td>-</td>`;
+    const isCounted = d.counted.has(playerId);
+    return `<td>${isCounted ? `<span class="circled-score">${val}</span>` : val}</td>`;
+  }
+  function playerAggCell(playerId, subset){
+    const vals = subset.map(h => {
+      const d = byHole[h.holeNumber];
+      const entry = d.entries.find(e => e.playerId === playerId);
+      return entry ? entry.pts : null;
+    }).filter(v => v != null);
+    return `<td class="agg-col">${vals.length ? vals.reduce((a,b)=>a+b,0) : "-"}</td>`;
+  }
+  function teamCell(h){
+    const d = byHole[h.holeNumber];
+    return `<td>${d.teamPts == null ? "-" : `<strong>${d.teamPts}</strong>`}</td>`;
+  }
+  function teamAggCell(subset){
+    const vals = subset.map(h => byHole[h.holeNumber].teamPts).filter(v => v != null);
+    return `<td class="agg-col">${vals.length ? vals.reduce((a,b)=>a+b,0) : "-"}</td>`;
+  }
+
+  const thru = data.filter(d => d.teamPts != null).length;
+  const total = data.reduce((a,d) => a + (d.teamPts || 0), 0);
+
+  const html = `
+    <div class="scorecard-overlay" id="scorecardOverlay">
+      <div class="scorecard-panel">
+        <button class="scorecard-close" id="scorecardCloseBtn">&times;</button>
+        <div class="scorecard-heading">
+          <div class="course">${round.courseName}</div>
+          <div class="meta">${round.roundDate || ""}${round.teeTime ? " · " + round.teeTime : ""}${round.teeBox ? " · " + round.teeBox + " tees" : ""}</div>
+        </div>
+        <div class="scorecard-player-name">Alliance — Fourball <span class="muted" style="font-size:.85rem;font-weight:600;">(best ${n} of ${players.length} count, circled = counted that hole)</span></div>
+
+        <div class="scorecard-table-wrap">
+        <table class="scorecard-table">
+          <thead>
+            <tr>
+              <th class="label-col">Player</th>
+              ${front.map(h=>`<th>${h.holeNumber}</th>`).join("")}
+              <th class="agg-col">OUT</th>
+              ${back.map(h=>`<th>${h.holeNumber}</th>`).join("")}
+              <th class="agg-col">IN</th>
+              <th class="agg-col">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${players.map(p => `
+            <tr>
+              <td class="label-col">${p.name}</td>
+              ${front.map(h => ptsCell(p.id, h)).join("")}
+              ${playerAggCell(p.id, front)}
+              ${back.map(h => ptsCell(p.id, h)).join("")}
+              ${playerAggCell(p.id, back)}
+              ${playerAggCell(p.id, holes)}
+            </tr>`).join("")}
+            <tr class="gross-row">
+              <td class="label-col">Fourball</td>
+              ${front.map(h => teamCell(h)).join("")}
+              ${teamAggCell(front)}
+              ${back.map(h => teamCell(h)).join("")}
+              ${teamAggCell(back)}
+              ${teamAggCell(holes)}
+            </tr>
+          </tbody>
+        </table>
+        </div>
+
+        <div class="scorecard-summary">
+          <div><div class="val">${thru}/18</div><div class="lbl">Thru</div></div>
+          <div><div class="val">${thru ? total : "-"}</div><div class="lbl">Alliance points</div></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = html;
+  document.body.appendChild(wrapper.firstElementChild);
+
+  const overlay = document.getElementById("scorecardOverlay");
+  document.getElementById("scorecardCloseBtn").onclick = closeScorecard;
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeScorecard(); });
+}
+
 document.addEventListener("click", (e) => {
   const link = e.target.closest(".player-name-link");
-  if (link) openScorecard(link.dataset.player);
+  if (link){ openScorecard(link.dataset.player); return; }
+  const teamLink = e.target.closest(".team-scorecard-link");
+  if (teamLink){ openTeamScorecard(); }
 });
 
 render();
