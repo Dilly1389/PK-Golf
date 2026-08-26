@@ -73,6 +73,12 @@
   .leader-row{font-weight:700;background:var(--gold-dim);}
   .top-bar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px;}
   .badge-live{display:inline-flex;align-items:center;gap:6px;font-size:.75rem;color:var(--gold);}
+  .conn-indicator{display:inline-flex;align-items:center;gap:5px;font-size:.68rem;opacity:.85;}
+  .conn-indicator.conn-online{color:#8fd9a8;}
+  .conn-indicator.conn-offline{color:#ffb4a8;}
+  .conn-dot{width:6px;height:6px;border-radius:50%;}
+  .conn-online .conn-dot{background:#4caf50;}
+  .conn-offline .conn-dot{background:#e05a4a;}
   .dot{width:7px;height:7px;border-radius:50%;background:var(--gold);animation:pulse 1.6s infinite;}
   @keyframes pulse{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
   .hole-nav{display:flex;align-items:center;gap:10px;margin:10px 0;}
@@ -257,6 +263,10 @@ function renderAppHeader(title, subtitle, badge){
     : badge === "final"
       ? `<span class="badge-live" style="color:#fff;opacity:.85;"><span class="dot" style="animation:none;background:#fff;"></span>final</span>`
       : "";
+  const online = navigator.onLine;
+  const connHtml = `<span class="conn-indicator ${online ? "conn-online" : "conn-offline"}" id="connIndicator">
+    <span class="conn-dot"></span>${online ? "Connected" : "Offline"}
+  </span>`;
   return `
     <div class="app-header">
       <div class="top-bar">
@@ -264,7 +274,10 @@ function renderAppHeader(title, subtitle, badge){
           <h1>⛳ ${title}</h1>
           <p class="subtitle">${subtitle || ""}</p>
         </div>
-        ${badgeHtml}
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+          ${badgeHtml}
+          ${connHtml}
+        </div>
       </div>
     </div>`;
 }
@@ -2024,7 +2037,7 @@ function openTeamScorecard(){
             </tr>
             ${players.map(p => `
             <tr>
-              <td class="label-col">${p.name}</td>
+              <td class="label-col">${p.name}<div class="muted" style="font-size:.62rem;font-weight:600;">hcp ${p.playingHandicap}</div></td>
               ${front.map(h => ptsCell(p.id, h)).join("")}
               ${playerAggCell(p.id, front)}
               ${back.map(h => ptsCell(p.id, h)).join("")}
@@ -2068,6 +2081,16 @@ document.addEventListener("click", (e) => {
   const teamLink = e.target.closest(".team-scorecard-link");
   if (teamLink){ openTeamScorecard(); }
 });
+
+function updateConnIndicator(){
+  const el = document.getElementById("connIndicator");
+  if (!el) return;
+  const online = navigator.onLine;
+  el.className = "conn-indicator " + (online ? "conn-online" : "conn-offline");
+  el.innerHTML = `<span class="conn-dot"></span>${online ? "Connected" : "Offline"}`;
+}
+window.addEventListener("online", updateConnIndicator);
+window.addEventListener("offline", updateConnIndicator);
 
 render();
 </script>
