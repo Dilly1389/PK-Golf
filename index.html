@@ -103,10 +103,12 @@
   .team-scorecard-link:hover{color:var(--green-dark);}
   .circled-score{
     display:inline-flex;align-items:center;justify-content:center;
-    min-width:22px;height:22px;border-radius:50%;
+    min-width:20px;height:20px;border-radius:50%;
     border:2px solid var(--green-dark);background:var(--gold-dim);
-    font-weight:800;padding:0 2px;
+    font-weight:800;padding:0 2px;margin-top:2px;font-size:.75rem;
   }
+  .shot-count{font-size:.65rem;color:var(--muted);line-height:1;}
+  .pts-plain{display:inline-block;margin-top:2px;font-weight:700;font-size:.75rem;}
 
   /* individual scorecard modal */
   .scorecard-overlay{
@@ -182,7 +184,7 @@ const GAME_MODES = [
   { key: "stroke",     label: "Stroke play (gross/net)" },
   { key: "stableford",  label: "Stableford" },
   { key: "matchplay",  label: "Match play (2 v 2)" },
-  { key: "alliance",   label: "Alliance (best 2 of 4)" },
+  { key: "alliance",   label: "Alliance" },
 ];
 
 const TEE_BOXES = ["White", "Yellow", "Red", "Blue", "Black", "Gold"];
@@ -1235,10 +1237,14 @@ function openTeamScorecard(){
   function ptsCell(playerId, h){
     const d = byHole[h.holeNumber];
     const entry = d.entries.find(e => e.playerId === playerId);
-    const val = entry ? entry.pts : null;
-    if (val == null) return `<td>-</td>`;
+    const pts = entry ? entry.pts : null;
+    const gross = detail[playerId][h.holeNumber].gross;
+    if (pts == null) return `<td>-</td>`;
     const isCounted = d.counted.has(playerId);
-    return `<td>${isCounted ? `<span class="circled-score">${val}</span>` : val}</td>`;
+    return `<td>
+      <div class="shot-count">${gross}</div>
+      <div class="${isCounted ? 'circled-score' : 'pts-plain'}">${pts}</div>
+    </td>`;
   }
   function playerAggCell(playerId, subset){
     const vals = subset.map(h => {
@@ -1268,7 +1274,7 @@ function openTeamScorecard(){
           <div class="course">${round.courseName}</div>
           <div class="meta">${round.roundDate || ""}${round.teeTime ? " · " + round.teeTime : ""}${round.teeBox ? " · " + round.teeBox + " tees" : ""}</div>
         </div>
-        <div class="scorecard-player-name">Alliance — Fourball <span class="muted" style="font-size:.85rem;font-weight:600;">(best ${n} of ${players.length} count, circled = counted that hole)</span></div>
+        <div class="scorecard-player-name">Alliance — Fourball <span class="muted" style="font-size:.85rem;font-weight:600;">(best ${n} of ${players.length} count · small number = shots, circled = points counted)</span></div>
 
         <div class="scorecard-table-wrap">
         <table class="scorecard-table">
