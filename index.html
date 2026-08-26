@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fourball Scorer</title>
+<title>PK Golf</title>
 <style>
   :root{
     --ink:#1a1a1a;
@@ -220,7 +220,7 @@ async function render(){
 
   if (!configured){
     app.innerHTML = `
-      ${renderAppHeader("Fourball Scorer", "Setup needed")}
+      ${renderAppHeader("PK Golf", "Setup needed")}
       <div class="content">
       <div class="card">
         <strong>Setup needed</strong>
@@ -244,7 +244,7 @@ async function render(){
 function renderSetup(){
   const app = document.getElementById("app");
   app.innerHTML = `
-    ${renderAppHeader("Fourball Scorer", "Set up a round, score it live, share a spectator link.")}
+    ${renderAppHeader("PK Golf", "Set up a round, score it live, share a spectator link.")}
     <div class="content">
 
     <h2>Existing rounds</h2>
