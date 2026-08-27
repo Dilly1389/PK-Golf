@@ -2298,12 +2298,18 @@ function openTeamScorecard(){
     </td>`;
   }
   function playerAggCell(playerId, subset){
-    const vals = subset.map(h => {
+    const ptsVals = subset.map(h => {
       const d = byHole[h.holeNumber];
       const entry = d.entries.find(e => e.playerId === playerId);
       return entry ? entry.pts : null;
     }).filter(v => v != null);
-    return `<td class="agg-col">${vals.length ? vals.reduce((a,b)=>a+b,0) : "-"}</td>`;
+    const grossVals = subset.map(h => detail[playerId][h.holeNumber].gross).filter(v => v != null);
+    const ptsSum = ptsVals.length ? ptsVals.reduce((a,b)=>a+b,0) : "-";
+    const grossSum = grossVals.length ? grossVals.reduce((a,b)=>a+b,0) : "-";
+    return `<td class="agg-col">
+      <div class="shot-count">${grossSum}</div>
+      <div class="pts-plain">${ptsSum}</div>
+    </td>`;
   }
   function teamCell(h){
     const d = byHole[h.holeNumber];
@@ -2316,8 +2322,6 @@ function openTeamScorecard(){
 
   const thru = data.filter(d => d.teamPts != null).length;
   const total = data.reduce((a,d) => a + (d.teamPts || 0), 0);
-  const grossTotals = totalsFor(players, holes, detail, "gross");
-  const totalShots = players.reduce((a,p) => a + (grossTotals[p.id].count ? grossTotals[p.id].sum : 0), 0);
 
   const html = `
     <div class="scorecard-overlay" id="scorecardOverlay">
@@ -2382,7 +2386,6 @@ function openTeamScorecard(){
         <div class="scorecard-summary">
           <div><div class="val">${thru}/18</div><div class="lbl">Thru</div></div>
           <div><div class="val">${thru ? total : "-"}</div><div class="lbl">Alliance points</div></div>
-          <div><div class="val">${totalShots || "-"}</div><div class="lbl">Total shots</div></div>
         </div>
         ${scrambleLegend(currentBundle)}
       </div>
