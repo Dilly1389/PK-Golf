@@ -1232,7 +1232,9 @@ function renderEntry(){
 
   const chipOffsets = [-2,-1,0,1,2,3];
 
-  card.innerHTML = scorerData.players.map(p => {
+  const scrambleHtml = scorerData.round.scrambleDrive ? buildScrambleDriveHtml(finished) : "";
+
+  const playersHtml = scorerData.players.map(p => {
     const existing = scorerData.scores.find(s => s.playerId === p.id && s.holeNumber === scorerHole);
     const currentVal = existing ? existing.grossStrokes : null;
 
@@ -1271,6 +1273,14 @@ function renderEntry(){
       </div>`;
   }).join("");
 
+  card.innerHTML = scrambleHtml + playersHtml;
+
+  card.querySelectorAll(".scramble-pick").forEach(btn => {
+    btn.addEventListener("click", () => saveScrambleDrive("playerId", btn.dataset.player));
+  });
+  card.querySelectorAll(".scramble-pick-team").forEach(btn => {
+    btn.addEventListener("click", () => saveScrambleDrive(btn.dataset.field, btn.dataset.player));
+  });
   card.querySelectorAll(".score-chip").forEach(btn => {
     btn.addEventListener("click", () => {
       const val = parseInt(btn.dataset.val, 10);
@@ -1295,29 +1305,22 @@ function renderEntry(){
   if (scorerData.round.gameModes.includes("bbb")){
     renderBBBPicker(finished);
   }
-  if (scorerData.round.scrambleDrive){
-    renderScrambleDrivePicker(finished);
-  }
 }
 
 function getScrambleDriveForHole(holeNumber){
   return (scorerData.scrambleDrives || []).find(s => s.holeNumber === holeNumber) || null;
 }
 
-function renderScrambleDrivePicker(finished){
-  const card = document.getElementById("entryCard");
+function buildScrambleDriveHtml(finished){
   const isBetterball = scorerData.round.gameModes.includes("betterball");
-
   if (isBetterball){
-    renderScrambleDrivePickerTeam(card, finished, "A", "team-a");
-    renderScrambleDrivePickerTeam(card, finished, "B", "team-b");
-    return;
+    return buildScrambleDriveTeamHtml(finished, "A", "team-a") + buildScrambleDriveTeamHtml(finished, "B", "team-b");
   }
 
   // Alliance: one fourball-wide pick per hole
   const current = getScrambleDriveForHole(scorerHole);
-  const html = `
-    <div class="card" style="padding:12px;border-color:var(--gold);">
+  return `
+    <div class="card" style="padding:12px;border-color:var(--gold);margin-bottom:8px;">
       <strong>Scramble drive</strong>
       <div class="muted" style="font-size:.78rem;margin-bottom:4px;">Whose tee shot did the fourball play from?</div>
       <div class="row" style="gap:6px;flex-wrap:nowrap;">
@@ -1334,24 +1337,16 @@ function renderScrambleDrivePicker(finished){
         }).join("")}
       </div>
     </div>`;
-
-  const wrapper = document.createElement("div");
-  wrapper.innerHTML = html;
-  card.appendChild(wrapper.firstElementChild);
-
-  card.querySelectorAll(".scramble-pick").forEach(btn => {
-    btn.addEventListener("click", () => saveScrambleDrive("playerId", btn.dataset.player));
-  });
 }
 
-function renderScrambleDrivePickerTeam(card, finished, teamKey, colorClass){
+function buildScrambleDriveTeamHtml(finished, teamKey, colorClass){
   const teamPlayers = scorerData.players.filter(p => p.team === teamKey);
-  if (teamPlayers.length === 0) return;
+  if (teamPlayers.length === 0) return "";
   const field = teamKey === "A" ? "teamA" : "teamB";
   const current = getScrambleDriveForHole(scorerHole);
   const currentPlayerId = current ? current[field] : null;
 
-  const html = `
+  return `
     <div class="card" style="padding:12px;border-color:var(--gold);margin-bottom:8px;">
       <strong class="${colorClass}">Team ${teamKey} scramble drive</strong>
       <div class="muted" style="font-size:.78rem;margin-bottom:4px;">Whose tee shot did this pair play from?</div>
@@ -1369,14 +1364,6 @@ function renderScrambleDrivePickerTeam(card, finished, teamKey, colorClass){
         }).join("")}
       </div>
     </div>`;
-
-  const wrapper = document.createElement("div");
-  wrapper.innerHTML = html;
-  card.appendChild(wrapper.firstElementChild);
-
-  card.querySelectorAll(`.scramble-pick-team[data-field="${field}"]`).forEach(btn => {
-    btn.addEventListener("click", () => saveScrambleDrive(field, btn.dataset.player));
-  });
 }
 
 async function saveScrambleDrive(field, playerId){
