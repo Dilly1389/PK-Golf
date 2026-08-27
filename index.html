@@ -1971,7 +1971,8 @@ function buildAllianceBoard(bundle, detail){
   return `
   <div class="card">
     <strong>Alliance</strong> <span class="muted">— best ${n} of ${players.length} net-stableford scores per hole</span>
-    <p style="font-size:1.1rem;margin:10px 0 4px;">${thru ? total + " points" : "Not started"} <span class="muted" style="font-size:.85rem;">(thru ${thru} · total shots: ${totalShots || "-"})</span></p>
+    <p style="font-size:1.1rem;margin:10px 0 0;">${thru ? total + " points" : "Not started"} <span class="muted" style="font-size:.85rem;">(thru ${thru})</span></p>
+    <p style="font-size:.95rem;margin:2px 0 8px;">Total shots (fourball): <strong>${totalShots || "-"}</strong></p>
     <div class="team-scorecard-link">Fourball: ${players.map(p=>p.name).join(", ")} — view full scorecard</div>
   </div>`;
 }
