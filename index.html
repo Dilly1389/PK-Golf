@@ -2100,9 +2100,9 @@ function openScorecard(playerId){
           <thead>
             <tr>
               <th class="label-col">Hole</th>
-              ${front.map(h=>`<th>${h.holeNumber}${scrambleHoleMark(currentBundle, h.holeNumber)}</th>`).join("")}
+              ${front.map(h=>`<th>${h.holeNumber}</th>`).join("")}
               <th class="agg-col">OUT</th>
-              ${back.map(h=>`<th>${h.holeNumber}${scrambleHoleMark(currentBundle, h.holeNumber)}</th>`).join("")}
+              ${back.map(h=>`<th>${h.holeNumber}</th>`).join("")}
               <th class="agg-col">IN</th>
               <th class="agg-col">TOTAL</th>
             </tr>
@@ -2259,14 +2259,22 @@ function openTeamScorecard(){
           <thead>
             <tr>
               <th class="label-col">Player</th>
-              ${front.map(h=>`<th>${h.holeNumber}${scrambleHoleMark(currentBundle, h.holeNumber)}</th>`).join("")}
+              ${front.map(h=>`<th>${h.holeNumber}</th>`).join("")}
               <th class="agg-col">OUT</th>
-              ${back.map(h=>`<th>${h.holeNumber}${scrambleHoleMark(currentBundle, h.holeNumber)}</th>`).join("")}
+              ${back.map(h=>`<th>${h.holeNumber}</th>`).join("")}
               <th class="agg-col">IN</th>
               <th class="agg-col">TOTAL</th>
             </tr>
           </thead>
           <tbody>
+            <tr>
+              <td class="label-col">Par</td>
+              ${front.map(h=>`<td>${h.par}</td>`).join("")}
+              <td class="agg-col">${front.reduce((a,h)=>a+h.par,0)}</td>
+              ${back.map(h=>`<td>${h.par}</td>`).join("")}
+              <td class="agg-col">${back.reduce((a,h)=>a+h.par,0)}</td>
+              <td class="agg-col">${holes.reduce((a,h)=>a+h.par,0)}</td>
+            </tr>
             <tr>
               <td class="label-col">S.I.</td>
               ${front.map(h=>`<td>${h.strokeIndex}</td>`).join("")}
@@ -2391,14 +2399,22 @@ function openBetterballScorecard(){
           <thead>
             <tr>
               <th class="label-col">Player</th>
-              ${front.map(h=>`<th>${h.holeNumber}${scrambleHoleMark(currentBundle, h.holeNumber)}</th>`).join("")}
+              ${front.map(h=>`<th>${h.holeNumber}</th>`).join("")}
               <th class="agg-col">OUT</th>
-              ${back.map(h=>`<th>${h.holeNumber}${scrambleHoleMark(currentBundle, h.holeNumber)}</th>`).join("")}
+              ${back.map(h=>`<th>${h.holeNumber}</th>`).join("")}
               <th class="agg-col">IN</th>
               <th class="agg-col">TOTAL</th>
             </tr>
           </thead>
           <tbody>
+            <tr>
+              <td class="label-col">Par</td>
+              ${front.map(h=>`<td>${h.par}</td>`).join("")}
+              <td class="agg-col">${front.reduce((a,h)=>a+h.par,0)}</td>
+              ${back.map(h=>`<td>${h.par}</td>`).join("")}
+              <td class="agg-col">${back.reduce((a,h)=>a+h.par,0)}</td>
+              <td class="agg-col">${holes.reduce((a,h)=>a+h.par,0)}</td>
+            </tr>
             <tr>
               <td class="label-col">S.I.</td>
               ${front.map(h=>`<td>${h.strokeIndex}</td>`).join("")}
