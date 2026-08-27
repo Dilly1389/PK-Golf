@@ -1961,18 +1961,15 @@ function computeAllianceData(bundle, detail){
 }
 
 function buildAllianceBoard(bundle, detail){
-  const { players, round, holes } = bundle;
+  const { players, round } = bundle;
   const n = Math.max(1, Math.min(round.allianceCount || 2, players.length));
   const data = computeAllianceData(bundle, detail);
   const thru = data.filter(d => d.teamPts != null).length;
   const total = data.reduce((a,d) => a + (d.teamPts || 0), 0);
-  const grossTotals = totalsFor(players, holes, detail, "gross");
-  const totalShots = players.reduce((a,p) => a + (grossTotals[p.id].count ? grossTotals[p.id].sum : 0), 0);
   return `
   <div class="card">
     <strong>Alliance</strong> <span class="muted">— best ${n} of ${players.length} net-stableford scores per hole</span>
-    <p style="font-size:1.1rem;margin:10px 0 0;">${thru ? total + " points" : "Not started"} <span class="muted" style="font-size:.85rem;">(thru ${thru})</span></p>
-    <p style="font-size:.95rem;margin:2px 0 8px;">Total shots (fourball): <strong>${totalShots || "-"}</strong></p>
+    <p style="font-size:1.1rem;margin:10px 0 4px;">${thru ? total + " points" : "Not started"} <span class="muted" style="font-size:.85rem;">(thru ${thru})</span></p>
     <div class="team-scorecard-link">Fourball: ${players.map(p=>p.name).join(", ")} — view full scorecard</div>
   </div>`;
 }
@@ -2319,6 +2316,8 @@ function openTeamScorecard(){
 
   const thru = data.filter(d => d.teamPts != null).length;
   const total = data.reduce((a,d) => a + (d.teamPts || 0), 0);
+  const grossTotals = totalsFor(players, holes, detail, "gross");
+  const totalShots = players.reduce((a,p) => a + (grossTotals[p.id].count ? grossTotals[p.id].sum : 0), 0);
 
   const html = `
     <div class="scorecard-overlay" id="scorecardOverlay">
@@ -2383,6 +2382,7 @@ function openTeamScorecard(){
         <div class="scorecard-summary">
           <div><div class="val">${thru}/18</div><div class="lbl">Thru</div></div>
           <div><div class="val">${thru ? total : "-"}</div><div class="lbl">Alliance points</div></div>
+          <div><div class="val">${totalShots || "-"}</div><div class="lbl">Total shots</div></div>
         </div>
         ${scrambleLegend(currentBundle)}
       </div>
