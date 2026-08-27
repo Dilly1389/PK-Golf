@@ -1107,6 +1107,51 @@ function buildPlayersEditSection(bundle){
     </div>`;
 }
 
+function buildAllianceEditSection(bundle){
+  const { round } = bundle;
+  if (!round.gameModes.includes("alliance")) return "";
+  return `
+    <h2>Alliance</h2>
+    <div class="card">
+      <label>Scores to count per hole</label>
+      <select id="editAllianceCount">
+        <option value="1" ${round.allianceCount===1?"selected":""}>Best 1 of 4</option>
+        <option value="2" ${!round.allianceCount || round.allianceCount===2?"selected":""}>Best 2 of 4</option>
+        <option value="3" ${round.allianceCount===3?"selected":""}>Best 3 of 4</option>
+        <option value="4" ${round.allianceCount===4?"selected":""}>Best 4 of 4 (all)</option>
+      </select>
+    </div>`;
+}
+
+function buildScrambleDriveEditSection(bundle){
+  const { round } = bundle;
+  if (!round.gameModes.includes("alliance") && !round.gameModes.includes("betterball")) return "";
+  const parTypes = round.scrambleDriveParTypes || [];
+  return `
+    <h2>Scramble drive</h2>
+    <div class="card">
+      <div class="checkbox-row">
+        <input type="checkbox" id="editScrambleDriveCb" ${round.scrambleDrive ? "checked" : ""}>
+        <label style="margin:0" for="editScrambleDriveCb">Scramble drive</label>
+      </div>
+      <label style="margin-top:6px;">Applies on</label>
+      <div class="row" style="gap:14px;">
+        <div class="checkbox-row" style="margin:0;">
+          <input type="checkbox" class="edit-scramble-par-cb" id="editScramblePar3" value="3" ${parTypes.includes(3)?"checked":""}>
+          <label style="margin:0" for="editScramblePar3">Par 3</label>
+        </div>
+        <div class="checkbox-row" style="margin:0;">
+          <input type="checkbox" class="edit-scramble-par-cb" id="editScramblePar4" value="4" ${parTypes.includes(4)?"checked":""}>
+          <label style="margin:0" for="editScramblePar4">Par 4</label>
+        </div>
+        <div class="checkbox-row" style="margin:0;">
+          <input type="checkbox" class="edit-scramble-par-cb" id="editScramblePar5" value="5" ${parTypes.includes(5)?"checked":""}>
+          <label style="margin:0" for="editScramblePar5">Par 5</label>
+        </div>
+      </div>
+    </div>`;
+}
+
 function buildScheduleEditHtml(bundle){
   const { round, holes } = bundle;
   return `
@@ -1131,6 +1176,8 @@ function buildScheduleEditHtml(bundle){
     </div>
 
     ${buildPlayersEditSection(bundle)}
+    ${buildAllianceEditSection(bundle)}
+    ${buildScrambleDriveEditSection(bundle)}
     ${buildPiekfynEditSection(bundle)}
 
     <h2>Holes — par &amp; stroke index</h2>
@@ -1171,6 +1218,17 @@ async function saveSchedule(spectatorUrl){
   }));
 
   const updates = { courseName, roundDate, teeTime, teeBox };
+  if (scorerData.round.gameModes.includes("alliance")){
+    const allianceCountEl = document.getElementById("editAllianceCount");
+    if (allianceCountEl) updates.allianceCount = parseInt(allianceCountEl.value, 10);
+  }
+  if (scorerData.round.gameModes.includes("alliance") || scorerData.round.gameModes.includes("betterball")){
+    const scrambleCb = document.getElementById("editScrambleDriveCb");
+    if (scrambleCb){
+      updates.scrambleDrive = scrambleCb.checked;
+      updates.scrambleDriveParTypes = Array.from(document.querySelectorAll(".edit-scramble-par-cb:checked")).map(cb => parseInt(cb.value, 10));
+    }
+  }
   if (scorerData.round.gameModes.includes("piekfyn")){
     const teamAEl = document.getElementById("editTeamAName");
     const teamBEl = document.getElementById("editTeamBName");
@@ -1728,7 +1786,7 @@ function buildBoardsHtml(bundle){
   if (round.gameModes.includes("matchplay")) html += buildMatchPlayBoard(players, holes, detail);
   if (round.gameModes.includes("betterball")) html += buildBetterballBoard(bundle, detail);
   if (round.gameModes.includes("alliance")) html += buildAllianceBoard(bundle, detail);
-  if (round.gameModes.includes("bbb")) html += buildBBBBoard(bundle);
+  if (round.gameModes.includes("bbb")) html += buildBBBBoard(bundle, detail);
   if (round.gameModes.includes("piekfyn")) html += buildPiekfynBoard(bundle, detail);
   return html;
 }
@@ -1775,17 +1833,19 @@ function buildStrokeBoard(players, holes, detail){
 
 function buildStablefordBoard(players, holes, detail){
   const pts = totalsFor(players, holes, detail, "pts");
-  const rows = players.map(p => ({ p, s: pts[p.id] })).sort((a,b) => b.s.sum - a.s.sum);
+  const gross = totalsFor(players, holes, detail, "gross");
+  const rows = players.map(p => ({ p, s: pts[p.id], g: gross[p.id] })).sort((a,b) => b.s.sum - a.s.sum);
   return `
   <div class="card">
     <strong>Stableford</strong> <span class="muted">— points, higher is better</span>
     <table style="margin-top:8px;">
-      <tr><th class="name-col">Player</th><th>Thru</th><th>Points</th></tr>
+      <tr><th class="name-col">Player</th><th>Thru</th><th>Points</th><th>Total shots</th></tr>
       ${rows.map((r,i) => `
         <tr class="${i===0 && r.s.count ? 'leader-row' : ''}">
           <td class="name-col">${playerLink(r.p)}</td>
           <td>${r.s.count}</td>
           <td>${r.s.count ? r.s.sum : "-"}</td>
+          <td>${r.g.count ? r.g.sum : "-"}</td>
         </tr>`).join("")}
     </table>
   </div>`;
@@ -1823,6 +1883,13 @@ function buildMatchPlayBoard(players, holes, detail){
     vs <span class="team-b">Team B</span>: ${teamB.map(p=>playerLink(p)).join(", ")} · better-ball net</span>
     <p class="${statusClass}" style="font-size:1.1rem;margin:10px 0 0;">${statusText}</p>
     <p class="muted" style="margin:2px 0 0;">Through ${holesPlayed} hole${holesPlayed===1?"":"s"}</p>
+    <table style="margin-top:8px;">
+      <tr><th class="name-col">Player</th><th>Total shots</th></tr>
+      ${[...teamA, ...teamB].map(p => {
+        const g = totalsFor([p], holes, detail, "gross")[p.id];
+        return `<tr><td class="name-col">${playerLink(p)}</td><td>${g.count ? g.sum : "-"}</td></tr>`;
+      }).join("")}
+    </table>
   </div>`;
 }
 
@@ -1846,7 +1913,7 @@ function computeBetterballData(bundle, detail){
 }
 
 function buildBetterballBoard(bundle, detail){
-  const { players } = bundle;
+  const { players, holes } = bundle;
   const teamA = players.filter(p => p.team === "A");
   const teamB = players.filter(p => p.team === "B");
   if (teamA.length === 0 || teamB.length === 0){
@@ -1857,6 +1924,10 @@ function buildBetterballBoard(bundle, detail){
   const thruB = data.filter(d => d.teamB.best != null).length;
   const totalA = data.reduce((a,d) => a + (d.teamA.best || 0), 0);
   const totalB = data.reduce((a,d) => a + (d.teamB.best || 0), 0);
+  const grossA = totalsFor(teamA, holes, detail, "gross");
+  const grossB = totalsFor(teamB, holes, detail, "gross");
+  const shotsA = teamA.reduce((a,p) => a + (grossA[p.id].count ? grossA[p.id].sum : 0), 0);
+  const shotsB = teamB.reduce((a,p) => a + (grossB[p.id].count ? grossB[p.id].sum : 0), 0);
 
   return `
   <div class="card">
@@ -1864,9 +1935,9 @@ function buildBetterballBoard(bundle, detail){
     <span class="muted">— <span class="team-a">Team A</span>: ${teamA.map(p=>playerLink(p)).join(", ")}
     vs <span class="team-b">Team B</span>: ${teamB.map(p=>playerLink(p)).join(", ")} · best net-Stableford score of the pair counts</span>
     <table style="margin-top:8px;">
-      <tr><th class="name-col">Team</th><th>Thru</th><th>Points</th></tr>
-      <tr><td class="name-col team-a">Team A</td><td>${thruA}</td><td>${thruA ? totalA : "-"}</td></tr>
-      <tr><td class="name-col team-b">Team B</td><td>${thruB}</td><td>${thruB ? totalB : "-"}</td></tr>
+      <tr><th class="name-col">Team</th><th>Thru</th><th>Points</th><th>Total shots</th></tr>
+      <tr><td class="name-col team-a">Team A</td><td>${thruA}</td><td>${thruA ? totalA : "-"}</td><td>${shotsA || "-"}</td></tr>
+      <tr><td class="name-col team-b">Team B</td><td>${thruB}</td><td>${thruB ? totalB : "-"}</td><td>${shotsB || "-"}</td></tr>
     </table>
     <div class="team-scorecard-link" data-betterball-link="1">View full scorecard</div>
   </div>`;
@@ -1890,21 +1961,23 @@ function computeAllianceData(bundle, detail){
 }
 
 function buildAllianceBoard(bundle, detail){
-  const { players, round } = bundle;
+  const { players, round, holes } = bundle;
   const n = Math.max(1, Math.min(round.allianceCount || 2, players.length));
   const data = computeAllianceData(bundle, detail);
   const thru = data.filter(d => d.teamPts != null).length;
   const total = data.reduce((a,d) => a + (d.teamPts || 0), 0);
+  const grossTotals = totalsFor(players, holes, detail, "gross");
+  const totalShots = players.reduce((a,p) => a + (grossTotals[p.id].count ? grossTotals[p.id].sum : 0), 0);
   return `
   <div class="card">
     <strong>Alliance</strong> <span class="muted">— best ${n} of ${players.length} net-stableford scores per hole</span>
-    <p style="font-size:1.1rem;margin:10px 0 4px;">${thru ? total + " points" : "Not started"} <span class="muted" style="font-size:.85rem;">(thru ${thru})</span></p>
+    <p style="font-size:1.1rem;margin:10px 0 4px;">${thru ? total + " points" : "Not started"} <span class="muted" style="font-size:.85rem;">(thru ${thru} · total shots: ${totalShots || "-"})</span></p>
     <div class="team-scorecard-link">Fourball: ${players.map(p=>p.name).join(", ")} — view full scorecard</div>
   </div>`;
 }
 
-function buildBBBBoard(bundle){
-  const { players, bbb } = bundle;
+function buildBBBBoard(bundle, detail){
+  const { players, bbb, holes } = bundle;
   const totals = {};
   players.forEach(p => totals[p.id] = { bingo: 0, bango: 0, bongo: 0 });
   let holesRecorded = 0;
@@ -1915,16 +1988,17 @@ function buildBBBBoard(bundle){
     });
     if (any) holesRecorded++;
   });
+  const gross = totalsFor(players, holes, detail, "gross");
   const rows = players.map(p => {
     const t = totals[p.id];
-    return { p, total: t.bingo + t.bango + t.bongo, t };
+    return { p, total: t.bingo + t.bango + t.bongo, t, g: gross[p.id] };
   }).sort((a,b) => b.total - a.total);
 
   return `
   <div class="card">
     <strong>Bingo Bango Bongo</strong> <span class="muted">— 1 point each for first on green, closest once all on, first to hole out</span>
     <table style="margin-top:8px;">
-      <tr><th class="name-col">Player</th><th>Bingo</th><th>Bango</th><th>Bongo</th><th>Total</th></tr>
+      <tr><th class="name-col">Player</th><th>Bingo</th><th>Bango</th><th>Bongo</th><th>Total</th><th>Total shots</th></tr>
       ${rows.map((r,i) => `
         <tr class="${i===0 && r.total>0 ? 'leader-row' : ''}">
           <td class="name-col">${playerLink(r.p)}</td>
@@ -1932,6 +2006,7 @@ function buildBBBBoard(bundle){
           <td>${r.t.bango}</td>
           <td>${r.t.bongo}</td>
           <td><strong>${r.total}</strong></td>
+          <td>${r.g.count ? r.g.sum : "-"}</td>
         </tr>`).join("")}
     </table>
     <p class="muted" style="font-size:.75rem;margin-top:6px;">${holesRecorded} hole${holesRecorded===1?"":"s"} recorded</p>
