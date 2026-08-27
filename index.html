@@ -2220,4 +2220,211 @@ function openTeamScorecard(){
       <div class="scorecard-panel">
         <button class="scorecard-close" id="scorecardCloseBtn">&times;</button>
         <div class="scorecard-heading">
-          <div class="course">${round.courseName}</
+          <div class="course">${round.courseName}</div>
+          <div class="meta">${round.roundDate || ""}${round.teeTime ? " · " + round.teeTime : ""}${round.teeBox ? " · " + round.teeBox + " tees" : ""}</div>
+        </div>
+        <div class="scorecard-player-name">Alliance — Fourball <span class="muted" style="font-size:.85rem;font-weight:600;">(best ${n} of ${players.length} count · small number = shots, circled = points counted)</span></div>
+
+        <div class="scorecard-table-wrap">
+        <table class="scorecard-table">
+          <thead>
+            <tr>
+              <th class="label-col">Player</th>
+              ${front.map(h=>`<th>${h.holeNumber}${scrambleHoleMark(currentBundle, h.holeNumber)}</th>`).join("")}
+              <th class="agg-col">OUT</th>
+              ${back.map(h=>`<th>${h.holeNumber}${scrambleHoleMark(currentBundle, h.holeNumber)}</th>`).join("")}
+              <th class="agg-col">IN</th>
+              <th class="agg-col">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="label-col">S.I.</td>
+              ${front.map(h=>`<td>${h.strokeIndex}</td>`).join("")}
+              <td class="agg-col">-</td>
+              ${back.map(h=>`<td>${h.strokeIndex}</td>`).join("")}
+              <td class="agg-col">-</td>
+              <td class="agg-col">-</td>
+            </tr>
+            ${players.map(p => `
+            <tr>
+              <td class="label-col">${p.name}<div class="muted" style="font-size:.62rem;font-weight:600;">hcp ${p.playingHandicap}</div></td>
+              ${front.map(h => ptsCell(p.id, h)).join("")}
+              ${playerAggCell(p.id, front)}
+              ${back.map(h => ptsCell(p.id, h)).join("")}
+              ${playerAggCell(p.id, back)}
+              ${playerAggCell(p.id, holes)}
+            </tr>`).join("")}
+            <tr class="gross-row">
+              <td class="label-col">Fourball</td>
+              ${front.map(h => teamCell(h)).join("")}
+              ${teamAggCell(front)}
+              ${back.map(h => teamCell(h)).join("")}
+              ${teamAggCell(back)}
+              ${teamAggCell(holes)}
+            </tr>
+          </tbody>
+        </table>
+        </div>
+
+        <div class="scorecard-summary">
+          <div><div class="val">${thru}/18</div><div class="lbl">Thru</div></div>
+          <div><div class="val">${thru ? total : "-"}</div><div class="lbl">Alliance points</div></div>
+        </div>
+        ${scrambleLegend(currentBundle)}
+      </div>
+    </div>
+  `;
+
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = html;
+  document.body.appendChild(wrapper.firstElementChild);
+
+  const overlay = document.getElementById("scorecardOverlay");
+  document.getElementById("scorecardCloseBtn").onclick = closeScorecard;
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeScorecard(); });
+}
+
+function openBetterballScorecard(){
+  if (!currentBundle) return;
+  const { round, holes, players } = currentBundle;
+  const detail = computeDetail(currentBundle);
+  const teamA = players.filter(p => p.team === "A");
+  const teamB = players.filter(p => p.team === "B");
+  const data = computeBetterballData(currentBundle, detail);
+  const byHole = {};
+  data.forEach(d => byHole[d.holeNumber] = d);
+
+  const front = holes.filter(h => h.holeNumber <= 9);
+  const back = holes.filter(h => h.holeNumber > 9);
+
+  function ptsCell(playerId, teamKey, h){
+    const gross = detail[playerId][h.holeNumber].gross;
+    const pts = detail[playerId][h.holeNumber].pts;
+    if (pts == null) return `<td>-</td>`;
+    const isCounted = byHole[h.holeNumber][teamKey].bestPlayerId === playerId;
+    return `<td>
+      <div class="shot-count">${gross}</div>
+      <div class="${isCounted ? 'circled-score' : 'pts-plain'}">${pts}</div>
+    </td>`;
+  }
+  function playerAggCell(playerId, subset){
+    const vals = subset.map(h => detail[playerId][h.holeNumber].pts).filter(v => v != null);
+    return `<td class="agg-col">${vals.length ? vals.reduce((a,b)=>a+b,0) : "-"}</td>`;
+  }
+  function teamCell(teamKey, h){
+    const v = byHole[h.holeNumber][teamKey].best;
+    return `<td>${v == null ? "-" : `<strong>${v}</strong>`}</td>`;
+  }
+  function teamAggCell(teamKey, subset){
+    const vals = subset.map(h => byHole[h.holeNumber][teamKey].best).filter(v => v != null);
+    return `<td class="agg-col">${vals.length ? vals.reduce((a,b)=>a+b,0) : "-"}</td>`;
+  }
+  function teamRows(teamPlayers, teamKey, teamLabel){
+    return `
+      ${teamPlayers.map(p => `
+      <tr>
+        <td class="label-col">${p.name}<div class="muted" style="font-size:.62rem;font-weight:600;">hcp ${p.playingHandicap}</div></td>
+        ${front.map(h => ptsCell(p.id, teamKey, h)).join("")}
+        ${playerAggCell(p.id, front)}
+        ${back.map(h => ptsCell(p.id, teamKey, h)).join("")}
+        ${playerAggCell(p.id, back)}
+        ${playerAggCell(p.id, holes)}
+      </tr>`).join("")}
+      <tr class="gross-row">
+        <td class="label-col">${teamLabel}</td>
+        ${front.map(h => teamCell(teamKey, h)).join("")}
+        ${teamAggCell(teamKey, front)}
+        ${back.map(h => teamCell(teamKey, h)).join("")}
+        ${teamAggCell(teamKey, back)}
+        ${teamAggCell(teamKey, holes)}
+      </tr>`;
+  }
+
+  const thruA = data.filter(d => d.teamA.best != null).length;
+  const thruB = data.filter(d => d.teamB.best != null).length;
+  const totalA = data.reduce((a,d) => a + (d.teamA.best || 0), 0);
+  const totalB = data.reduce((a,d) => a + (d.teamB.best || 0), 0);
+
+  const html = `
+    <div class="scorecard-overlay" id="scorecardOverlay">
+      <div class="scorecard-panel">
+        <button class="scorecard-close" id="scorecardCloseBtn">&times;</button>
+        <div class="scorecard-heading">
+          <div class="course">${round.courseName}</div>
+          <div class="meta">${round.roundDate || ""}${round.teeTime ? " · " + round.teeTime : ""}${round.teeBox ? " · " + round.teeBox + " tees" : ""}</div>
+        </div>
+        <div class="scorecard-player-name">Betterball Stableford <span class="muted" style="font-size:.85rem;font-weight:600;">(small number = shots, circled = the score that counted)</span></div>
+
+        <div class="scorecard-table-wrap">
+        <table class="scorecard-table">
+          <thead>
+            <tr>
+              <th class="label-col">Player</th>
+              ${front.map(h=>`<th>${h.holeNumber}${scrambleHoleMark(currentBundle, h.holeNumber)}</th>`).join("")}
+              <th class="agg-col">OUT</th>
+              ${back.map(h=>`<th>${h.holeNumber}${scrambleHoleMark(currentBundle, h.holeNumber)}</th>`).join("")}
+              <th class="agg-col">IN</th>
+              <th class="agg-col">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="label-col">S.I.</td>
+              ${front.map(h=>`<td>${h.strokeIndex}</td>`).join("")}
+              <td class="agg-col">-</td>
+              ${back.map(h=>`<td>${h.strokeIndex}</td>`).join("")}
+              <td class="agg-col">-</td>
+              <td class="agg-col">-</td>
+            </tr>
+            ${teamRows(teamA, "teamA", "Team A")}
+            ${teamRows(teamB, "teamB", "Team B")}
+          </tbody>
+        </table>
+        </div>
+
+        <div class="scorecard-summary">
+          <div><div class="val">${thruA}/18</div><div class="lbl">Team A thru</div></div>
+          <div><div class="val">${thruA ? totalA : "-"}</div><div class="lbl">Team A pts</div></div>
+          <div><div class="val">${thruB}/18</div><div class="lbl">Team B thru</div></div>
+          <div><div class="val">${thruB ? totalB : "-"}</div><div class="lbl">Team B pts</div></div>
+        </div>
+        ${scrambleLegend(currentBundle)}
+      </div>
+    </div>
+  `;
+
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = html;
+  document.body.appendChild(wrapper.firstElementChild);
+
+  const overlay = document.getElementById("scorecardOverlay");
+  document.getElementById("scorecardCloseBtn").onclick = closeScorecard;
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeScorecard(); });
+}
+
+document.addEventListener("click", (e) => {
+  const link = e.target.closest(".player-name-link");
+  if (link){ openScorecard(link.dataset.player); return; }
+  const standingsLink = e.target.closest("[data-standings-link]");
+  if (standingsLink){ location.hash = `#/standings/${standingsLink.dataset.standingsLink}`; return; }
+  const betterballLink = e.target.closest("[data-betterball-link]");
+  if (betterballLink){ openBetterballScorecard(); return; }
+  const teamLink = e.target.closest(".team-scorecard-link");
+  if (teamLink){ openTeamScorecard(); }
+});
+
+function updateConnIndicator(){
+  const el = document.getElementById("connIndicator");
+  if (!el) return;
+  const online = navigator.onLine;
+  el.className = "conn-indicator " + (online ? "conn-online" : "conn-offline");
+  el.innerHTML = `<span class="conn-dot"></span>${online ? "Connected" : "Offline"}`;
+}
+window.addEventListener("online", updateConnIndicator);
+window.addEventListener("offline", updateConnIndicator);
+
+render();
+</script>
+</body>
+</html>
