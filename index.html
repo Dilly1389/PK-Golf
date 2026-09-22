@@ -953,13 +953,32 @@ function buildStartGateHtml(players){
   return `
     <div class="card" style="border-color:var(--gold);text-align:center;">
       <strong>Check the names and handicaps below</strong>
-      <p class="muted" style="font-size:.85rem;margin:6px 0 10px;">Once everything looks right, tap Start to begin scoring and start the round timer.</p>
+      <p class="muted" style="font-size:.85rem;margin:6px 0 10px;">Tap a handicap to fix it. Once everything looks right, tap Start to begin scoring and start the round timer.</p>
       <table style="margin-bottom:12px;">
         <tr><th class="name-col">Player</th><th>Handicap</th></tr>
-        ${players.map(p => `<tr><td class="name-col">${p.name}</td><td>${p.playingHandicap}</td></tr>`).join("")}
+        ${players.map(p => `<tr><td class="name-col">${p.name}</td><td><input type="number" class="hole-input hcp-edit-input" data-player="${p.id}" value="${p.playingHandicap}" style="width:60px;" onfocus="this.select()"></td></tr>`).join("")}
       </table>
       <button id="startRoundBtn" style="width:100%;">Start round</button>
     </div>`;
+}
+// Wired wherever a handicap is shown in the Score tab (the Start gate, and each player's
+// entry card) — lets the scorer fix a wrong handicap without needing the Schedule tab, which the
+// shared scoring-only link doesn't even have.
+async function updatePlayerHandicap(roundId, playerId, rawValue, inputEl){
+  const hcp = parseInt(rawValue, 10);
+  const player = scorerData.players.find(p => p.id === playerId);
+  if (!Number.isFinite(hcp) || hcp < 0){
+    if (inputEl && player) inputEl.value = player.playingHandicap;   // reject and restore what it was
+    return;
+  }
+  await updateDoc(doc(db, "golf_rounds", roundId, "players", playerId), { playingHandicap: hcp });
+  if (player) player.playingHandicap = hcp;
+  renderBoards();   // net scores, points and match results all depend on handicap
+}
+function wireHandicapInputs(roundId, selector, root){
+  (root || document).querySelectorAll(selector).forEach(inp => {
+    inp.addEventListener("change", () => updatePlayerHandicap(roundId, inp.dataset.player, inp.value, inp));
+  });
 }
 async function startRound(roundId){
   await updateDoc(doc(db, "golf_rounds", roundId), { startedAt: serverTimestamp() });
@@ -1030,6 +1049,7 @@ async function renderScorer(roundId){
   if (finishBtn) finishBtn.onclick = () => finishRound(roundId);
   const startRoundBtn = document.getElementById("startRoundBtn");
   if (startRoundBtn) startRoundBtn.onclick = async () => { await startRound(roundId); renderScorer(roundId); };
+  if (needsStart) wireHandicapInputs(roundId, ".hcp-edit-input");
   const restoreBannerBtn = document.getElementById("restoreBannerBtn");
   if (restoreBannerBtn) restoreBannerBtn.onclick = () => restoreRound(roundId);
 
@@ -1155,6 +1175,7 @@ async function renderScoringOnly(roundId){
   if (finishBtn) finishBtn.onclick = () => finishRound(roundId);
   const startRoundBtn = document.getElementById("startRoundBtn");
   if (startRoundBtn) startRoundBtn.onclick = async () => { await startRound(roundId); renderScoringOnly(roundId); };
+  if (needsStart) wireHandicapInputs(roundId, ".hcp-edit-input");
   const restoreBannerBtn = document.getElementById("restoreBannerBtn");
   if (restoreBannerBtn) restoreBannerBtn.onclick = () => restoreRound(roundId);
 
@@ -1562,7 +1583,7 @@ function renderEntry(){
       <div class="card" style="padding:12px;">
         <div class="row" style="justify-content:space-between;margin-bottom:8px;">
           <strong>${p.name}</strong>
-          <span class="muted">hcp ${p.playingHandicap}${p.team ? " · team "+p.team : ""} · thru ${thru}: ${thru ? total : "-"}</span>
+          <span class="muted">hcp <input type="number" class="hcp-edit-input" data-player="${p.id}" value="${p.playingHandicap}" style="width:44px;padding:1px 4px;font-size:.85rem;border:1px solid var(--line);border-radius:4px;color:var(--ink);" onfocus="this.select()" ${finished ? "disabled" : ""}>${p.team ? " · team "+p.team : ""} · thru ${thru}: ${thru ? total : "-"}</span>
         </div>
         <div class="row" style="gap:6px;flex-wrap:nowrap;">${chips}</div>
         <div class="row" style="margin-top:6px;">
@@ -1573,6 +1594,8 @@ function renderEntry(){
   }).join("");
 
   card.innerHTML = scrambleHtml + playersHtml;
+
+  wireHandicapInputs(scorerData.round.id, ".hcp-edit-input", card);
 
   card.querySelectorAll(".scramble-pick").forEach(btn => {
     btn.addEventListener("click", () => saveScrambleDrive("playerId", btn.dataset.player));
