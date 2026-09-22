@@ -814,7 +814,7 @@ async function createRound(){
     const roundRef = await addDoc(collection(db, "golf_rounds"), {
       name: roundName, courseName, roundDate, teeTime, teeBox, gameModes: modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
       teamAName, teamBName, piekfynPairs, spectatorCode,
-      status: "active", deleted: false, createdAt: serverTimestamp()
+      status: "active", deleted: false, startedAt: null, finishedAt: null, createdAt: serverTimestamp()
     });
 
     const batch = writeBatch(db);
@@ -868,7 +868,7 @@ async function createCompetition(cfg){
       teamAName: isPiekfyn ? teamAName : null, teamBName: isPiekfyn ? teamBName : null,
       piekfynPairs: isPiekfyn ? (isFirst ? piekfynPairs : defaultPairsFor(playersByFourball[fb - 1])) : null,
       spectatorCode, competitionId: compRef.id, fourballIndex: fb,
-      status: "active", deleted: false, createdAt: serverTimestamp()
+      status: "active", deleted: false, startedAt: null, finishedAt: null, createdAt: serverTimestamp()
     });
 
     const batch = writeBatch(db);
@@ -919,6 +919,53 @@ async function loadRoundBundle(roundId){
 
 let scheduleEditMode = false;
 
+/* ---------- Round timer: a required "Start round" checkpoint, then an elapsed-time display ---------- */
+function toDateMaybe(val){
+  if (!val) return null;
+  if (val instanceof Date) return val;
+  if (typeof val.toDate === "function") return val.toDate();   // a Firestore Timestamp, once reloaded from the server
+  return new Date(val);
+}
+function formatDuration(ms){
+  const totalMin = Math.max(0, Math.round(ms / 60000));
+  const h = Math.floor(totalMin / 60), m = totalMin % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+function finishedDurationText(round){
+  const start = toDateMaybe(round.startedAt), end = toDateMaybe(round.finishedAt);
+  return (start && end) ? ` · Round time: ${formatDuration(end.getTime() - start.getTime())}` : "";
+}
+let elapsedTimerInterval = null;
+function startElapsedTimer(elId, startedAt){
+  if (elapsedTimerInterval) clearInterval(elapsedTimerInterval);
+  const start = toDateMaybe(startedAt);
+  const el = document.getElementById(elId);
+  if (!start || !el) return;
+  function tick(){
+    const target = document.getElementById(elId);
+    if (!target){ clearInterval(elapsedTimerInterval); return; }   // navigated away — stop ticking
+    target.textContent = "Elapsed: " + formatDuration(Date.now() - start.getTime());
+  }
+  tick();
+  elapsedTimerInterval = setInterval(tick, 30000);
+}
+function buildStartGateHtml(players){
+  return `
+    <div class="card" style="border-color:var(--gold);text-align:center;">
+      <strong>Check the names and handicaps below</strong>
+      <p class="muted" style="font-size:.85rem;margin:6px 0 10px;">Once everything looks right, tap Start to begin scoring and start the round timer.</p>
+      <table style="margin-bottom:12px;">
+        <tr><th class="name-col">Player</th><th>Handicap</th></tr>
+        ${players.map(p => `<tr><td class="name-col">${p.name}</td><td>${p.playingHandicap}</td></tr>`).join("")}
+      </table>
+      <button id="startRoundBtn" style="width:100%;">Start round</button>
+    </div>`;
+}
+async function startRound(roundId){
+  await updateDoc(doc(db, "golf_rounds", roundId), { startedAt: serverTimestamp() });
+  scorerData.round.startedAt = new Date();   // optimistic, so the gate closes immediately without waiting on a reload
+}
+
 async function renderScorer(roundId){
   const app = document.getElementById("app");
   app.innerHTML = `<p class="muted">Loading…</p>`;
@@ -928,6 +975,7 @@ async function renderScorer(roundId){
 
   const spectatorUrl = location.origin + location.pathname + `#/spectate/${scorerData.round.spectatorCode}`;
   const finished = scorerData.round.status === "finished";
+  const needsStart = !finished && !scorerData.round.startedAt && scorerData.scores.length === 0;
 
   app.innerHTML = `
     ${renderAppHeader(scorerData.round.name, scorerData.round.courseName, finished ? "final" : "live")}
@@ -951,14 +999,17 @@ async function renderScorer(roundId){
     <div id="scoreTab">
       <div>${scorerData.round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
       ${finished
-        ? `<div class="card" style="text-align:center;border-color:var(--green);"><strong>Round finished</strong><p class="muted" style="margin:4px 0 0;">Scores are locked. See the Leaderboards tab for final results.</p></div>`
-        : `<div class="row" style="margin:10px 0;"><button id="finishBtn" style="background:var(--red);border-color:var(--red);">Finish round</button></div>`}
+        ? `<div class="card" style="text-align:center;border-color:var(--green);"><strong>Round finished</strong><p class="muted" style="margin:4px 0 0;">Scores are locked. See the Leaderboards tab for final results.${finishedDurationText(scorerData.round)}</p></div>`
+        : needsStart
+          ? buildStartGateHtml(scorerData.players)
+          : `<div class="row" style="margin:10px 0;justify-content:space-between;align-items:center;"><button id="finishBtn" style="background:var(--red);border-color:var(--red);">Finish round</button><span id="elapsedTimer" class="muted" style="font-size:.85rem;"></span></div>`}
+      ${needsStart ? "" : `
       <div class="hole-nav">
         <button id="prevHole" class="secondary">&larr;</button>
         <div class="current" id="holeLabel"></div>
         <button id="nextHole" class="secondary">&rarr;</button>
       </div>
-      <div id="entryCard"></div>
+      <div id="entryCard"></div>`}
     </div>
 
     <div id="boardsTab" style="display:none;">
@@ -971,15 +1022,22 @@ async function renderScorer(roundId){
   document.getElementById("tabScheduleBtn").onclick = () => switchScorerTab("schedule");
   document.getElementById("tabScoreBtn").onclick = () => switchScorerTab("score");
   document.getElementById("tabBoardsBtn").onclick = () => switchScorerTab("boards");
-  document.getElementById("prevHole").onclick = () => { scorerHole = Math.max(1, scorerHole-1); renderEntry(); };
-  document.getElementById("nextHole").onclick = () => { scorerHole = Math.min(18, scorerHole+1); renderEntry(); };
+  if (!needsStart){
+    document.getElementById("prevHole").onclick = () => { scorerHole = Math.max(1, scorerHole-1); renderEntry(); };
+    document.getElementById("nextHole").onclick = () => { scorerHole = Math.min(18, scorerHole+1); renderEntry(); };
+  }
   const finishBtn = document.getElementById("finishBtn");
   if (finishBtn) finishBtn.onclick = () => finishRound(roundId);
+  const startRoundBtn = document.getElementById("startRoundBtn");
+  if (startRoundBtn) startRoundBtn.onclick = async () => { await startRound(roundId); renderScorer(roundId); };
   const restoreBannerBtn = document.getElementById("restoreBannerBtn");
   if (restoreBannerBtn) restoreBannerBtn.onclick = () => restoreRound(roundId);
 
   renderScheduleTab(spectatorUrl);
-  renderEntry();
+  if (!needsStart){
+    renderEntry();
+    if (!finished) startElapsedTimer("elapsedTimer", scorerData.round.startedAt);
+  }
   renderBoards();
 
   if (scorerUnsub) scorerUnsub();
@@ -1037,6 +1095,7 @@ async function renderScoringOnly(roundId){
 
   const spectatorUrl = location.origin + location.pathname + `#/spectate/${scorerData.round.spectatorCode}`;
   const finished = scorerData.round.status === "finished";
+  const needsStart = !finished && !scorerData.round.startedAt && scorerData.scores.length === 0;
 
   app.innerHTML = `
     ${renderAppHeader(scorerData.round.name, scorerData.round.courseName, finished ? "final" : "live")}
@@ -1062,14 +1121,17 @@ async function renderScoringOnly(roundId){
         <button class="ghost" id="copyBtn">Copy</button>
       </div>
       ${finished
-        ? `<div class="card" style="text-align:center;border-color:var(--green);"><strong>Round finished</strong><p class="muted" style="margin:4px 0 0;">Scores are locked. See the Leaderboards tab for final results.</p></div>`
-        : `<div class="row" style="margin:10px 0;"><button id="finishBtn" style="background:var(--red);border-color:var(--red);">Finish round</button></div>`}
+        ? `<div class="card" style="text-align:center;border-color:var(--green);"><strong>Round finished</strong><p class="muted" style="margin:4px 0 0;">Scores are locked. See the Leaderboards tab for final results.${finishedDurationText(scorerData.round)}</p></div>`
+        : needsStart
+          ? buildStartGateHtml(scorerData.players)
+          : `<div class="row" style="margin:10px 0;justify-content:space-between;align-items:center;"><button id="finishBtn" style="background:var(--red);border-color:var(--red);">Finish round</button><span id="elapsedTimer" class="muted" style="font-size:.85rem;"></span></div>`}
+      ${needsStart ? "" : `
       <div class="hole-nav">
         <button id="prevHole" class="secondary">&larr;</button>
         <div class="current" id="holeLabel"></div>
         <button id="nextHole" class="secondary">&rarr;</button>
       </div>
-      <div id="entryCard"></div>
+      <div id="entryCard"></div>`}
     </div>
 
     <div id="boardsTab" style="display:none;">
@@ -1081,17 +1143,24 @@ async function renderScoringOnly(roundId){
 
   document.getElementById("tabScoreBtn").onclick = () => switchScorerTab("score");
   document.getElementById("tabBoardsBtn").onclick = () => switchScorerTab("boards");
-  document.getElementById("prevHole").onclick = () => { scorerHole = Math.max(1, scorerHole-1); renderEntry(); };
-  document.getElementById("nextHole").onclick = () => { scorerHole = Math.min(18, scorerHole+1); renderEntry(); };
+  if (!needsStart){
+    document.getElementById("prevHole").onclick = () => { scorerHole = Math.max(1, scorerHole-1); renderEntry(); };
+    document.getElementById("nextHole").onclick = () => { scorerHole = Math.min(18, scorerHole+1); renderEntry(); };
+  }
   const copyBtn = document.getElementById("copyBtn");
   if (copyBtn) copyBtn.onclick = () => navigator.clipboard.writeText(spectatorUrl);
   const finishBtn = document.getElementById("finishBtn");
   if (finishBtn) finishBtn.onclick = () => finishRound(roundId);
+  const startRoundBtn = document.getElementById("startRoundBtn");
+  if (startRoundBtn) startRoundBtn.onclick = async () => { await startRound(roundId); renderScoringOnly(roundId); };
   const restoreBannerBtn = document.getElementById("restoreBannerBtn");
   if (restoreBannerBtn) restoreBannerBtn.onclick = () => restoreRound(roundId);
 
   currentBundle = scorerData;
-  renderEntry();
+  if (!needsStart){
+    renderEntry();
+    if (!finished) startElapsedTimer("elapsedTimer", scorerData.round.startedAt);
+  }
   renderBoards();
 
   if (scorerUnsub) scorerUnsub();
@@ -1423,8 +1492,9 @@ async function restoreRound(roundId){
 
 async function finishRound(roundId){
   if (!confirm("Finish this round? Scores will be locked from further entry.")) return;
-  await updateDoc(doc(db, "golf_rounds", roundId), { status: "finished" });
+  await updateDoc(doc(db, "golf_rounds", roundId), { status: "finished", finishedAt: serverTimestamp() });
   scorerData.round.status = "finished";
+  scorerData.round.finishedAt = new Date();
   renderScorer(roundId);
 }
 
