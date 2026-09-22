@@ -396,7 +396,7 @@ function renderSetup(){
           <input type="text" id="roundDate" placeholder="e.g. 2026-08-29" value="${new Date().toISOString().slice(0,10)}">
         </div>
         <div>
-          <label>Tee time</label>
+          <label id="teeTimeLabel">Tee time</label>
           <input type="text" id="teeTime" placeholder="e.g. 07:30">
         </div>
         <div>
@@ -643,11 +643,22 @@ function renderSetup(){
 
     // Remember anything already typed, accumulating across every change — so a fourball's
     // details survive even if the count is shrunk past it and later grown back to it again.
-    playersBox.querySelectorAll("input.p-name, input.p-hcp, select.p-team").forEach(el => {
+    playersBox.querySelectorAll("input.p-name, input.p-hcp, select.p-team, input.fb-tee-time").forEach(el => {
       if (el.value) playerFieldMemory[el.id] = el.value;
     });
 
-    const oneFourballHtml = (fb) => [1,2,3,4].map(i => `
+    const teeTimeLabel = document.getElementById("teeTimeLabel");
+    if (teeTimeLabel) teeTimeLabel.textContent = fourballCount > 1 ? "Fourball 1 tee time" : "Tee time";
+
+    // Fourball 1's tee time is the field up in Round details, above; every other fourball gets
+    // its own here, since tournaments commonly stagger tee-off times between groups.
+    const teeTimeField = (fb) => fb === 1 ? "" : `
+      <div style="max-width:220px;margin-bottom:8px;">
+        <label>Fourball ${fb} tee time</label>
+        <input type="text" class="fb-tee-time" id="fb${fb}-teeTime" placeholder="e.g. 07:40">
+      </div>`;
+
+    const oneFourballHtml = (fb) => teeTimeField(fb) + [1,2,3,4].map(i => `
       <div class="grid-2" style="margin-bottom:8px;">
         <div>
           <label>Player ${i} name</label>
@@ -722,6 +733,11 @@ function readPlayersForFourball(fb){
   });
 }
 
+function readTeeTimeForFourball(fb){
+  const el = document.getElementById(fb === 1 ? "teeTime" : `fb${fb}-teeTime`);
+  return el ? el.value.trim() : "";
+}
+
 async function createRound(){
   const msg = document.getElementById("createMsg");
   const roundName = document.getElementById("roundName").value.trim() || "Fourball";
@@ -785,9 +801,10 @@ async function createRound(){
   try{
     if (fourballCount > 1){
       const playersByFourball = Array.from({length: fourballCount}, (_, idx) => readPlayersForFourball(idx + 1));
+      const teeTimesByFourball = Array.from({length: fourballCount}, (_, idx) => readTeeTimeForFourball(idx + 1));
       await createCompetition({
-        roundName, courseName, roundDate, teeTime, teeBox, modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
-        teamAName, teamBName, piekfynPairs, playersByFourball, holes, fourballCount
+        roundName, courseName, roundDate, teeBox, modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
+        teamAName, teamBName, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount
       });
       return;
     }
@@ -831,14 +848,14 @@ function defaultPairsFor(players){
 
 async function createCompetition(cfg){
   const {
-    roundName, courseName, roundDate, teeTime, teeBox, modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
-    teamAName, teamBName, piekfynPairs, playersByFourball, holes, fourballCount
+    roundName, courseName, roundDate, teeBox, modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
+    teamAName, teamBName, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount
   } = cfg;
   const isPiekfyn = modes.includes("piekfyn");
 
   const compRef = await addDoc(collection(db, "golf_competitions"), {
     name: roundName, teamAName: isPiekfyn ? teamAName : null, teamBName: isPiekfyn ? teamBName : null,
-    courseName, roundDate, teeTime, teeBox,
+    courseName, roundDate, teeTime: teeTimesByFourball[0] || "", teeBox,
     fourballCount, gameModes: modes, createdAt: serverTimestamp()
   });
 
@@ -846,7 +863,7 @@ async function createCompetition(cfg){
     const isFirst = fb === 1;
     const spectatorCode = Math.random().toString(36).slice(2,8);
     const roundRef = await addDoc(collection(db, "golf_rounds"), {
-      name: `${roundName} — Fourball ${fb}`, courseName, roundDate, teeTime, teeBox,
+      name: `${roundName} — Fourball ${fb}`, courseName, roundDate, teeTime: teeTimesByFourball[fb - 1] || "", teeBox,
       gameModes: modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
       teamAName: isPiekfyn ? teamAName : null, teamBName: isPiekfyn ? teamBName : null,
       piekfynPairs: isPiekfyn ? (isFirst ? piekfynPairs : defaultPairsFor(playersByFourball[fb - 1])) : null,
