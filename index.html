@@ -360,6 +360,9 @@ function renderSetup(){
     <h2>Existing rounds</h2>
     <div class="card" id="roundsListCard"><p class="muted">Loading…</p></div>
 
+    <h2>Competitions</h2>
+    <div class="card" id="competitionsListCard"><p class="muted">Loading…</p></div>
+
     <h2>New round</h2>
     <div class="card">
       <label>Load saved course (optional)</label>
@@ -470,6 +473,8 @@ function renderSetup(){
     });
   });
 
+  populateCompetitionsList();
+
   loadCoursesList().then(courses => {
     const select = document.getElementById("savedCourseSelect");
     courses.forEach(c => {
@@ -528,6 +533,14 @@ function renderSetup(){
         </div>
       </div>
     </div>
+    <div id="fourballCountOptions" style="margin:8px 0 0 26px;">
+      <label>Number of fourballs</label>
+      <select id="fourballCount">
+        <option value="1" selected>1 (single round)</option>
+        ${Array.from({length:7},(_,i)=>i+2).map(n => `<option value="${n}">${n} fourballs</option>`).join("")}
+      </select>
+      <p class="muted" style="font-size:.75rem;margin-top:4px;" id="fourballCountHint"></p>
+    </div>
     <div id="piekfynOptions" style="display:none;margin:8px 0 0 26px;">
       <div class="grid-2">
         <div>
@@ -539,16 +552,8 @@ function renderSetup(){
           <input type="text" id="teamBName" placeholder="e.g. The Birdies">
         </div>
       </div>
-      <label>Number of fourballs in this competition</label>
-      <select id="fourballCount">
-        ${Array.from({length:8},(_,i)=>i+1).map(n => `<option value="${n}">${n} fourball${n>1?"s":""}</option>`).join("")}
-      </select>
-      <p class="muted" style="font-size:.75rem;margin-top:4px;">The players and pairings below are for Fourball 1. Extra fourballs are created with placeholder players you edit afterward from each one's Schedule tab.</p>
       <label>Fourball 1 — individual match pairings</label>
       <div id="pairingOptions"></div>
-
-      <h2>Competitions</h2>
-      <div class="card" id="competitionsListCard"><p class="muted">Loading…</p></div>
     </div>`;
 
   function updateModeVisibility(){
@@ -556,11 +561,17 @@ function renderSetup(){
     const isAlliance = selected === "alliance";
     const isBetterball = selected === "betterball";
     const isPiekfyn = selected === "piekfyn";
+    const isMatchStyle = selected === "matchplay" || selected === "betterball";
     const isTeamMode = selected === "matchplay" || selected === "piekfyn" || selected === "betterball";
     document.getElementById("allianceOptions").style.display = isAlliance ? "" : "none";
     document.getElementById("scrambleDriveOptions").style.display = (isAlliance || isBetterball) ? "" : "none";
     document.getElementById("piekfynOptions").style.display = isPiekfyn ? "" : "none";
-    if (isPiekfyn){ refreshPairingOptions(); populateCompetitionsList(); }
+    document.getElementById("fourballCountHint").textContent = isPiekfyn
+      ? "The players and pairings below are for Fourball 1. Extra fourballs are created with placeholder players you edit afterward from each one's Schedule tab. More than 1 links them into one Piekfyn competition with a combined team score."
+      : isMatchStyle
+        ? "More than 1 runs several separate head-to-head fourballs side by side — each keeps its own result, players and scoring link, but they aren't combined into one ranking."
+        : "More than 1 groups the fourballs into one competition with a combined leaderboard, plus its own scoring link for each fourball. Fourball 1 uses the players below; extra fourballs get placeholder players you edit afterward from each one's Schedule tab.";
+    if (isPiekfyn) refreshPairingOptions();
     [1,2,3,4].forEach(i => {
       const col = document.getElementById(`teamCol-${i}`);
       if (col) col.style.display = isTeamMode ? "" : "none";
@@ -627,8 +638,9 @@ async function createRound(){
   const scrambleDriveParTypes = scrambleDrive
     ? Array.from(document.querySelectorAll(".scramble-par-cb:checked")).map(cb => parseInt(cb.value, 10))
     : [];
+  const fourballCount = parseInt(document.getElementById("fourballCount").value, 10) || 1;
 
-  let teamAName = null, teamBName = null, piekfynPairs = null, fourballCount = 1;
+  let teamAName = null, teamBName = null, piekfynPairs = null;
   if (modes.includes("piekfyn")){
     const teamACount = [1,2,3,4].filter(i => document.getElementById(`p${i}-team`).value === "A").length;
     const teamBCount = [1,2,3,4].filter(i => document.getElementById(`p${i}-team`).value === "B").length;
@@ -644,7 +656,6 @@ async function createRound(){
     teamAName = document.getElementById("teamAName").value.trim() || "Team A";
     teamBName = document.getElementById("teamBName").value.trim() || "Team B";
     piekfynPairs = JSON.parse(selectedRadio.value);
-    fourballCount = parseInt(document.getElementById("fourballCount").value, 10) || 1;
   }
 
   const players = [1,2,3,4].map(i => ({
@@ -666,8 +677,8 @@ async function createRound(){
   msg.textContent = "Creating…";
   try{
     if (fourballCount > 1){
-      await createPiekfynCompetition({
-        roundName, courseName, roundDate, teeTime, teeBox, modes, allianceCount,
+      await createCompetition({
+        roundName, courseName, roundDate, teeTime, teeBox, modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
         teamAName, teamBName, piekfynPairs, players, holes, fourballCount
       });
       return;
@@ -700,14 +711,16 @@ async function createRound(){
   }
 }
 
-async function createPiekfynCompetition(cfg){
+async function createCompetition(cfg){
   const {
-    roundName, courseName, roundDate, teeTime, teeBox, modes, allianceCount,
+    roundName, courseName, roundDate, teeTime, teeBox, modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
     teamAName, teamBName, piekfynPairs, players, holes, fourballCount
   } = cfg;
+  const isPiekfyn = modes.includes("piekfyn");
 
   const compRef = await addDoc(collection(db, "golf_competitions"), {
-    name: roundName, teamAName, teamBName, courseName, roundDate, teeTime, teeBox,
+    name: roundName, teamAName: isPiekfyn ? teamAName : null, teamBName: isPiekfyn ? teamBName : null,
+    courseName, roundDate, teeTime, teeBox,
     fourballCount, gameModes: modes, createdAt: serverTimestamp()
   });
 
@@ -719,19 +732,17 @@ async function createPiekfynCompetition(cfg){
   }));
   const defaultPairs = [{a:1,b:3},{a:2,b:4}];
 
-  let firstRoundId = null;
   for (let fb = 1; fb <= fourballCount; fb++){
     const isFirst = fb === 1;
     const spectatorCode = Math.random().toString(36).slice(2,8);
     const roundRef = await addDoc(collection(db, "golf_rounds"), {
       name: `${roundName} — Fourball ${fb}`, courseName, roundDate, teeTime, teeBox,
-      gameModes: modes, allianceCount,
-      teamAName, teamBName,
-      piekfynPairs: isFirst ? piekfynPairs : defaultPairs,
+      gameModes: modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
+      teamAName: isPiekfyn ? teamAName : null, teamBName: isPiekfyn ? teamBName : null,
+      piekfynPairs: isPiekfyn ? (isFirst ? piekfynPairs : defaultPairs) : null,
       spectatorCode, competitionId: compRef.id, fourballIndex: fb,
       status: "active", deleted: false, createdAt: serverTimestamp()
     });
-    if (isFirst) firstRoundId = roundRef.id;
 
     const batch = writeBatch(db);
     holes.forEach(h => batch.set(doc(db, "golf_rounds", roundRef.id, "holes", String(h.holeNumber)), h));
@@ -1625,6 +1636,7 @@ async function renderCompetition(competitionId){
   const compSnap = await getDoc(doc(db, "golf_competitions", competitionId));
   if (!compSnap.exists()){ app.innerHTML = `<p>Competition not found.</p>`; return; }
   const comp = { id: compSnap.id, ...compSnap.data() };
+  const mode = (comp.gameModes && comp.gameModes[0]) || "stroke";
 
   const roundsSnap = await getDocs(query(collection(db, "golf_rounds"), where("competitionId", "==", competitionId)));
   const fourballRounds = roundsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -1632,47 +1644,22 @@ async function renderCompetition(competitionId){
     .sort((a,b) => (a.fourballIndex||0) - (b.fourballIndex||0));
 
   const bundles = await Promise.all(fourballRounds.map(r => loadRoundBundle(r.id)));
+  competitionBundlesForLinks = bundles;
 
   function renderBody(){
-    let teamATotal = 0, teamBTotal = 0;
-    const rows = bundles.map((bundle, idx) => {
-      const detail = computeDetail(bundle);
-      const pts = computePiekfynPoints(bundle, detail);
-      teamATotal += pts.teamAPts;
-      teamBTotal += pts.teamBPts;
-      const scoreUrl = location.origin + location.pathname + `#/play/${bundle.round.id}`;
-      return `
-        <div class="card">
-          <div class="row" style="justify-content:space-between;">
-            <strong>Fourball ${bundle.round.fourballIndex || idx+1}</strong>
-            <span class="muted">${pts.decidedCount} of 3 decided</span>
-          </div>
-          <p class="muted" style="margin:4px 0 8px;">${bundle.players.map(p=>p.name).join(", ")}</p>
-          <p style="font-size:1.1rem;margin:0 0 8px;text-align:center;">
-            <strong>${comp.teamAName || "Team A"} ${pts.teamAPts}</strong> — <strong>${pts.teamBPts} ${comp.teamBName || "Team B"}</strong>
-          </p>
-          <div class="link-box">
-            <span class="muted">Scoring link:</span>
-            <input type="text" readonly value="${scoreUrl}" onclick="this.select()">
-            <button class="ghost copy-link-btn" data-url="${scoreUrl}">Copy</button>
-          </div>
-        </div>`;
-    }).join("");
-
-    document.getElementById("competitionBody").innerHTML = `
-      <p style="font-size:1.6rem;margin:0 0 4px;text-align:center;">
-        <strong>${comp.teamAName || "Team A"} ${teamATotal}</strong> — <strong>${teamBTotal} ${comp.teamBName || "Team B"}</strong>
-      </p>
-      <p class="muted" style="text-align:center;font-size:.82rem;margin-bottom:16px;">out of ${fourballRounds.length * 3} points across ${fourballRounds.length} fourball${fourballRounds.length===1?"":"s"}</p>
-      ${rows || `<p class="muted">No fourballs found for this competition.</p>`}
-    `;
+    document.getElementById("competitionBody").innerHTML =
+      buildCompetitionBody(comp, mode, bundles) + buildFourballLinksHtml(bundles);
     document.querySelectorAll(".copy-link-btn").forEach(btn => {
       btn.onclick = () => navigator.clipboard.writeText(btn.dataset.url);
     });
   }
 
+  const subtitle = mode === "piekfyn"
+    ? `${comp.teamAName || "Team A"} vs ${comp.teamBName || "Team B"}`
+    : `${competitionModeLabel(mode)}${comp.courseName ? " · " + comp.courseName : ""}`;
+
   app.innerHTML = `
-    ${renderAppHeader(comp.name, `${comp.teamAName || "Team A"} vs ${comp.teamBName || "Team B"}`, "live")}
+    ${renderAppHeader(comp.name, subtitle, "live")}
     <div class="content">
     <div id="competitionBody"><p class="muted">Loading…</p></div>
     </div>
@@ -1680,12 +1667,19 @@ async function renderCompetition(competitionId){
   renderBody();
 
   if (competitionUnsubs.length) competitionUnsubs.forEach(u => u());
-  competitionUnsubs = fourballRounds.map(r =>
-    onSnapshot(collection(db, "golf_rounds", r.id, "scores"), snap => {
+  competitionUnsubs = fourballRounds.flatMap(r => {
+    const unsubs = [onSnapshot(collection(db, "golf_rounds", r.id, "scores"), snap => {
       const idx = bundles.findIndex(b => b.round.id === r.id);
       if (idx >= 0){ bundles[idx].scores = snap.docs.map(d => d.data()); renderBody(); }
-    })
-  );
+    })];
+    if (mode === "bbb"){
+      unsubs.push(onSnapshot(collection(db, "golf_rounds", r.id, "bbb"), snap => {
+        const idx = bundles.findIndex(b => b.round.id === r.id);
+        if (idx >= 0){ bundles[idx].bbb = snap.docs.map(d => d.data()); renderBody(); }
+      }));
+    }
+    return unsubs;
+  });
 }
 
 /* Read-only standings — safe to link from within a fourball's own scoring flow.
@@ -1698,6 +1692,7 @@ async function renderStandings(competitionId){
   const compSnap = await getDoc(doc(db, "golf_competitions", competitionId));
   if (!compSnap.exists()){ app.innerHTML = `<p>Competition not found.</p>`; return; }
   const comp = { id: compSnap.id, ...compSnap.data() };
+  const mode = (comp.gameModes && comp.gameModes[0]) || "stroke";
 
   const roundsSnap = await getDocs(query(collection(db, "golf_rounds"), where("competitionId", "==", competitionId)));
   const fourballRounds = roundsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -1705,38 +1700,18 @@ async function renderStandings(competitionId){
     .sort((a,b) => (a.fourballIndex||0) - (b.fourballIndex||0));
 
   const bundles = await Promise.all(fourballRounds.map(r => loadRoundBundle(r.id)));
+  competitionBundlesForLinks = bundles;
 
   function renderBody(){
-    let teamATotal = 0, teamBTotal = 0;
-    const rows = bundles.map((bundle, idx) => {
-      const detail = computeDetail(bundle);
-      const pts = computePiekfynPoints(bundle, detail);
-      teamATotal += pts.teamAPts;
-      teamBTotal += pts.teamBPts;
-      return `
-        <div class="card">
-          <div class="row" style="justify-content:space-between;">
-            <strong>Fourball ${bundle.round.fourballIndex || idx+1}</strong>
-            <span class="muted">${pts.decidedCount} of 3 decided</span>
-          </div>
-          <p class="muted" style="margin:4px 0 8px;">${bundle.players.map(p=>p.name).join(", ")}</p>
-          <p style="font-size:1.1rem;margin:0;text-align:center;">
-            <strong>${comp.teamAName || "Team A"} ${pts.teamAPts}</strong> — <strong>${pts.teamBPts} ${comp.teamBName || "Team B"}</strong>
-          </p>
-        </div>`;
-    }).join("");
-
-    document.getElementById("standingsBody").innerHTML = `
-      <p style="font-size:1.6rem;margin:0 0 4px;text-align:center;">
-        <strong>${comp.teamAName || "Team A"} ${teamATotal}</strong> — <strong>${teamBTotal} ${comp.teamBName || "Team B"}</strong>
-      </p>
-      <p class="muted" style="text-align:center;font-size:.82rem;margin-bottom:16px;">out of ${fourballRounds.length * 3} points across ${fourballRounds.length} fourball${fourballRounds.length===1?"":"s"}</p>
-      ${rows || `<p class="muted">No fourballs found for this competition.</p>`}
-    `;
+    document.getElementById("standingsBody").innerHTML = buildCompetitionBody(comp, mode, bundles);
   }
 
+  const subtitle = mode === "piekfyn"
+    ? `${comp.teamAName || "Team A"} vs ${comp.teamBName || "Team B"}`
+    : `${competitionModeLabel(mode)}${comp.courseName ? " · " + comp.courseName : ""}`;
+
   app.innerHTML = `
-    ${renderAppHeader(comp.name, `${comp.teamAName || "Team A"} vs ${comp.teamBName || "Team B"}`, "live")}
+    ${renderAppHeader(comp.name, subtitle, "live")}
     <div class="content">
     <div id="standingsBody"><p class="muted">Loading…</p></div>
     </div>
@@ -1744,12 +1719,19 @@ async function renderStandings(competitionId){
   renderBody();
 
   if (competitionUnsubs.length) competitionUnsubs.forEach(u => u());
-  competitionUnsubs = fourballRounds.map(r =>
-    onSnapshot(collection(db, "golf_rounds", r.id, "scores"), snap => {
+  competitionUnsubs = fourballRounds.flatMap(r => {
+    const unsubs = [onSnapshot(collection(db, "golf_rounds", r.id, "scores"), snap => {
       const idx = bundles.findIndex(b => b.round.id === r.id);
       if (idx >= 0){ bundles[idx].scores = snap.docs.map(d => d.data()); renderBody(); }
-    })
-  );
+    })];
+    if (mode === "bbb"){
+      unsubs.push(onSnapshot(collection(db, "golf_rounds", r.id, "bbb"), snap => {
+        const idx = bundles.findIndex(b => b.round.id === r.id);
+        if (idx >= 0){ bundles[idx].bbb = snap.docs.map(d => d.data()); renderBody(); }
+      }));
+    }
+    return unsubs;
+  });
 }
 
 /* ============================================================
@@ -1788,6 +1770,9 @@ function buildBoardsHtml(bundle){
   if (round.gameModes.includes("alliance")) html += buildAllianceBoard(bundle, detail);
   if (round.gameModes.includes("bbb")) html += buildBBBBoard(bundle, detail);
   if (round.gameModes.includes("piekfyn")) html += buildPiekfynBoard(bundle, detail);
+  if (round.competitionId && !round.gameModes.includes("piekfyn")){
+    html += `<div class="team-scorecard-link" data-standings-link="${round.competitionId}">Part of a multi-fourball competition — view overall leaderboard</div>`;
+  }
   return html;
 }
 
@@ -1804,8 +1789,8 @@ function totalsFor(players, holes, detail, field){
   return totals;
 }
 
-function playerLink(p){
-  return `<span class="player-name-link" data-player="${p.id}">${p.name}</span><span class="muted" style="font-size:.72rem;font-weight:400;"> (${p.playingHandicap})</span>`;
+function playerLink(p, roundId){
+  return `<span class="player-name-link" data-player="${p.id}"${roundId ? ` data-round="${roundId}"` : ""}>${p.name}</span><span class="muted" style="font-size:.72rem;font-weight:400;"> (${p.playingHandicap})</span>`;
 }
 
 function buildStrokeBoard(players, holes, detail){
@@ -2009,6 +1994,174 @@ function buildBBBBoard(bundle, detail){
     </table>
     <p class="muted" style="font-size:.75rem;margin-top:6px;">${holesRecorded} hole${holesRecorded===1?"":"s"} recorded</p>
   </div>`;
+}
+
+/* ============================================================
+   MULTI-FOURBALL COMPETITION BOARDS (non-Piekfyn modes)
+   Piekfyn already links fourballs together via computePiekfynPoints/buildPiekfynBoard,
+   below. These give the other modes the same ability: several fourballs sharing one
+   competition, with a leaderboard that makes sense for that mode.
+   ============================================================ */
+function buildCombinedIndividualBoard(bundles, field, opts){
+  const rows = [];
+  bundles.forEach(bundle => {
+    const detail = computeDetail(bundle);
+    const gross = totalsFor(bundle.players, bundle.holes, detail, "gross");
+    bundle.players.forEach(p => {
+      const t = totalsFor([p], bundle.holes, detail, field)[p.id];
+      rows.push({ p, roundId: bundle.round.id, fourballLabel: `Fourball ${bundle.round.fourballIndex || "?"}`, count: t.count, sum: t.sum, gross: gross[p.id] });
+    });
+  });
+  rows.sort((a,b) => {
+    if (!a.count && !b.count) return 0;
+    if (!a.count) return 1;
+    if (!b.count) return -1;
+    return opts.sortAsc ? (a.sum - b.sum) : (b.sum - a.sum);
+  });
+  return `
+  <div class="card">
+    <strong>${opts.title}</strong> <span class="muted">— combined leaderboard, all fourballs</span>
+    <table style="margin-top:8px;">
+      <tr><th class="name-col">Player</th><th>Fourball</th><th>Thru</th><th>${opts.unitLabel}</th><th>Total shots</th></tr>
+      ${rows.map((r,i) => `
+        <tr class="${i===0 && r.count ? 'leader-row' : ''}">
+          <td class="name-col">${playerLink(r.p, r.roundId)}</td>
+          <td class="muted">${r.fourballLabel}</td>
+          <td>${r.count}</td>
+          <td>${r.count ? r.sum : "-"}</td>
+          <td>${r.gross.count ? r.gross.sum : "-"}</td>
+        </tr>`).join("")}
+    </table>
+  </div>`;
+}
+
+function buildCombinedBBBBoard(bundles){
+  const rows = [];
+  bundles.forEach(bundle => {
+    const detail = computeDetail(bundle);
+    const totals = {};
+    bundle.players.forEach(p => totals[p.id] = { bingo: 0, bango: 0, bongo: 0 });
+    (bundle.bbb || []).forEach(rec => {
+      BBB_CATEGORIES.forEach(cat => { if (rec[cat.key] && totals[rec[cat.key]]) totals[rec[cat.key]][cat.key]++; });
+    });
+    const gross = totalsFor(bundle.players, bundle.holes, detail, "gross");
+    bundle.players.forEach(p => {
+      const t = totals[p.id];
+      rows.push({ p, roundId: bundle.round.id, fourballLabel: `Fourball ${bundle.round.fourballIndex || "?"}`, total: t.bingo + t.bango + t.bongo, t, gross: gross[p.id] });
+    });
+  });
+  rows.sort((a,b) => b.total - a.total);
+  return `
+  <div class="card">
+    <strong>Bingo Bango Bongo</strong> <span class="muted">— combined leaderboard, all fourballs</span>
+    <table style="margin-top:8px;">
+      <tr><th class="name-col">Player</th><th>Fourball</th><th>Bingo</th><th>Bango</th><th>Bongo</th><th>Total</th><th>Total shots</th></tr>
+      ${rows.map((r,i) => `
+        <tr class="${i===0 && r.total>0 ? 'leader-row' : ''}">
+          <td class="name-col">${playerLink(r.p, r.roundId)}</td>
+          <td class="muted">${r.fourballLabel}</td>
+          <td>${r.t.bingo}</td>
+          <td>${r.t.bango}</td>
+          <td>${r.t.bongo}</td>
+          <td><strong>${r.total}</strong></td>
+          <td>${r.gross.count ? r.gross.sum : "-"}</td>
+        </tr>`).join("")}
+    </table>
+  </div>`;
+}
+
+function buildCombinedAllianceBoard(bundles){
+  const rows = bundles.map(bundle => {
+    const detail = computeDetail(bundle);
+    const data = computeAllianceData(bundle, detail);
+    const thru = data.filter(d => d.teamPts != null).length;
+    const total = data.reduce((a,d) => a + (d.teamPts || 0), 0);
+    return { bundle, thru, total };
+  }).sort((a,b) => b.total - a.total);
+
+  return `
+  <div class="card">
+    <strong>Alliance</strong> <span class="muted">— fourballs ranked against each other</span>
+    <table style="margin-top:8px;">
+      <tr><th class="name-col">Fourball</th><th>Players</th><th>Thru</th><th>Points</th></tr>
+      ${rows.map((r,i) => `
+        <tr class="${i===0 && r.total>0 ? 'leader-row' : ''}">
+          <td class="name-col">Fourball ${r.bundle.round.fourballIndex || "?"}</td>
+          <td class="muted" style="text-align:left;">${r.bundle.players.map(p=>p.name).join(", ")}</td>
+          <td>${r.thru}</td>
+          <td>${r.thru ? r.total : "-"}</td>
+        </tr>`).join("")}
+    </table>
+  </div>`;
+}
+
+// Match play and Betterball are inherently one fourball vs itself (2v2), so there's no
+// single combined score across fourballs the way Stroke/Stableford/Alliance/BBB have —
+// each fourball just gets its own board, one after another.
+function buildPerFourballBoards(bundles, builderFn){
+  return bundles.map(bundle => `
+    <p class="muted" style="margin:14px 0 4px;font-weight:700;color:var(--ink);">Fourball ${bundle.round.fourballIndex || "?"} <span style="font-weight:400;color:var(--muted);">— ${bundle.players.map(p=>p.name).join(", ")}</span></p>
+    ${builderFn(bundle)}`).join("");
+}
+
+function buildFourballLinksHtml(bundles){
+  return `
+  <h2>Fourball scoring links</h2>
+  ${bundles.map(bundle => {
+    const scoreUrl = location.origin + location.pathname + `#/play/${bundle.round.id}`;
+    return `
+    <div class="card">
+      <strong>Fourball ${bundle.round.fourballIndex || "?"}</strong>
+      <p class="muted" style="margin:4px 0 8px;">${bundle.players.map(p=>p.name).join(", ")}</p>
+      <div class="link-box">
+        <span class="muted">Scoring link:</span>
+        <input type="text" readonly value="${scoreUrl}" onclick="this.select()">
+        <button class="ghost copy-link-btn" data-url="${scoreUrl}">Copy</button>
+      </div>
+    </div>`;
+  }).join("")}`;
+}
+
+function competitionModeLabel(mode){
+  return (GAME_MODES.find(g => g.key === mode) || {}).label || mode;
+}
+
+function buildCompetitionBody(comp, mode, bundles){
+  if (mode === "piekfyn"){
+    let teamATotal = 0, teamBTotal = 0;
+    const rows = bundles.map((bundle, idx) => {
+      const detail = computeDetail(bundle);
+      const pts = computePiekfynPoints(bundle, detail);
+      teamATotal += pts.teamAPts;
+      teamBTotal += pts.teamBPts;
+      return `
+        <div class="card">
+          <div class="row" style="justify-content:space-between;">
+            <strong>Fourball ${bundle.round.fourballIndex || idx+1}</strong>
+            <span class="muted">${pts.decidedCount} of 3 decided</span>
+          </div>
+          <p class="muted" style="margin:4px 0 8px;">${bundle.players.map(p=>p.name).join(", ")}</p>
+          <p style="font-size:1.1rem;margin:0;text-align:center;">
+            <strong>${comp.teamAName || "Team A"} ${pts.teamAPts}</strong> — <strong>${pts.teamBPts} ${comp.teamBName || "Team B"}</strong>
+          </p>
+        </div>`;
+    }).join("");
+    return `
+      <p style="font-size:1.6rem;margin:0 0 4px;text-align:center;">
+        <strong>${comp.teamAName || "Team A"} ${teamATotal}</strong> — <strong>${teamBTotal} ${comp.teamBName || "Team B"}</strong>
+      </p>
+      <p class="muted" style="text-align:center;font-size:.82rem;margin-bottom:16px;">out of ${bundles.length * 3} points across ${bundles.length} fourball${bundles.length===1?"":"s"}</p>
+      ${rows || `<p class="muted">No fourballs found for this competition.</p>`}
+    `;
+  }
+  if (bundles.length === 0) return `<p class="muted">No fourballs found for this competition.</p>`;
+  if (mode === "stroke") return buildCombinedIndividualBoard(bundles, "net", {title:"Stroke play", unitLabel:"Net", sortAsc:true});
+  if (mode === "stableford") return buildCombinedIndividualBoard(bundles, "pts", {title:"Stableford", unitLabel:"Points", sortAsc:false});
+  if (mode === "bbb") return buildCombinedBBBBoard(bundles);
+  if (mode === "alliance") return buildCombinedAllianceBoard(bundles);
+  if (mode === "matchplay") return buildPerFourballBoards(bundles, bundle => buildMatchPlayBoard(bundle.players, bundle.holes, computeDetail(bundle)));
+  if (mode === "betterball") return buildPerFourballBoards(bundles, bundle => buildBetterballBoard(bundle, computeDetail(bundle)));
+  return `<p class="muted">Unsupported game mode for a competition.</p>`;
 }
 
 /* ---------- Piekfyn Kompetisie: 2 singles matches + 1 team match, 1pt win / 0.5pt halve ---------- */
@@ -2537,9 +2690,18 @@ function openBetterballScorecard(){
   overlay.addEventListener("click", (e) => { if (e.target === overlay) closeScorecard(); });
 }
 
+let competitionBundlesForLinks = [];   // set by renderCompetition/renderStandings so player links on a
+                                        // combined leaderboard open the right fourball's scorecard
 document.addEventListener("click", (e) => {
   const link = e.target.closest(".player-name-link");
-  if (link){ openScorecard(link.dataset.player); return; }
+  if (link){
+    if (link.dataset.round){
+      const b = competitionBundlesForLinks.find(x => x.round.id === link.dataset.round);
+      if (b) currentBundle = b;
+    }
+    openScorecard(link.dataset.player);
+    return;
+  }
   const standingsLink = e.target.closest("[data-standings-link]");
   if (standingsLink){ location.hash = `#/standings/${standingsLink.dataset.standingsLink}`; return; }
   const betterballLink = e.target.closest("[data-betterball-link]");
