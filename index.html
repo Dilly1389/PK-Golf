@@ -259,6 +259,24 @@ async function loadCompetitionsList(){
   }
 }
 
+// Deleting/restoring a competition cascades to every fourball round linked to it, so the whole
+// thing disappears from (or comes back to) both the Competitions and Existing rounds lists together.
+// Nothing is erased — same soft-delete pattern a single round already uses.
+async function deleteCompetition(competitionId){
+  const roundsSnap = await getDocs(query(collection(db, "golf_rounds"), where("competitionId", "==", competitionId)));
+  const batch = writeBatch(db);
+  batch.update(doc(db, "golf_competitions", competitionId), { deleted: true, deletedAt: serverTimestamp() });
+  roundsSnap.docs.forEach(d => batch.update(doc(db, "golf_rounds", d.id), { deleted: true, deletedAt: serverTimestamp() }));
+  await batch.commit();
+}
+async function restoreCompetition(competitionId){
+  const roundsSnap = await getDocs(query(collection(db, "golf_rounds"), where("competitionId", "==", competitionId)));
+  const batch = writeBatch(db);
+  batch.update(doc(db, "golf_competitions", competitionId), { deleted: false, deletedAt: null });
+  roundsSnap.docs.forEach(d => batch.update(doc(db, "golf_rounds", d.id), { deleted: false, deletedAt: null }));
+  await batch.commit();
+}
+
 /* ---------- shared header ---------- */
 function renderAppHeader(title, subtitle, badge){
   // badge: "live" | "final" | undefined
@@ -409,17 +427,51 @@ function renderSetup(){
     const card = document.getElementById("competitionsListCard");
     if (!card) return;
     loadCompetitionsList().then(comps => {
-      if (comps.length === 0){ card.innerHTML = `<p class="muted">No competitions yet — create one below by naming more than 1 fourball.</p>`; return; }
-      card.innerHTML = comps.map(c => `
-        <div class="row comp-item" data-comp="${c.id}" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer;">
-          <div>
+      const active = comps.filter(c => !c.deleted);
+      const deleted = comps.filter(c => c.deleted);
+
+      const itemHtml = (c, isDeleted) => {
+        const mode = (c.gameModes && c.gameModes[0]) || "stroke";
+        const subtitle = mode === "piekfyn" ? `${c.teamAName || "Team A"} vs ${c.teamBName || "Team B"}` : competitionModeLabel(mode);
+        return `
+        <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);${isDeleted ? "opacity:.6;" : ""}">
+          <div class="comp-item" data-comp="${c.id}" style="cursor:${isDeleted ? "default" : "pointer"};flex:1;">
             <strong>${c.name}</strong>
-            <div class="muted" style="font-size:.78rem;">${c.teamAName || "Team A"} vs ${c.teamBName || "Team B"} · ${c.fourballCount} fourball${c.fourballCount>1?"s":""}${c.courseName ? " · " + c.courseName : ""}</div>
+            <div class="muted" style="font-size:.78rem;">${subtitle} · ${c.fourballCount} fourball${c.fourballCount>1?"s":""}${c.courseName ? " · " + c.courseName : ""}</div>
           </div>
-          <span class="pill mode" style="background:var(--gold-dim);">View</span>
-        </div>`).join("");
+          ${isDeleted
+            ? `<button class="ghost restore-comp-item" data-comp="${c.id}" style="font-size:.75rem;padding:4px 10px;">Restore</button>`
+            : `<span class="pill mode" style="background:var(--gold-dim);">View</span>`}
+        </div>`;
+      };
+
+      let html = active.length === 0
+        ? `<p class="muted">No competitions yet — create one below by setting a fourball count above 1.</p>`
+        : active.map(c => itemHtml(c, false)).join("");
+
+      if (deleted.length > 0){
+        html += `
+          <div style="margin-top:10px;">
+            <button class="ghost" id="toggleDeletedCompsBtn" style="font-size:.75rem;padding:4px 10px;">Show deleted (${deleted.length})</button>
+            <div id="deletedCompsList" style="display:none;margin-top:8px;">${deleted.map(c => itemHtml(c, true)).join("")}</div>
+          </div>`;
+      }
+      card.innerHTML = html;
+
       card.querySelectorAll(".comp-item").forEach(el => {
         el.addEventListener("click", () => { location.hash = `#/competition/${el.dataset.comp}`; });
+      });
+      const toggleBtn = document.getElementById("toggleDeletedCompsBtn");
+      if (toggleBtn){
+        toggleBtn.onclick = () => {
+          const list = document.getElementById("deletedCompsList");
+          const showing = list.style.display !== "none";
+          list.style.display = showing ? "none" : "";
+          toggleBtn.textContent = showing ? `Show deleted (${deleted.length})` : "Hide deleted";
+        };
+      }
+      card.querySelectorAll(".restore-comp-item").forEach(btn => {
+        btn.onclick = async () => { await restoreCompetition(btn.dataset.comp); populateCompetitionsList(); };
       });
     });
   }
@@ -1685,6 +1737,83 @@ async function renderSpectator(code){
    COMPETITION VIEW (multiple fourballs feeding one Piekfyn total)
    ============================================================ */
 let competitionUnsubs = [];
+let competitionEditMode = false;
+
+function buildCompetitionControlsHtml(comp){
+  if (comp.deleted){
+    return `
+      <div class="card" style="border-color:var(--red);background:var(--gold-dim);text-align:center;">
+        <strong>This competition has been deleted</strong>
+        <p class="muted" style="margin:4px 0 10px;">It's hidden from your competitions list but hasn't been erased.</p>
+        <button id="restoreCompetitionBtn">Restore competition</button>
+      </div>`;
+  }
+  return `
+    <div class="row" style="justify-content:flex-end;gap:8px;margin-bottom:10px;">
+      <button class="secondary" id="editCompetitionBtn">Edit</button>
+      <button id="deleteCompetitionBtn" style="background:var(--red);border-color:var(--red);">Delete competition</button>
+    </div>`;
+}
+
+function buildCompetitionEditHtml(comp, mode){
+  return `
+    <div class="card">
+      <label>Name</label>
+      <input type="text" id="editCompName" value="${comp.name}">
+      <label>Course name</label>
+      <input type="text" id="editCompCourseName" value="${comp.courseName || ""}">
+      <div class="grid-2">
+        <div>
+          <label>Date</label>
+          <input type="text" id="editCompDate" value="${comp.roundDate || ""}">
+        </div>
+        <div>
+          <label>Tee box</label>
+          <select id="editCompTeeBox">${teeBoxOptions(comp.teeBox || "White")}</select>
+        </div>
+      </div>
+      ${mode === "piekfyn" ? `
+      <div class="grid-2">
+        <div><label>Team A name</label><input type="text" id="editCompTeamAName" value="${comp.teamAName || "Team A"}"></div>
+        <div><label>Team B name</label><input type="text" id="editCompTeamBName" value="${comp.teamBName || "Team B"}"></div>
+      </div>` : ""}
+      <p class="muted" style="font-size:.75rem;margin-top:6px;">Applies to every fourball. Each fourball's own tee time, players and holes can still be changed individually from that fourball's own Schedule tab.</p>
+      <div class="row" style="margin-top:12px;">
+        <button id="saveCompetitionBtn">Save changes</button>
+        <button class="secondary" id="cancelCompetitionEditBtn">Cancel</button>
+        <span id="competitionEditMsg" class="muted"></span>
+      </div>
+    </div>`;
+}
+
+async function saveCompetitionEdit(comp, mode, bundles){
+  const msg = document.getElementById("competitionEditMsg");
+  const name = document.getElementById("editCompName").value.trim() || comp.name;
+  const courseName = document.getElementById("editCompCourseName").value.trim() || comp.courseName;
+  const roundDate = document.getElementById("editCompDate").value.trim();
+  const teeBox = document.getElementById("editCompTeeBox").value;
+  const updates = { name, courseName, roundDate, teeBox };
+  if (mode === "piekfyn"){
+    updates.teamAName = document.getElementById("editCompTeamAName").value.trim() || "Team A";
+    updates.teamBName = document.getElementById("editCompTeamBName").value.trim() || "Team B";
+  }
+
+  if (msg) msg.textContent = "Saving…";
+  try{
+    const batch = writeBatch(db);
+    batch.update(doc(db, "golf_competitions", comp.id), updates);
+    bundles.forEach(b => {
+      const roundUpdates = { courseName, roundDate, teeBox, name: `${name} — Fourball ${b.round.fourballIndex}` };
+      if (mode === "piekfyn"){ roundUpdates.teamAName = updates.teamAName; roundUpdates.teamBName = updates.teamBName; }
+      batch.update(doc(db, "golf_rounds", b.round.id), roundUpdates);
+    });
+    await batch.commit();
+    competitionEditMode = false;
+    await renderCompetition(comp.id);
+  } catch(err){
+    if (msg) msg.textContent = "Error: " + err.message;
+  }
+}
 
 async function renderCompetition(competitionId){
   const app = document.getElementById("app");
@@ -1694,6 +1823,7 @@ async function renderCompetition(competitionId){
   if (!compSnap.exists()){ app.innerHTML = `<p>Competition not found.</p>`; return; }
   const comp = { id: compSnap.id, ...compSnap.data() };
   const mode = (comp.gameModes && comp.gameModes[0]) || "stroke";
+  competitionEditMode = false;
 
   const roundsSnap = await getDocs(query(collection(db, "golf_rounds"), where("competitionId", "==", competitionId)));
   const fourballRounds = roundsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -1702,6 +1832,29 @@ async function renderCompetition(competitionId){
 
   const bundles = await Promise.all(fourballRounds.map(r => loadRoundBundle(r.id)));
   competitionBundlesForLinks = bundles;
+
+  function renderControls(){
+    const el = document.getElementById("competitionControls");
+    if (!el) return;
+    el.innerHTML = competitionEditMode ? buildCompetitionEditHtml(comp, mode) : buildCompetitionControlsHtml(comp);
+    if (competitionEditMode){
+      document.getElementById("saveCompetitionBtn").onclick = () => saveCompetitionEdit(comp, mode, bundles);
+      document.getElementById("cancelCompetitionEditBtn").onclick = () => { competitionEditMode = false; renderControls(); };
+    } else if (comp.deleted){
+      document.getElementById("restoreCompetitionBtn").onclick = async () => {
+        await restoreCompetition(comp.id);
+        comp.deleted = false;
+        renderControls();
+      };
+    } else {
+      document.getElementById("editCompetitionBtn").onclick = () => { competitionEditMode = true; renderControls(); };
+      document.getElementById("deleteCompetitionBtn").onclick = async () => {
+        if (!confirm("Delete this competition? Every fourball in it will be hidden too, but nothing is erased — you can restore it all later.")) return;
+        await deleteCompetition(comp.id);
+        location.hash = "";
+      };
+    }
+  }
 
   function renderBody(){
     document.getElementById("competitionBody").innerHTML =
@@ -1718,9 +1871,11 @@ async function renderCompetition(competitionId){
   app.innerHTML = `
     ${renderAppHeader(comp.name, subtitle, "live")}
     <div class="content">
+    <div id="competitionControls"></div>
     <div id="competitionBody"><p class="muted">Loading…</p></div>
     </div>
   `;
+  renderControls();
   renderBody();
 
   if (competitionUnsubs.length) competitionUnsubs.forEach(u => u());
