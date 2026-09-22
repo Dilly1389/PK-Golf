@@ -1059,6 +1059,8 @@ async function renderScorer(roundId){
     renderEntry();
     renderBoards();
   });
+
+  loadSiblingBundles(scorerData.round);
 }
 
 /* ---------- Schedule tab: view mode + edit mode ---------- */
@@ -1182,6 +1184,8 @@ async function renderScoringOnly(roundId){
     renderEntry();
     renderBoards();
   });
+
+  loadSiblingBundles(scorerData.round);
 }
 
 /* ---------- Schedule tab: view mode + edit mode ---------- */
@@ -1512,10 +1516,12 @@ function switchScorerTab(which){
 const SCORE_LABELS = { "-2":"Eagle", "-1":"Birdie", "0":"Par", "1":"Bogey", "2":"Dbl", "3":"Tpl+" };
 
 function renderEntry(){
+  const holeLabel = document.getElementById("holeLabel");
+  const card = document.getElementById("entryCard");
+  if (!holeLabel || !card) return;   // the "Start round" gate is showing instead — nothing to fill in yet
   const hole = scorerData.holes.find(h => h.holeNumber === scorerHole);
   const finished = scorerData.round.status === "finished";
-  document.getElementById("holeLabel").textContent = `Hole ${scorerHole} · Par ${hole.par} · SI ${hole.strokeIndex}`;
-  const card = document.getElementById("entryCard");
+  holeLabel.textContent = `Hole ${scorerHole} · Par ${hole.par} · SI ${hole.strokeIndex}`;
 
   const chipOffsets = [-2,-1,0,1,2,3];
 
@@ -1764,9 +1770,51 @@ async function clearScore(playerId){
   renderBoards();
 }
 
+// While scoring a fourball that's part of a (non-Piekfyn) competition, its own Leaderboards tab
+// also embeds the full combined leaderboard below its own board, so the scorer can see both
+// without leaving the scoring screen. Piekfyn already has its own cross-fourball board built in.
+let siblingBundles = [];
+let siblingUnsubs = [];
+async function loadSiblingBundles(round){
+  if (siblingUnsubs.length) siblingUnsubs.forEach(u => u());
+  siblingUnsubs = [];
+  siblingBundles = [];
+  if (!round.competitionId || round.gameModes.includes("piekfyn")) return;
+
+  const roundsSnap = await getDocs(query(collection(db, "golf_rounds"), where("competitionId", "==", round.competitionId)));
+  const others = roundsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+    .filter(r => !r.deleted && r.id !== round.id)
+    .sort((a,b) => (a.fourballIndex||0) - (b.fourballIndex||0));
+  siblingBundles = await Promise.all(others.map(r => loadRoundBundle(r.id)));
+
+  const mode = round.gameModes[0];
+  siblingUnsubs = others.flatMap(r => {
+    const unsubs = [onSnapshot(collection(db, "golf_rounds", r.id, "scores"), snap => {
+      const idx = siblingBundles.findIndex(b => b.round.id === r.id);
+      if (idx >= 0){ siblingBundles[idx].scores = snap.docs.map(d => d.data()); renderBoards(); }
+    })];
+    if (mode === "bbb"){
+      unsubs.push(onSnapshot(collection(db, "golf_rounds", r.id, "bbb"), snap => {
+        const idx = siblingBundles.findIndex(b => b.round.id === r.id);
+        if (idx >= 0){ siblingBundles[idx].bbb = snap.docs.map(d => d.data()); renderBoards(); }
+      }));
+    }
+    return unsubs;
+  });
+  renderBoards();   // sibling data just arrived — refresh once now, on top of the live updates above
+}
+
 function renderBoards(){
   currentBundle = scorerData;
-  document.getElementById("boards").innerHTML = buildBoardsHtml(scorerData);
+  const { round } = scorerData;
+  const showsCombined = !!round.competitionId && !round.gameModes.includes("piekfyn");
+  let html = buildBoardsHtml(scorerData, { includeStandingsLink: !showsCombined });
+  if (showsCombined){
+    const mode = round.gameModes[0];
+    const allBundles = [scorerData, ...siblingBundles].sort((a,b) => (a.round.fourballIndex||0) - (b.round.fourballIndex||0));
+    html += `<h2 style="margin-top:20px;">Full leaderboard</h2>` + buildCompetitionBody({}, mode, allBundles);
+  }
+  document.getElementById("boards").innerHTML = html;
 }
 
 /* ============================================================
@@ -2066,7 +2114,8 @@ function computeDetail(bundle){
   return detail;
 }
 
-function buildBoardsHtml(bundle){
+function buildBoardsHtml(bundle, opts){
+  opts = opts || {};
   const { round, holes, players } = bundle;
   const detail = computeDetail(bundle);
 
@@ -2078,7 +2127,7 @@ function buildBoardsHtml(bundle){
   if (round.gameModes.includes("alliance")) html += buildAllianceBoard(bundle, detail);
   if (round.gameModes.includes("bbb")) html += buildBBBBoard(bundle, detail);
   if (round.gameModes.includes("piekfyn")) html += buildPiekfynBoard(bundle, detail);
-  if (round.competitionId && !round.gameModes.includes("piekfyn")){
+  if (round.competitionId && !round.gameModes.includes("piekfyn") && opts.includeStandingsLink !== false){
     html += `<div class="team-scorecard-link" data-standings-link="${round.competitionId}">Part of a multi-fourball competition — view overall leaderboard</div>`;
   }
   return html;
