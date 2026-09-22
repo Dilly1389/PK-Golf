@@ -2383,13 +2383,18 @@ function buildBBBBoard(bundle, detail){
    competition, with a leaderboard that makes sense for that mode.
    ============================================================ */
 function buildCombinedIndividualBoard(bundles, field, opts){
+  // "Net vs par" only makes sense for the Stroke play board — Stableford already shows
+  // performance relative to par via its points (2 = par), so it has no separate column here,
+  // matching how the single-fourball Stroke play board already works.
+  const showVsPar = field === "net";
   const rows = [];
   bundles.forEach(bundle => {
     const detail = computeDetail(bundle);
     const gross = totalsFor(bundle.players, bundle.holes, detail, "gross");
     bundle.players.forEach(p => {
       const t = totalsFor([p], bundle.holes, detail, field)[p.id];
-      rows.push({ p, roundId: bundle.round.id, fourballLabel: `Fourball ${bundle.round.fourballIndex || "?"}`, count: t.count, sum: t.sum, gross: gross[p.id] });
+      const parThru = bundle.holes.slice(0, t.count).reduce((a,h)=>a+h.par,0);
+      rows.push({ p, roundId: bundle.round.id, fourballLabel: `Fourball ${bundle.round.fourballIndex || "?"}`, count: t.count, sum: t.sum, gross: gross[p.id], vsPar: t.count ? fmtDiff(t.sum - parThru) : null });
     });
   });
   rows.sort((a,b) => {
@@ -2402,13 +2407,14 @@ function buildCombinedIndividualBoard(bundles, field, opts){
   <div class="card">
     <strong>${opts.title}</strong> <span class="muted">— combined leaderboard, all fourballs</span>
     <table style="margin-top:8px;">
-      <tr><th class="name-col">Player</th><th>Fourball</th><th>Thru</th><th>${opts.unitLabel}</th><th>Total shots</th></tr>
+      <tr><th class="name-col">Player</th><th>Fourball</th><th>Thru</th><th>${opts.unitLabel}</th>${showVsPar ? "<th>Net vs par</th>" : ""}<th>Total shots</th></tr>
       ${rows.map((r,i) => `
         <tr class="${i===0 && r.count ? 'leader-row' : ''}">
           <td class="name-col">${playerLink(r.p, r.roundId)}</td>
           <td class="muted">${r.fourballLabel}</td>
           <td>${r.count}</td>
           <td>${r.count ? r.sum : "-"}</td>
+          ${showVsPar ? `<td>${r.vsPar != null ? r.vsPar : "-"}</td>` : ""}
           <td>${r.gross.count ? r.gross.sum : "-"}</td>
         </tr>`).join("")}
     </table>
