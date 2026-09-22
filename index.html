@@ -1954,10 +1954,19 @@ async function renderCompetition(competitionId){
   const subtitle = mode === "piekfyn"
     ? `${comp.teamAName || "Team A"} vs ${comp.teamBName || "Team B"}`
     : `${competitionModeLabel(mode)}${comp.courseName ? " · " + comp.courseName : ""}`;
+  // The competition's own page has Edit/Delete and every fourball's own scoring link — not safe
+  // to hand to a spectator. #/standings/ is the read-only view built for exactly that: the
+  // combined leaderboard with none of those controls, so sharing it can't touch anyone's scores.
+  const standingsUrl = location.origin + location.pathname + `#/standings/${comp.id}`;
 
   app.innerHTML = `
     ${renderAppHeader(comp.name, subtitle, "live")}
     <div class="content">
+    <div class="link-box">
+      <span class="muted">Spectator link:</span>
+      <input type="text" readonly value="${standingsUrl}" onclick="this.select()">
+      <button class="ghost copy-link-btn" data-url="${standingsUrl}">Copy</button>
+    </div>
     <div id="competitionControls"></div>
     <div id="competitionBody"><p class="muted">Loading…</p></div>
     </div>
