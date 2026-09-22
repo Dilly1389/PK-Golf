@@ -567,46 +567,80 @@ function renderSetup(){
     document.getElementById("scrambleDriveOptions").style.display = (isAlliance || isBetterball) ? "" : "none";
     document.getElementById("piekfynOptions").style.display = isPiekfyn ? "" : "none";
     document.getElementById("fourballCountHint").textContent = isPiekfyn
-      ? "The players and pairings below are for Fourball 1. Extra fourballs are created with placeholder players you edit afterward from each one's Schedule tab. More than 1 links them into one Piekfyn competition with a combined team score."
+      ? "More than 1 links the fourballs into one Piekfyn competition with a combined team score. Individual match pairings below are for Fourball 1; extra fourballs default to pairing by team position (adjust afterward from that fourball's Schedule tab if needed)."
       : isMatchStyle
         ? "More than 1 runs several separate head-to-head fourballs side by side — each keeps its own result, players and scoring link, but they aren't combined into one ranking."
-        : "More than 1 groups the fourballs into one competition with a combined leaderboard, plus its own scoring link for each fourball. Fourball 1 uses the players below; extra fourballs get placeholder players you edit afterward from each one's Schedule tab.";
+        : "More than 1 groups the fourballs into one competition with a combined leaderboard, plus its own scoring link for each fourball.";
     if (isPiekfyn) refreshPairingOptions();
-    [1,2,3,4].forEach(i => {
-      const col = document.getElementById(`teamCol-${i}`);
-      if (col) col.style.display = isTeamMode ? "" : "none";
-    });
+    document.querySelectorAll(".team-col").forEach(col => { col.style.display = isTeamMode ? "" : "none"; });
   }
   document.querySelectorAll('input[name="gameMode"]').forEach(radio => {
     radio.addEventListener("change", updateModeVisibility);
   });
 
-  const playersBox = document.getElementById("playersBox");
-  playersBox.innerHTML = [1,2,3,4].map(i => `
-    <div class="grid-2" style="margin-bottom:8px;">
-      <div>
-        <label>Player ${i} name</label>
-        <input type="text" class="p-name" id="p${i}-name" placeholder="Player ${i}">
-      </div>
-      <div class="row" style="gap:8px;">
-        <div style="flex:1">
-          <label>Playing handicap</label>
-          <input type="number" class="p-hcp" id="p${i}-hcp" value="0">
-        </div>
-        <div style="flex:1;display:none;" id="teamCol-${i}">
-          <label>Team</label>
-          <select class="p-team" id="p${i}-team">
-            <option value="A" ${i<=2?"selected":""}>A</option>
-            <option value="B" ${i>2?"selected":""}>B</option>
-          </select>
-        </div>
-      </div>
-    </div>`).join("");
+  // Fourball 1 always uses the plain p{i}-* ids (unchanged, so every existing single-round
+  // code path — validation, single-round creation, Piekfyn's own pairing picker — keeps working
+  // untouched). Fourball 2+ use fb{fb}-p{i}-* ids instead.
+  function playerFieldId(fb, i, field){
+    return (fb === 1 ? `p${i}` : `fb${fb}-p${i}`) + `-${field}`;
+  }
+  let playerFieldMemory = {};
+  function renderPlayersBox(){
+    const fourballCount = parseInt(document.getElementById("fourballCount").value, 10) || 1;
+    const playersBox = document.getElementById("playersBox");
 
-  [1,2,3,4].forEach(i => {
-    document.getElementById(`p${i}-name`).addEventListener("input", refreshPairingOptions);
-    document.getElementById(`p${i}-team`).addEventListener("change", refreshPairingOptions);
-  });
+    // Remember anything already typed, accumulating across every change — so a fourball's
+    // details survive even if the count is shrunk past it and later grown back to it again.
+    playersBox.querySelectorAll("input.p-name, input.p-hcp, select.p-team").forEach(el => {
+      if (el.value) playerFieldMemory[el.id] = el.value;
+    });
+
+    const oneFourballHtml = (fb) => [1,2,3,4].map(i => `
+      <div class="grid-2" style="margin-bottom:8px;">
+        <div>
+          <label>Player ${i} name</label>
+          <input type="text" class="p-name" id="${playerFieldId(fb,i,'name')}" placeholder="Player ${i}">
+        </div>
+        <div class="row" style="gap:8px;">
+          <div style="flex:1">
+            <label>Playing handicap</label>
+            <input type="number" class="p-hcp" id="${playerFieldId(fb,i,'hcp')}" value="0">
+          </div>
+          <div class="team-col" style="flex:1;display:none;">
+            <label>Team</label>
+            <select class="p-team" id="${playerFieldId(fb,i,'team')}">
+              <option value="A" ${i<=2?"selected":""}>A</option>
+              <option value="B" ${i>2?"selected":""}>B</option>
+            </select>
+          </div>
+        </div>
+      </div>`).join("");
+
+    playersBox.innerHTML = Array.from({length: fourballCount}, (_,idx) => {
+      const fb = idx + 1;
+      const heading = fourballCount > 1
+        ? `<p class="muted" style="font-weight:700;color:var(--ink);margin:${fb===1?"0":"16px"} 0 4px;">Fourball ${fb}</p>`
+        : "";
+      return heading + oneFourballHtml(fb);
+    }).join("");
+
+    Object.entries(playerFieldMemory).forEach(([id, value]) => {
+      const el = document.getElementById(id);
+      if (el) el.value = value;
+    });
+
+    [1,2,3,4].forEach(i => {
+      document.getElementById(`p${i}-name`).addEventListener("input", refreshPairingOptions);
+      document.getElementById(`p${i}-team`).addEventListener("change", refreshPairingOptions);
+    });
+
+    const isTeamMode = document.querySelector('input[name="gameMode"]:checked')?.value;
+    document.querySelectorAll(".team-col").forEach(col => {
+      col.style.display = (isTeamMode === "matchplay" || isTeamMode === "piekfyn" || isTeamMode === "betterball") ? "" : "none";
+    });
+  }
+  renderPlayersBox();
+  document.getElementById("fourballCount").addEventListener("change", renderPlayersBox);
 
   updateModeVisibility();
 
@@ -622,6 +656,18 @@ function renderSetup(){
   buildHolesTable();
 
   document.getElementById("createBtn").onclick = createRound;
+}
+
+function readPlayersForFourball(fb){
+  return [1,2,3,4].map(i => {
+    const idPrefix = fb === 1 ? `p${i}` : `fb${fb}-p${i}`;
+    return {
+      name: document.getElementById(`${idPrefix}-name`).value.trim() || `Fourball ${fb} · Player ${i}`,
+      playingHandicap: parseInt(document.getElementById(`${idPrefix}-hcp`).value || "0", 10),
+      team: document.getElementById(`${idPrefix}-team`).value,
+      sortOrder: i
+    };
+  });
 }
 
 async function createRound(){
@@ -656,6 +702,15 @@ async function createRound(){
     teamAName = document.getElementById("teamAName").value.trim() || "Team A";
     teamBName = document.getElementById("teamBName").value.trim() || "Team B";
     piekfynPairs = JSON.parse(selectedRadio.value);
+
+    for (let fb = 2; fb <= fourballCount; fb++){
+      const aCount = [1,2,3,4].filter(i => document.getElementById(`fb${fb}-p${i}-team`).value === "A").length;
+      const bCount = [1,2,3,4].filter(i => document.getElementById(`fb${fb}-p${i}-team`).value === "B").length;
+      if (aCount !== 2 || bCount !== 2){
+        msg.textContent = `Fourball ${fb} needs exactly 2 players on Team A and 2 on Team B.`;
+        return;
+      }
+    }
   }
 
   const players = [1,2,3,4].map(i => ({
@@ -677,9 +732,10 @@ async function createRound(){
   msg.textContent = "Creating…";
   try{
     if (fourballCount > 1){
+      const playersByFourball = Array.from({length: fourballCount}, (_, idx) => readPlayersForFourball(idx + 1));
       await createCompetition({
         roundName, courseName, roundDate, teeTime, teeBox, modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
-        teamAName, teamBName, piekfynPairs, players, holes, fourballCount
+        teamAName, teamBName, piekfynPairs, playersByFourball, holes, fourballCount
       });
       return;
     }
@@ -711,10 +767,20 @@ async function createRound(){
   }
 }
 
+// Pairs the two Team A players against the two Team B players by position — the same rule the
+// setup screen's own pairing picker uses for Fourball 1 — based on whatever teams were actually
+// entered for this fourball, rather than assuming a fixed layout.
+function defaultPairsFor(players){
+  const teamA = players.filter(p => p.team === "A");
+  const teamB = players.filter(p => p.team === "B");
+  if (teamA.length !== 2 || teamB.length !== 2) return [{a:1,b:3},{a:2,b:4}];
+  return [{a:teamA[0].sortOrder,b:teamB[0].sortOrder},{a:teamA[1].sortOrder,b:teamB[1].sortOrder}];
+}
+
 async function createCompetition(cfg){
   const {
     roundName, courseName, roundDate, teeTime, teeBox, modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
-    teamAName, teamBName, piekfynPairs, players, holes, fourballCount
+    teamAName, teamBName, piekfynPairs, playersByFourball, holes, fourballCount
   } = cfg;
   const isPiekfyn = modes.includes("piekfyn");
 
@@ -724,14 +790,6 @@ async function createCompetition(cfg){
     fourballCount, gameModes: modes, createdAt: serverTimestamp()
   });
 
-  const defaultPlayersFor = (fbIndex) => [1,2,3,4].map(i => ({
-    name: `Fourball ${fbIndex} · Player ${i}`,
-    playingHandicap: 0,
-    team: i <= 2 ? "A" : "B",
-    sortOrder: i
-  }));
-  const defaultPairs = [{a:1,b:3},{a:2,b:4}];
-
   for (let fb = 1; fb <= fourballCount; fb++){
     const isFirst = fb === 1;
     const spectatorCode = Math.random().toString(36).slice(2,8);
@@ -739,15 +797,14 @@ async function createCompetition(cfg){
       name: `${roundName} — Fourball ${fb}`, courseName, roundDate, teeTime, teeBox,
       gameModes: modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
       teamAName: isPiekfyn ? teamAName : null, teamBName: isPiekfyn ? teamBName : null,
-      piekfynPairs: isPiekfyn ? (isFirst ? piekfynPairs : defaultPairs) : null,
+      piekfynPairs: isPiekfyn ? (isFirst ? piekfynPairs : defaultPairsFor(playersByFourball[fb - 1])) : null,
       spectatorCode, competitionId: compRef.id, fourballIndex: fb,
       status: "active", deleted: false, createdAt: serverTimestamp()
     });
 
     const batch = writeBatch(db);
     holes.forEach(h => batch.set(doc(db, "golf_rounds", roundRef.id, "holes", String(h.holeNumber)), h));
-    const fbPlayers = isFirst ? players : defaultPlayersFor(fb);
-    fbPlayers.forEach(p => {
+    playersByFourball[fb - 1].forEach(p => {
       const pRef = doc(collection(db, "golf_rounds", roundRef.id, "players"));
       batch.set(pRef, p);
     });
