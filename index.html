@@ -4,6 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PK Golf</title>
+<!-- Absolute /golf/... paths, not relative - the app's real address is
+     pksport.co.za/golf (no trailing slash), and a relative path from a URL
+     with no trailing slash resolves against the parent directory, not this
+     one. PK Fishing solves the same problem with an injected <base> tag from
+     its proxy; golf's proxy (pk-fishing's _worker.js) does a plain passthrough
+     with no rewriting, so absolute paths are the simpler fix here. -->
+<link rel="icon" href="/golf/icon-192.png">
+<link rel="apple-touch-icon" href="/golf/icon-192.png">
+<link rel="manifest" href="/golf/manifest.json">
+<meta name="theme-color" content="#a11212">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="PK Golf">
 <style>
   :root{
     --ink:#1a1a1a;
