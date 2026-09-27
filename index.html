@@ -205,11 +205,20 @@ const GAME_MODES = [
   { key: "stroke",     label: "Stroke play (gross/net)" },
   { key: "stableford",  label: "Stableford" },
   { key: "matchplay",  label: "Match play (2 v 2)" },
+  { key: "matchplay3", label: "3-way match play" },
   { key: "betterball", label: "Betterball Stableford" },
   { key: "alliance",   label: "Alliance" },
   { key: "bbb",        label: "Bingo Bango Bongo" },
   { key: "piekfyn",    label: "Piekfyn Kompetisie" },
 ];
+
+// Modes with a fixed player count other than the usual 4 (3-way match play needs
+// exactly 3 - a real Three-ball, not a 4th unused slot). Anything not listed
+// here uses the default of 4.
+const MODE_PLAYER_COUNT = { matchplay3: 3 };
+function playerCountForMode(mode){
+  return MODE_PLAYER_COUNT[mode] || 4;
+}
 
 const TEE_BOXES = ["White", "Yellow", "Red", "Blue", "Black", "Gold"];
 function teeBoxOptions(selected){
@@ -625,7 +634,7 @@ function renderSetup(){
     const isAlliance = selected === "alliance";
     const isBetterball = selected === "betterball";
     const isPiekfyn = selected === "piekfyn";
-    const isMatchStyle = selected === "matchplay" || selected === "betterball";
+    const isMatchStyle = selected === "matchplay" || selected === "betterball" || selected === "matchplay3";
     const isTeamMode = selected === "matchplay" || selected === "piekfyn" || selected === "betterball";
     document.getElementById("allianceOptions").style.display = isAlliance ? "" : "none";
     document.getElementById("scrambleDriveOptions").style.display = (isAlliance || isBetterball) ? "" : "none";
@@ -633,10 +642,13 @@ function renderSetup(){
     document.getElementById("fourballCountHint").textContent = isPiekfyn
       ? "More than 1 links the fourballs into one Piekfyn competition with a combined team score. Individual match pairings below are for Fourball 1; extra fourballs default to pairing by team position (adjust afterward from that fourball's Schedule tab if needed)."
       : isMatchStyle
-        ? "More than 1 runs several separate head-to-head fourballs side by side — each keeps its own result, players and scoring link, but they aren't combined into one ranking."
+        ? "More than 1 runs several separate head-to-head groups side by side — each keeps its own result, players and scoring link, but they aren't combined into one ranking."
         : "More than 1 groups the fourballs into one competition with a combined leaderboard, plus its own scoring link for each fourball.";
     if (isPiekfyn) refreshPairingOptions();
     document.querySelectorAll(".team-col").forEach(col => { col.style.display = isTeamMode ? "" : "none"; });
+    // 3-way match play needs exactly 3 player slots per group instead of 4 -
+    // re-render whenever the mode changes (not just when the fourball count does).
+    renderPlayersBox();
   }
   document.querySelectorAll('input[name="gameMode"]').forEach(radio => {
     radio.addEventListener("change", updateModeVisibility);
@@ -651,6 +663,9 @@ function renderSetup(){
   let playerFieldMemory = {};
   function renderPlayersBox(){
     const fourballCount = parseInt(document.getElementById("fourballCount").value, 10) || 1;
+    const selectedMode = document.querySelector('input[name="gameMode"]:checked')?.value;
+    const playerCount = playerCountForMode(selectedMode);
+    const playerSlots = Array.from({length: playerCount}, (_,i) => i+1);
     const playersBox = document.getElementById("playersBox");
 
     // Remember anything already typed, accumulating across every change — so a fourball's
@@ -670,7 +685,7 @@ function renderSetup(){
         <input type="text" class="fb-tee-time" id="fb${fb}-teeTime" placeholder="e.g. 07:40">
       </div>`;
 
-    const oneFourballHtml = (fb) => teeTimeField(fb) + [1,2,3,4].map(i => `
+    const oneFourballHtml = (fb) => teeTimeField(fb) + playerSlots.map(i => `
       <div class="grid-2" style="margin-bottom:8px;">
         <div>
           <label>Player ${i} name</label>
@@ -704,14 +719,14 @@ function renderSetup(){
       if (el) el.value = value;
     });
 
-    [1,2,3,4].forEach(i => {
+    playerSlots.forEach(i => {
       document.getElementById(`p${i}-name`).addEventListener("input", refreshPairingOptions);
-      document.getElementById(`p${i}-team`).addEventListener("change", refreshPairingOptions);
+      const teamSel = document.getElementById(`p${i}-team`);
+      if (teamSel) teamSel.addEventListener("change", refreshPairingOptions);
     });
 
-    const isTeamMode = document.querySelector('input[name="gameMode"]:checked')?.value;
     document.querySelectorAll(".team-col").forEach(col => {
-      col.style.display = (isTeamMode === "matchplay" || isTeamMode === "piekfyn" || isTeamMode === "betterball") ? "" : "none";
+      col.style.display = (selectedMode === "matchplay" || selectedMode === "piekfyn" || selectedMode === "betterball") ? "" : "none";
     });
   }
   renderPlayersBox();
@@ -733,13 +748,15 @@ function renderSetup(){
   document.getElementById("createBtn").onclick = createRound;
 }
 
-function readPlayersForFourball(fb){
-  return [1,2,3,4].map(i => {
+function readPlayersForFourball(fb, playerCount){
+  const slots = Array.from({length: playerCount || 4}, (_,i) => i+1);
+  return slots.map(i => {
     const idPrefix = fb === 1 ? `p${i}` : `fb${fb}-p${i}`;
+    const teamEl = document.getElementById(`${idPrefix}-team`);
     return {
       name: document.getElementById(`${idPrefix}-name`).value.trim() || `Fourball ${fb} · Player ${i}`,
       playingHandicap: parseInt(document.getElementById(`${idPrefix}-hcp`).value || "0", 10),
-      team: document.getElementById(`${idPrefix}-team`).value,
+      team: teamEl ? teamEl.value : null,
       sortOrder: i
     };
   });
@@ -793,7 +810,8 @@ async function createRound(){
     }
   }
 
-  const players = [1,2,3,4].map(i => ({
+  const playerCount = playerCountForMode(modes[0]);
+  const players = Array.from({length: playerCount}, (_,idx) => idx+1).map(i => ({
     name: document.getElementById(`p${i}-name`).value.trim() || `Player ${i}`,
     playingHandicap: parseInt(document.getElementById(`p${i}-hcp`).value || "0", 10),
     team: document.getElementById(`p${i}-team`).value,
@@ -812,7 +830,7 @@ async function createRound(){
   msg.textContent = "Creating…";
   try{
     if (fourballCount > 1){
-      const playersByFourball = Array.from({length: fourballCount}, (_, idx) => readPlayersForFourball(idx + 1));
+      const playersByFourball = Array.from({length: fourballCount}, (_, idx) => readPlayersForFourball(idx + 1, playerCount));
       const teeTimesByFourball = Array.from({length: fourballCount}, (_, idx) => readTeeTimeForFourball(idx + 1));
       await createCompetition({
         roundName, courseName, roundDate, teeBox, modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
@@ -2158,6 +2176,7 @@ function buildBoardsHtml(bundle, opts){
   if (round.gameModes.includes("stroke")) html += buildStrokeBoard(players, holes, detail);
   if (round.gameModes.includes("stableford")) html += buildStablefordBoard(players, holes, detail);
   if (round.gameModes.includes("matchplay")) html += buildMatchPlayBoard(players, holes, detail);
+  if (round.gameModes.includes("matchplay3")) html += buildMatchPlay3Board(bundle, detail);
   if (round.gameModes.includes("betterball")) html += buildBetterballBoard(bundle, detail);
   if (round.gameModes.includes("alliance")) html += buildAllianceBoard(bundle, detail);
   if (round.gameModes.includes("bbb")) html += buildBBBBoard(bundle, detail);
@@ -2266,6 +2285,56 @@ function buildMatchPlayBoard(players, holes, detail){
         const g = totalsFor([p], holes, detail, "gross")[p.id];
         return `<tr><td class="name-col">${playerLink(p)}</td><td>${g.count ? g.sum : "-"}</td></tr>`;
       }).join("")}
+    </table>
+  </div>`;
+}
+
+// 3-way match play ("Three-ball"): every hole compares all three players' net
+// scores at once and hands out points per hole - 2 to a sole winner, 1 each to
+// a pair tied for best with the third beaten, or 1 each if all three tie.
+// Unlike the 2-player match (a running holes-up/down count), this totals to a
+// points table since a three-way tie has no "up/down" equivalent.
+function computeMatchPlay3Points(players, holes, detail){
+  const points = {};
+  players.forEach(p => { points[p.id] = { sum: 0, thru: 0 }; });
+
+  for (const h of holes){
+    const nets = players.map(p => ({ p, net: detail[p.id][h.holeNumber].net }));
+    if (nets.some(n => n.net == null)) break;   // stop at the first hole anyone hasn't entered yet
+
+    const best = Math.min(...nets.map(n => n.net));
+    const winners = nets.filter(n => n.net === best);
+    // 1 outright winner -> 2 points; 2 tied for best -> 1 point each; all 3 tied -> 1 each
+    const pointsForWinner = winners.length === 1 ? 2 : 1;
+    winners.forEach(w => { points[w.p.id].sum += pointsForWinner; });
+    players.forEach(p => { points[p.id].thru++; });
+  }
+  return points;
+}
+
+function buildMatchPlay3Board(bundle, detail){
+  const { players, holes } = bundle;
+  if (players.length !== 3){
+    return `<div class="card"><strong>3-way match play</strong><p class="muted">Needs exactly 3 players.</p></div>`;
+  }
+  const points = computeMatchPlay3Points(players, holes, detail);
+  const gross = totalsFor(players, holes, detail, "gross");
+  const rows = players.map(p => ({ p, pts: points[p.id], g: gross[p.id] }))
+    .sort((a,b) => b.pts.sum - a.pts.sum);
+
+  return `
+  <div class="card">
+    <strong>3-way match play</strong>
+    <span class="muted">— net score wins the hole: 2 pts outright, 1 pt each on a tie for best, 1 pt each if all square</span>
+    <table style="margin-top:8px;">
+      <tr><th class="name-col">Player</th><th>Thru</th><th>Points</th><th>Total shots</th></tr>
+      ${rows.map((r,i) => `
+        <tr class="${i===0 && r.pts.thru ? 'leader-row' : ''}">
+          <td class="name-col">${playerLink(r.p)}</td>
+          <td>${r.pts.thru}</td>
+          <td>${r.pts.thru ? r.pts.sum : "-"}</td>
+          <td>${r.g.count ? r.g.sum : "-"}</td>
+        </tr>`).join("")}
     </table>
   </div>`;
 }
@@ -2558,6 +2627,7 @@ function buildCompetitionBody(comp, mode, bundles){
   if (mode === "bbb") return buildCombinedBBBBoard(bundles);
   if (mode === "alliance") return buildCombinedAllianceBoard(bundles);
   if (mode === "matchplay") return buildPerFourballBoards(bundles, bundle => buildMatchPlayBoard(bundle.players, bundle.holes, computeDetail(bundle)));
+  if (mode === "matchplay3") return buildPerFourballBoards(bundles, bundle => buildMatchPlay3Board(bundle, computeDetail(bundle)));
   if (mode === "betterball") return buildPerFourballBoards(bundles, bundle => buildBetterballBoard(bundle, computeDetail(bundle)));
   return `<p class="muted">Unsupported game mode for a competition.</p>`;
 }
