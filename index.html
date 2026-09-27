@@ -1595,9 +1595,14 @@ function renderEntry(){
       if (s && s.grossStrokes != null){ total += s.grossStrokes; thru++; }
     });
 
+    // Net Stableford points this exact gross score would be worth for this player,
+    // so the points on offer are visible right where the score gets picked - not
+    // just after the fact on the Stableford board.
+    const sr = strokesReceived(p.playingHandicap, hole.strokeIndex);
     const chips = chipOffsets.map(off => {
       const val = Math.max(1, hole.par + off);
       const isActive = currentVal === val;
+      const pts = stablefordPoints(hole.par, val - sr);
       return `<button type="button" class="score-chip" data-player="${p.id}" data-val="${val}"
         style="flex:1;min-width:0;padding:10px 2px;font-size:.95rem;
         background:${isActive ? "var(--green-dark)" : "#fff"};
@@ -1606,6 +1611,7 @@ function renderEntry(){
         border-radius:8px;" ${finished ? "disabled" : ""}>
         <div style="font-weight:700;">${val}</div>
         <div style="font-size:.62rem;opacity:.75;">${SCORE_LABELS[String(off)]}</div>
+        <div style="font-size:.6rem;opacity:.9;font-weight:700;">${pts} pt${pts===1?"":"s"}</div>
       </button>`;
     }).join("");
 
@@ -1613,7 +1619,7 @@ function renderEntry(){
       <div class="card" style="padding:12px;">
         <div class="row" style="justify-content:space-between;margin-bottom:8px;">
           <strong>${p.name}</strong>
-          <span class="muted">hcp <input type="number" class="hcp-edit-input" data-player="${p.id}" value="${p.playingHandicap}" style="width:44px;padding:1px 4px;font-size:.85rem;border:1px solid var(--line);border-radius:4px;color:var(--ink);" onfocus="this.select()" ${finished ? "disabled" : ""}>${p.team ? " · team "+p.team : ""} · thru ${thru}: ${thru ? total : "-"}</span>
+          <span class="muted">hcp ${p.playingHandicap}${p.team ? " · team "+p.team : ""} · thru ${thru}: ${thru ? total : "-"}</span>
         </div>
         <div class="row" style="gap:6px;flex-wrap:nowrap;">${chips}</div>
         <div class="row" style="margin-top:6px;">
@@ -1624,8 +1630,6 @@ function renderEntry(){
   }).join("");
 
   card.innerHTML = scrambleHtml + playersHtml;
-
-  wireHandicapInputs(scorerData.round.id, ".hcp-edit-input", card);
 
   card.querySelectorAll(".scramble-pick").forEach(btn => {
     btn.addEventListener("click", () => saveScrambleDrive("playerId", btn.dataset.player));
@@ -2173,8 +2177,12 @@ function buildBoardsHtml(bundle, opts){
   const detail = computeDetail(bundle);
 
   let html = "";
+  // Stableford points are useful regardless of which mode is actually being
+  // competed for, so they always show - not just when Stableford itself was
+  // picked as a mode. Shown first, and never duplicated if Stableford was
+  // also explicitly selected.
+  html += buildStablefordBoard(players, holes, detail);
   if (round.gameModes.includes("stroke")) html += buildStrokeBoard(players, holes, detail);
-  if (round.gameModes.includes("stableford")) html += buildStablefordBoard(players, holes, detail);
   if (round.gameModes.includes("matchplay")) html += buildMatchPlayBoard(players, holes, detail);
   if (round.gameModes.includes("matchplay3")) html += buildMatchPlay3Board(bundle, detail);
   if (round.gameModes.includes("betterball")) html += buildBetterballBoard(bundle, detail);
@@ -2594,6 +2602,13 @@ function competitionModeLabel(mode){
 }
 
 function buildCompetitionBody(comp, mode, bundles){
+  // Stableford points are useful regardless of which mode the competition is
+  // actually being decided by, so a combined Stableford leaderboard always
+  // shows first - never duplicated if Stableford is itself the primary mode.
+  const stablefordHtml = (bundles.length && mode !== "stableford")
+    ? buildCombinedIndividualBoard(bundles, "pts", {title:"Stableford", unitLabel:"Points", sortAsc:false})
+    : "";
+
   if (mode === "piekfyn"){
     let teamATotal = 0, teamBTotal = 0;
     const rows = bundles.map((bundle, idx) => {
@@ -2613,7 +2628,7 @@ function buildCompetitionBody(comp, mode, bundles){
           </p>
         </div>`;
     }).join("");
-    return `
+    return stablefordHtml + `
       <p style="font-size:1.6rem;margin:0 0 4px;text-align:center;">
         <strong>${comp.teamAName || "Team A"} ${teamATotal}</strong> — <strong>${teamBTotal} ${comp.teamBName || "Team B"}</strong>
       </p>
@@ -2622,14 +2637,14 @@ function buildCompetitionBody(comp, mode, bundles){
     `;
   }
   if (bundles.length === 0) return `<p class="muted">No fourballs found for this competition.</p>`;
-  if (mode === "stroke") return buildCombinedIndividualBoard(bundles, "net", {title:"Stroke play", unitLabel:"Net", sortAsc:true});
+  if (mode === "stroke") return stablefordHtml + buildCombinedIndividualBoard(bundles, "net", {title:"Stroke play", unitLabel:"Net", sortAsc:true});
   if (mode === "stableford") return buildCombinedIndividualBoard(bundles, "pts", {title:"Stableford", unitLabel:"Points", sortAsc:false});
-  if (mode === "bbb") return buildCombinedBBBBoard(bundles);
-  if (mode === "alliance") return buildCombinedAllianceBoard(bundles);
-  if (mode === "matchplay") return buildPerFourballBoards(bundles, bundle => buildMatchPlayBoard(bundle.players, bundle.holes, computeDetail(bundle)));
-  if (mode === "matchplay3") return buildPerFourballBoards(bundles, bundle => buildMatchPlay3Board(bundle, computeDetail(bundle)));
-  if (mode === "betterball") return buildPerFourballBoards(bundles, bundle => buildBetterballBoard(bundle, computeDetail(bundle)));
-  return `<p class="muted">Unsupported game mode for a competition.</p>`;
+  if (mode === "bbb") return stablefordHtml + buildCombinedBBBBoard(bundles);
+  if (mode === "alliance") return stablefordHtml + buildCombinedAllianceBoard(bundles);
+  if (mode === "matchplay") return stablefordHtml + buildPerFourballBoards(bundles, bundle => buildMatchPlayBoard(bundle.players, bundle.holes, computeDetail(bundle)));
+  if (mode === "matchplay3") return stablefordHtml + buildPerFourballBoards(bundles, bundle => buildMatchPlay3Board(bundle, computeDetail(bundle)));
+  if (mode === "betterball") return stablefordHtml + buildPerFourballBoards(bundles, bundle => buildBetterballBoard(bundle, computeDetail(bundle)));
+  return stablefordHtml + `<p class="muted">Unsupported game mode for a competition.</p>`;
 }
 
 /* ---------- Piekfyn Kompetisie: 2 singles matches + 1 team match, 1pt win / 0.5pt halve ---------- */
