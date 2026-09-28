@@ -314,7 +314,7 @@ function renderAppHeader(title, subtitle, badge){
     <div class="app-header">
       <div class="top-bar">
         <div>
-          <h1>⛳ ${title}</h1>
+          <h1><img src="/golf/icon-192.png" alt="" style="height:28px;width:28px;vertical-align:-6px;margin-right:6px;border-radius:6px;">${title}</h1>
           <p class="subtitle">${subtitle || ""}</p>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
@@ -1899,7 +1899,7 @@ async function renderSpectator(code){
     <div>${bundle.round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
     ${bundle.round.status === "finished" ? `<div class="card" style="text-align:center;border-color:var(--green);"><strong>Final result</strong></div>` : ""}
     <h2>Leaderboards</h2>
-    <div id="boards">${buildBoardsHtml(bundle)}</div>
+    <div id="boards">${buildBoardsHtml(bundle, {alwaysIncludeStableford: false})}</div>
     </div>
   `;
 
@@ -1907,21 +1907,21 @@ async function renderSpectator(code){
   spectatorUnsub = onSnapshot(collection(db, "golf_rounds", roundId, "scores"), snap => {
     bundle.scores = snap.docs.map(d => d.data());
     currentBundle = bundle;
-    document.getElementById("boards").innerHTML = buildBoardsHtml(bundle);
+    document.getElementById("boards").innerHTML = buildBoardsHtml(bundle, {alwaysIncludeStableford: false});
   });
 
   if (spectatorBbbUnsub) spectatorBbbUnsub();
   spectatorBbbUnsub = onSnapshot(collection(db, "golf_rounds", roundId, "bbb"), snap => {
     bundle.bbb = snap.docs.map(d => d.data());
     currentBundle = bundle;
-    document.getElementById("boards").innerHTML = buildBoardsHtml(bundle);
+    document.getElementById("boards").innerHTML = buildBoardsHtml(bundle, {alwaysIncludeStableford: false});
   });
 
   if (spectatorScrambleUnsub) spectatorScrambleUnsub();
   spectatorScrambleUnsub = onSnapshot(collection(db, "golf_rounds", roundId, "scrambleDrives"), snap => {
     bundle.scrambleDrives = snap.docs.map(d => d.data());
     currentBundle = bundle;
-    document.getElementById("boards").innerHTML = buildBoardsHtml(bundle);
+    document.getElementById("boards").innerHTML = buildBoardsHtml(bundle, {alwaysIncludeStableford: false});
   });
 }
 
@@ -2178,10 +2178,13 @@ function buildBoardsHtml(bundle, opts){
 
   let html = "";
   // Stableford points are useful regardless of which mode is actually being
-  // competed for, so they always show - not just when Stableford itself was
-  // picked as a mode. Shown first, and never duplicated if Stableford was
-  // also explicitly selected.
-  html += buildStablefordBoard(players, holes, detail);
+  // competed for, so they show by default even when Stableford wasn't itself
+  // picked as a mode - except on the spectator view (opts.alwaysIncludeStableford:
+  // false), which shows only the actual mode(s) being played. Never duplicated
+  // when Stableford is itself the selected mode.
+  const isStablefordMode = round.gameModes.includes("stableford");
+  const alwaysIncludeStableford = opts.alwaysIncludeStableford !== false;
+  if (isStablefordMode || alwaysIncludeStableford) html += buildStablefordBoard(players, holes, detail);
   if (round.gameModes.includes("stroke")) html += buildStrokeBoard(players, holes, detail);
   if (round.gameModes.includes("matchplay")) html += buildMatchPlayBoard(players, holes, detail);
   if (round.gameModes.includes("matchplay3")) html += buildMatchPlay3Board(bundle, detail);
@@ -2318,6 +2321,22 @@ function computeMatchPlay3Points(players, holes, detail){
     players.forEach(p => { points[p.id].thru++; });
   }
   return points;
+}
+
+// Which holes a specific player won OUTRIGHT (sole lowest net, worth 2
+// points) - used to mark those holes on their individual scorecard. Deliberately
+// excludes ties (1-point shares), since "won" reads as beating the field
+// outright, not squaring it.
+function matchPlay3WonHoles(players, holes, detail, playerId){
+  const won = new Set();
+  for (const h of holes){
+    const nets = players.map(p => ({ id: p.id, net: detail[p.id][h.holeNumber].net }));
+    if (nets.some(n => n.net == null)) continue;
+    const best = Math.min(...nets.map(n => n.net));
+    const winners = nets.filter(n => n.net === best);
+    if (winners.length === 1 && winners[0].id === playerId) won.add(h.holeNumber);
+  }
+  return won;
 }
 
 function buildMatchPlay3Board(bundle, detail){
@@ -2776,11 +2795,19 @@ function scrambleDriveMarkFor(bundle, holeNumber, playerId){
   if (rec.playerId === playerId || rec.teamA === playerId || rec.teamB === playerId) return "*";
   return "";
 }
-function scoreCellGross(subset, player, detail, bundle){
+function scoreCellGross(subset, player, detail, bundle, wonHoles){
   return subset.map(h => {
     const v = detail[player.id][h.holeNumber].gross;
     const mark = scrambleDriveMarkFor(bundle, h.holeNumber, player.id);
-    return `<td>${v == null ? "-" : `${v}${mark}`}</td>`;
+    if (v == null) return `<td>-</td>`;
+    const label = `${v}${mark}`;
+    // Same circled-score treatment already used elsewhere to mark a counted
+    // score (Alliance/Betterball scorecards) - here it marks a hole this
+    // player won outright in 3-way match play.
+    const content = (wonHoles && wonHoles.has(h.holeNumber))
+      ? `<span class="circled-score">${label}</span>`
+      : label;
+    return `<td>${content}</td>`;
   }).join("");
 }
 function aggCell(subset, player, detail, field){
@@ -2798,6 +2825,9 @@ function openScorecard(playerId){
   const front = holes.filter(h => h.holeNumber <= 9);
   const back = holes.filter(h => h.holeNumber > 9);
   const showPts = true; // stableford points are always computed from detail, so always worth showing
+  const wonHoles = round.gameModes.includes("matchplay3")
+    ? matchPlay3WonHoles(players, holes, detail, playerId)
+    : null;
 
   const parTotal = holes.reduce((a,h)=>a+h.par,0);
 
@@ -2844,9 +2874,9 @@ function openScorecard(playerId){
             </tr>
             <tr class="gross-row">
               <td class="label-col">Gross</td>
-              ${scoreCellGross(front, player, detail, currentBundle)}
+              ${scoreCellGross(front, player, detail, currentBundle, wonHoles)}
               ${aggCell(front, player, detail, "gross")}
-              ${scoreCellGross(back, player, detail, currentBundle)}
+              ${scoreCellGross(back, player, detail, currentBundle, wonHoles)}
               ${aggCell(back, player, detail, "gross")}
               ${aggCell(holes, player, detail, "gross")}
             </tr>
@@ -2877,6 +2907,7 @@ function openScorecard(playerId){
           <div><div class="val">${countEntered(holes,player,detail,"net") ? sumField(holes,player,detail,"net") : "-"}</div><div class="lbl">Net</div></div>
           ${showPts ? `<div><div class="val">${countEntered(holes,player,detail,"pts") ? sumField(holes,player,detail,"pts") : "-"}</div><div class="lbl">Points</div></div>` : ""}
         </div>
+        ${wonHoles ? `<p class="muted" style="font-size:.72rem;margin-top:8px;">⬤ Circled score — won that hole outright in the 3-way match</p>` : ""}
         ${scrambleLegend(currentBundle)}
       </div>
     </div>
