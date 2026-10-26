@@ -96,6 +96,13 @@
   .conn-online .conn-dot{background:#4caf50;}
   .conn-offline .conn-dot{background:#e05a4a;}
   .dot{width:7px;height:7px;border-radius:50%;background:var(--gold);animation:pulse 1.6s infinite;}
+  .account-chip{font-size:.72rem;color:var(--gold-dim);opacity:.9;text-decoration:none;}
+  .account-chip:hover{opacity:1;text-decoration:underline;}
+  input[type=email], input[type=password]{
+    width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;
+    background:#fff;font-size:.95rem;color:var(--ink);
+  }
+  .auth-switch-link{background:none;border:none;color:var(--green-light);font-weight:700;cursor:pointer;font-family:inherit;font-size:inherit;padding:0;text-decoration:underline;}
   @keyframes pulse{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
   .hole-nav{display:flex;align-items:center;gap:10px;margin:10px 0;}
   .hole-nav button{padding:6px 10px;}
@@ -194,12 +201,19 @@ import {
   getFirestore, collection, doc, setDoc, addDoc, getDoc, getDocs, updateDoc, deleteDoc,
   query, where, orderBy, onSnapshot, writeBatch, serverTimestamp, limit
 } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+import {
+  getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  signOut, sendPasswordResetEmail, setPersistence, browserLocalPersistence, browserSessionPersistence,
+  GoogleAuthProvider, signInWithPopup
+} from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
 
 const configured = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith("YOUR_");
 let db = null;
+let auth = null;
 if (configured){
   const app = initializeApp(firebaseConfig);
   db = getFirestore(app);
+  auth = getAuth(app);
 }
 
 const GAME_MODES = [
@@ -299,6 +313,87 @@ async function restoreCompetition(competitionId){
   await batch.commit();
 }
 
+/* ---------- Auth & golfer profiles ---------- */
+let currentUser = null;
+let currentGolferProfile = null; // {name, handicap, email}
+
+const GOOGLE_ICON_SVG = `<svg width="18" height="18" viewBox="0 0 48 48" style="flex-shrink:0;">
+  <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z"/>
+  <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.9 19 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
+  <path fill="#4CAF50" d="M24 44c5.2 0 10-2 13.6-5.2l-6.3-5.3C29.3 35.4 26.8 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/>
+  <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.1 5.7l6.3 5.3C39.9 37 44 31 44 24c0-1.3-.1-2.7-.4-3.5z"/>
+</svg>`;
+
+async function getGolferProfile(uid){
+  const snap = await getDoc(doc(db, "golfers", uid));
+  return snap.exists() ? snap.data() : null;
+}
+// Called on every sign-in/sign-up — creates a default profile the first time this
+// account is seen, so there's always something to show on the Account screen.
+async function ensureGolferProfile(user){
+  let profile = await getGolferProfile(user.uid);
+  if (!profile){
+    profile = {
+      name: user.displayName || (user.email ? user.email.split("@")[0] : "Golfer"),
+      handicap: 0,
+      email: user.email || "",
+      createdAt: serverTimestamp()
+    };
+    await setDoc(doc(db, "golfers", user.uid), profile);
+  }
+  return profile;
+}
+async function saveGolferProfile(uid, data){
+  await setDoc(doc(db, "golfers", uid), data, { merge: true });
+  if (currentGolferProfile) Object.assign(currentGolferProfile, data);
+}
+
+async function loadMyRoundsList(uid){
+  try{
+    const snap = await getDocs(query(collection(db, "golf_rounds"), where("ownerUid", "==", uid), orderBy("createdAt", "desc"), limit(25)));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch(err){
+    // Composite index (ownerUid + createdAt) may not exist yet — fall back to an
+    // unordered query and sort client-side instead of failing outright.
+    const snap = await getDocs(query(collection(db, "golf_rounds"), where("ownerUid", "==", uid)));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+  }
+}
+
+function setKeepSignedIn(keep){
+  return setPersistence(auth, keep ? browserLocalPersistence : browserSessionPersistence);
+}
+async function doSignUp(name, handicap, email, password, keepSignedIn){
+  await setKeepSignedIn(keepSignedIn);
+  const cred = await createUserWithEmailAndPassword(auth, email, password);
+  await setDoc(doc(db, "golfers", cred.user.uid), {
+    name: name || email.split("@")[0], handicap: handicap || 0, email, createdAt: serverTimestamp()
+  });
+}
+async function doSignIn(email, password, keepSignedIn){
+  await setKeepSignedIn(keepSignedIn);
+  await signInWithEmailAndPassword(auth, email, password);
+}
+async function doGoogleSignIn(){
+  await setKeepSignedIn(true);
+  await signInWithPopup(auth, new GoogleAuthProvider());
+}
+async function doSignOut(){
+  await signOut(auth);
+}
+async function doForgotPassword(email){
+  await sendPasswordResetEmail(auth, email);
+}
+
+if (auth){
+  onAuthStateChanged(auth, async (user) => {
+    currentUser = user;
+    currentGolferProfile = user ? await ensureGolferProfile(user) : null;
+    render();
+  });
+}
+
 /* ---------- shared header ---------- */
 function renderAppHeader(title, subtitle, badge){
   // badge: "live" | "final" | undefined
@@ -311,6 +406,8 @@ function renderAppHeader(title, subtitle, badge){
   const connHtml = `<span class="conn-indicator ${online ? "conn-online" : "conn-offline"}" id="connIndicator">
     <span class="conn-dot"></span>${online ? "Connected" : "Offline"}
   </span>`;
+  const accountLabel = currentUser ? (currentGolferProfile && currentGolferProfile.name) || currentUser.email || "Account" : "Sign in";
+  const accountHtml = `<a href="#/account" class="account-chip">👤 ${accountLabel}</a>`;
   return `
     <div class="app-header">
       <div class="top-bar">
@@ -321,6 +418,7 @@ function renderAppHeader(title, subtitle, badge){
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
           ${badgeHtml}
           ${connHtml}
+          ${accountHtml}
         </div>
       </div>
     </div>`;
@@ -357,7 +455,193 @@ async function render(){
   if (parts[0] === "spectate" && parts[1]) return renderSpectator(parts[1]);
   if (parts[0] === "competition" && parts[1]) return renderCompetition(parts[1]);
   if (parts[0] === "standings" && parts[1]) return renderStandings(parts[1]);
+  if (parts[0] === "account") return renderAccount();
   return renderSetup();
+}
+
+/* ============================================================
+   ACCOUNT VIEW — sign up / sign in / profile
+   ============================================================ */
+let accountMode = "signin"; // "signin" | "signup" — which form shows when signed out
+
+function renderAccount(){
+  const app = document.getElementById("app");
+  app.innerHTML = `
+    ${renderAppHeader("PK Golf", "Your account")}
+    <div class="content">
+    <div class="card" id="accountCard"></div>
+    </div>
+  `;
+  renderAccountCard();
+}
+
+function renderAccountCard(){
+  const card = document.getElementById("accountCard");
+  if (!card) return;
+
+  if (currentUser){
+    card.innerHTML = `
+      <div style="text-align:center;margin-bottom:16px;">
+        <img src="/golf/icon-header.png" alt="" style="height:46px;width:46px;">
+        <h2 style="border:none;margin:8px 0 0;padding:0;">My account</h2>
+        <p class="muted" style="margin:2px 0 0;">${currentUser.email || ""}</p>
+      </div>
+      <label>Display name</label>
+      <input type="text" id="profileName">
+      <label>Handicap</label>
+      <input type="number" id="profileHandicap">
+      <div class="row" style="margin-top:14px;">
+        <button id="saveProfileBtn">Save details</button>
+        <span id="profileMsg" class="muted"></span>
+      </div>
+      <div class="row" style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px;">
+        <button class="ghost" id="signOutBtn">Sign out</button>
+      </div>
+    `;
+    document.getElementById("profileName").value = (currentGolferProfile && currentGolferProfile.name) || "";
+    document.getElementById("profileHandicap").value = (currentGolferProfile && currentGolferProfile.handicap) ?? 0;
+    document.getElementById("saveProfileBtn").onclick = async () => {
+      const msg = document.getElementById("profileMsg");
+      const name = document.getElementById("profileName").value.trim();
+      const handicap = parseInt(document.getElementById("profileHandicap").value || "0", 10);
+      if (!name){ msg.textContent = "Enter a name."; return; }
+      msg.textContent = "Saving…";
+      try{
+        await saveGolferProfile(currentUser.uid, { name, handicap });
+        msg.textContent = "Saved.";
+      }catch(err){ msg.textContent = "Error: " + err.message; }
+    };
+    document.getElementById("signOutBtn").onclick = () => doSignOut();
+    return;
+  }
+
+  card.innerHTML = accountMode === "signup" ? signUpFormHtml() : signInFormHtml();
+  wireAccountForm();
+}
+
+function signInFormHtml(){
+  return `
+    <div style="text-align:center;margin-bottom:16px;">
+      <img src="/golf/icon-header.png" alt="" style="height:46px;width:46px;">
+      <h2 style="border:none;margin:8px 0 0;padding:0;">Sign in</h2>
+      <p class="muted" style="margin:2px 0 0;">Sign in to save your handicap and round history.</p>
+    </div>
+    <label>Email</label>
+    <input type="email" id="signinEmail" placeholder="you@example.com">
+    <label>Password</label>
+    <input type="password" id="signinPassword" placeholder="Password">
+    <div class="checkbox-row">
+      <input type="checkbox" id="keepSignedIn" checked>
+      <label style="margin:0" for="keepSignedIn">Keep me signed in on this device</label>
+    </div>
+    <div class="row" style="margin-top:4px;">
+      <button id="signinBtn">Sign in</button>
+      <span id="accountMsg" class="muted"></span>
+    </div>
+    <div class="row" style="margin:14px 0;">
+      <div style="flex:1;height:1px;background:var(--line);"></div>
+      <span class="muted" style="font-size:.75rem;">or</span>
+      <div style="flex:1;height:1px;background:var(--line);"></div>
+    </div>
+    <button class="secondary" id="googleSigninBtn" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;">
+      ${GOOGLE_ICON_SVG}
+      Continue with Google
+    </button>
+    <p class="muted" style="margin-top:16px;text-align:center;">
+      No account yet? <button type="button" id="showSignupLink" class="auth-switch-link">Sign up</button>
+    </p>
+    <p class="muted" style="margin-top:6px;text-align:center;">
+      <button type="button" id="forgotPasswordLink" style="background:none;border:none;color:var(--muted);font-size:.78rem;cursor:pointer;font-family:inherit;padding:0;text-decoration:underline;">Forgot password?</button>
+    </p>
+    <div id="forgotPasswordForm" style="display:none;margin-top:12px;border-top:1px solid var(--line);padding-top:12px;">
+      <p class="muted" style="font-size:.78rem;">We'll email you a link to reset your password.</p>
+      <input type="email" id="forgotEmail" placeholder="you@example.com">
+      <div class="row" style="margin-top:8px;">
+        <button class="secondary" id="forgotSendBtn">Send reset link</button>
+        <span id="forgotMsg" class="muted"></span>
+      </div>
+    </div>
+  `;
+}
+
+function signUpFormHtml(){
+  return `
+    <div style="text-align:center;margin-bottom:16px;">
+      <img src="/golf/icon-header.png" alt="" style="height:46px;width:46px;">
+      <h2 style="border:none;margin:8px 0 0;padding:0;">Create your account</h2>
+    </div>
+    <label>Display name</label>
+    <input type="text" id="signupName" placeholder="e.g. your name">
+    <label>Handicap</label>
+    <input type="number" id="signupHandicap" value="0">
+    <label>Email</label>
+    <input type="email" id="signupEmail" placeholder="you@example.com">
+    <label>Password</label>
+    <input type="password" id="signupPassword" placeholder="At least 6 characters">
+    <div class="row" style="margin-top:4px;">
+      <button id="signupBtn">Create account</button>
+      <span id="accountMsg" class="muted"></span>
+    </div>
+    <p class="muted" style="margin-top:16px;text-align:center;">
+      Already have an account? <button type="button" id="showSigninLink" class="auth-switch-link">Sign in</button>
+    </p>
+  `;
+}
+
+function wireAccountForm(){
+  const showSignup = document.getElementById("showSignupLink");
+  if (showSignup) showSignup.onclick = () => { accountMode = "signup"; renderAccountCard(); };
+  const showSignin = document.getElementById("showSigninLink");
+  if (showSignin) showSignin.onclick = () => { accountMode = "signin"; renderAccountCard(); };
+
+  const forgotLink = document.getElementById("forgotPasswordLink");
+  if (forgotLink) forgotLink.onclick = () => {
+    const form = document.getElementById("forgotPasswordForm");
+    form.style.display = form.style.display === "none" ? "" : "none";
+  };
+  const forgotSendBtn = document.getElementById("forgotSendBtn");
+  if (forgotSendBtn) forgotSendBtn.onclick = async () => {
+    const msg = document.getElementById("forgotMsg");
+    const email = document.getElementById("forgotEmail").value.trim();
+    if (!email){ msg.textContent = "Enter your email."; return; }
+    msg.textContent = "Sending…";
+    try{ await doForgotPassword(email); msg.textContent = "Check your email for a reset link."; }
+    catch(err){ msg.textContent = "Error: " + err.message; }
+  };
+
+  const googleBtn = document.getElementById("googleSigninBtn");
+  if (googleBtn) googleBtn.onclick = async () => {
+    const msg = document.getElementById("accountMsg");
+    if (msg) msg.textContent = "Opening Google sign-in…";
+    try{ await doGoogleSignIn(); }
+    catch(err){ if (msg) msg.textContent = "Error: " + err.message; }
+  };
+
+  const signinBtn = document.getElementById("signinBtn");
+  if (signinBtn) signinBtn.onclick = async () => {
+    const msg = document.getElementById("accountMsg");
+    const email = document.getElementById("signinEmail").value.trim();
+    const password = document.getElementById("signinPassword").value;
+    if (!email || !password){ msg.textContent = "Enter your email and password."; return; }
+    msg.textContent = "Signing in…";
+    try{ await doSignIn(email, password, document.getElementById("keepSignedIn").checked); }
+    catch(err){ msg.textContent = "Error: " + err.message; }
+  };
+
+  const signupBtn = document.getElementById("signupBtn");
+  if (signupBtn) signupBtn.onclick = async () => {
+    const msg = document.getElementById("accountMsg");
+    const name = document.getElementById("signupName").value.trim();
+    const handicap = parseInt(document.getElementById("signupHandicap").value || "0", 10);
+    const email = document.getElementById("signupEmail").value.trim();
+    const password = document.getElementById("signupPassword").value;
+    if (!name){ msg.textContent = "Enter your name."; return; }
+    if (!email || !password){ msg.textContent = "Enter an email and password."; return; }
+    if (password.length < 6){ msg.textContent = "Password must be at least 6 characters."; return; }
+    msg.textContent = "Creating account…";
+    try{ await doSignUp(name, handicap, email, password, true); }
+    catch(err){ msg.textContent = "Error: " + err.message; }
+  };
 }
 
 /* ============================================================
@@ -396,6 +680,11 @@ function renderSetup(){
   app.innerHTML = `
     ${renderAppHeader("PK Golf", "Set up a round, score it live, share a spectator link.")}
     <div class="content">
+
+    <div id="myRoundsSection" style="display:none;">
+      <h2>My rounds</h2>
+      <div class="card" id="myRoundsListCard"><p class="muted">Loading…</p></div>
+    </div>
 
     <h2>Existing rounds</h2>
     <div class="card" id="roundsListCard"><p class="muted">Loading…</p></div>
@@ -549,6 +838,27 @@ function renderSetup(){
   });
 
   populateCompetitionsList();
+
+  if (currentUser){
+    document.getElementById("myRoundsSection").style.display = "";
+    loadMyRoundsList(currentUser.uid).then(rounds => {
+      const card = document.getElementById("myRoundsListCard");
+      const active = rounds.filter(r => !r.deleted);
+      card.innerHTML = active.length === 0
+        ? `<p class="muted">No rounds yet under this account — rounds you create while signed in will show up here.</p>`
+        : active.map(r => `
+          <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);">
+            <div class="round-item" data-round="${r.id}" style="cursor:pointer;flex:1;">
+              <strong>${r.name}</strong>
+              <div class="muted" style="font-size:.78rem;">${r.courseName || ""}${r.roundDate ? " · " + r.roundDate : ""}${r.teeBox ? " · " + r.teeBox + " tees" : ""}</div>
+            </div>
+            <span class="pill mode" style="background:${r.status==='finished' ? 'var(--green-dim)' : 'var(--gold-dim)'};">${r.status === "finished" ? "Final" : "Active"}</span>
+          </div>`).join("");
+      card.querySelectorAll(".round-item").forEach(el => {
+        el.addEventListener("click", () => { location.hash = `#/score/${el.dataset.round}`; });
+      });
+    });
+  }
 
   loadCoursesList().then(courses => {
     const select = document.getElementById("savedCourseSelect");
@@ -734,6 +1044,17 @@ function renderSetup(){
   renderPlayersBox();
   document.getElementById("fourballCount").addEventListener("change", renderPlayersBox);
 
+  // Pre-fill Player 1 from the signed-in golfer's saved profile — still editable,
+  // just saves re-typing your own name and handicap every round.
+  if (currentUser && currentGolferProfile){
+    const p1Name = document.getElementById("p1-name");
+    const p1Hcp = document.getElementById("p1-hcp");
+    if (p1Name && !p1Name.value) p1Name.value = currentGolferProfile.name || "";
+    if (p1Hcp && (!p1Hcp.value || p1Hcp.value === "0") && currentGolferProfile.handicap){
+      p1Hcp.value = currentGolferProfile.handicap;
+    }
+  }
+
   updateModeVisibility();
 
   const holesTable = document.getElementById("holesTable");
@@ -845,7 +1166,7 @@ async function createRound(){
 
     const roundRef = await addDoc(collection(db, "golf_rounds"), {
       name: roundName, courseName, roundDate, teeTime, teeBox, gameModes: modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
-      teamAName, teamBName, piekfynPairs, spectatorCode,
+      teamAName, teamBName, piekfynPairs, spectatorCode, ownerUid: currentUser ? currentUser.uid : null,
       status: "active", deleted: false, startedAt: null, finishedAt: null, createdAt: serverTimestamp()
     });
 
@@ -899,7 +1220,7 @@ async function createCompetition(cfg){
       gameModes: modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
       teamAName: isPiekfyn ? teamAName : null, teamBName: isPiekfyn ? teamBName : null,
       piekfynPairs: isPiekfyn ? (isFirst ? piekfynPairs : defaultPairsFor(playersByFourball[fb - 1])) : null,
-      spectatorCode, competitionId: compRef.id, fourballIndex: fb,
+      spectatorCode, competitionId: compRef.id, fourballIndex: fb, ownerUid: currentUser ? currentUser.uid : null,
       status: "active", deleted: false, startedAt: null, finishedAt: null, createdAt: serverTimestamp()
     });
 
