@@ -74,6 +74,13 @@
   .hole-input::-webkit-outer-spin-button,
   .hole-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
   .hole-input[type=number]{-moz-appearance:textfield;}
+  /* Hole Par/S.I. editor — one row per hole, Front 9 / Back 9 side by side */
+  .holes-editor-grid{align-items:start;}
+  .holes-editor-label{font-weight:700;color:var(--green-dark);font-size:.85rem;margin:0 0 4px;}
+  table.holes-table{font-size:.9rem;}
+  table.holes-table th,table.holes-table td{padding:6px 4px;}
+  table.holes-table td.hole-num-col{font-weight:700;color:var(--green-dark);background:var(--gold-dim);width:20%;}
+  table.holes-table .hole-input{width:100%;box-sizing:border-box;padding:9px 2px;font-size:1.05rem;}
   .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:.72rem;font-weight:600;}
   .pill.mode{background:var(--gold-dim);color:var(--green-dark);margin:2px 4px 2px 0;border:1px solid var(--gold);}
   .checkbox-row{display:flex;align-items:center;gap:8px;margin:8px 0;}
@@ -767,6 +774,55 @@ function refreshPairingOptions(){
     </div>`;
 }
 
+// Hole-by-hole Par/S.I. editor, used both on the New Round form and the round-edit screen.
+// Laid out as one row per hole (Hole / Par / S.I.), split into Front 9 / Back 9 side by side —
+// far easier to read and tap on a phone than the old 18-column table that needed horizontal
+// scrolling and had cells too small to hit accurately.
+function holesEditorHtml(parClass, siClass, parFor, siFor){
+  function half(title, startHole){
+    const rows = Array.from({length: 9}, (_, i) => {
+      const n = startHole + i;
+      return `
+        <tr>
+          <td class="hole-num-col">${n}</td>
+          <td><input class="hole-input ${parClass}" data-hole="${n}" type="number" inputmode="numeric" value="${parFor(n)}" onfocus="this.select()"></td>
+          <td><input class="hole-input ${siClass}" data-hole="${n}" type="number" inputmode="numeric" value="${siFor(n)}" onfocus="this.select()"></td>
+        </tr>`;
+    }).join("");
+    return `
+      <div>
+        <p class="holes-editor-label">${title}</p>
+        <table class="holes-table">
+          <thead><tr><th>Hole</th><th>Par</th><th>S.I.</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+  return `<div class="grid-2 holes-editor-grid">${half("Front 9", 1)}${half("Back 9", 10)}</div>`;
+}
+
+// Read-only version of the same layout, for the Schedule tab where holes are shown but not edited.
+function holesReadOnlyHtml(holes){
+  const byHole = {};
+  holes.forEach(h => { byHole[h.holeNumber] = h; });
+  function half(title, startHole){
+    const rows = Array.from({length: 9}, (_, i) => {
+      const n = startHole + i;
+      const h = byHole[n] || {};
+      return `<tr><td class="hole-num-col">${n}</td><td>${h.par ?? "-"}</td><td>${h.strokeIndex ?? "-"}</td></tr>`;
+    }).join("");
+    return `
+      <div>
+        <p class="holes-editor-label">${title}</p>
+        <table class="holes-table">
+          <thead><tr><th>Hole</th><th>Par</th><th>S.I.</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+  return `<div class="grid-2 holes-editor-grid">${half("Front 9", 1)}${half("Back 9", 10)}</div>`;
+}
+
 function renderSetup(){
   const app = document.getElementById("app");
   app.innerHTML = `
@@ -817,7 +873,7 @@ function renderSetup(){
 
       <h2>Holes — par &amp; stroke index</h2>
       <p class="muted">Quick default fills par 4 / sequential SI — edit any cell, or load a saved course above.</p>
-      <div style="overflow-x:auto"><table id="holesTable"></table></div>
+      <div id="holesTable"></div>
 
       <div class="row" style="margin-top:16px;">
         <button id="createBtn">Create round</button>
@@ -1151,12 +1207,7 @@ function renderSetup(){
 
   const holesTable = document.getElementById("holesTable");
   function buildHolesTable(){
-    let head = "<tr><th>Hole</th>" + Array.from({length:18},(_,i)=>`<th>${i+1}</th>`).join("") + "</tr>";
-    let parRow = "<tr><td>Par</td>" + Array.from({length:18},(_,i)=>
-      `<td><input class="hole-input h-par" data-hole="${i+1}" type="number" inputmode="numeric" value="4" onfocus="this.select()"></td>`).join("") + "</tr>";
-    let siRow = "<tr><td>S.I.</td>" + Array.from({length:18},(_,i)=>
-      `<td><input class="hole-input h-si" data-hole="${i+1}" type="number" inputmode="numeric" value="${i+1}" onfocus="this.select()"></td>`).join("") + "</tr>";
-    holesTable.innerHTML = head + parRow + siRow;
+    holesTable.innerHTML = holesEditorHtml("h-par", "h-si", () => 4, n => n);
   }
   buildHolesTable();
 
@@ -1695,12 +1746,8 @@ function buildScheduleViewHtml(bundle, spectatorUrl){
     </div>
 
     <h2>Holes — par &amp; stroke index</h2>
-    <div class="card" style="overflow-x:auto;">
-      <table>
-        <tr><th>Hole</th>${holes.map(h=>`<th>${h.holeNumber}</th>`).join("")}</tr>
-        <tr><td>Par</td>${holes.map(h=>`<td>${h.par}</td>`).join("")}</tr>
-        <tr><td>S.I.</td>${holes.map(h=>`<td>${h.strokeIndex}</td>`).join("")}</tr>
-      </table>
+    <div class="card">
+      ${holesReadOnlyHtml(holes)}
     </div>
   `;
 }
@@ -1858,12 +1905,14 @@ function buildScheduleEditHtml(bundle){
 
     <h2>Holes — par &amp; stroke index</h2>
     <p class="muted">Saving updates this round and your saved course database.</p>
-    <div class="card" style="overflow-x:auto;">
-      <table>
-        <tr><th>Hole</th>${holes.map(h=>`<th>${h.holeNumber}</th>`).join("")}</tr>
-        <tr><td>Par</td>${holes.map(h=>`<td><input class="hole-input h-par-edit" data-hole="${h.holeNumber}" type="number" inputmode="numeric" value="${h.par}" onfocus="this.select()"></td>`).join("")}</tr>
-        <tr><td>S.I.</td>${holes.map(h=>`<td><input class="hole-input h-si-edit" data-hole="${h.holeNumber}" type="number" inputmode="numeric" value="${h.strokeIndex}" onfocus="this.select()"></td>`).join("")}</tr>
-      </table>
+    <div class="card">
+      ${(() => {
+        const byHole = {};
+        holes.forEach(h => { byHole[h.holeNumber] = h; });
+        return holesEditorHtml("h-par-edit", "h-si-edit",
+          n => (byHole[n] ? byHole[n].par : 4),
+          n => (byHole[n] ? byHole[n].strokeIndex : n));
+      })()}
     </div>
 
     <div class="row" style="margin:16px 0;">
