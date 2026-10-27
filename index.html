@@ -108,6 +108,11 @@
   }
   .auth-gate-logo{width:96px;height:96px;border-radius:20px;margin:0 auto 14px;display:block;box-shadow:0 4px 14px rgba(0,0,0,.2);}
   .auth-gate-appname{color:var(--green-dark);font-size:1.4rem;font-weight:800;margin:0 0 2px;}
+  .password-checklist{list-style:none;padding:0;margin:8px 0 0;font-size:12px;}
+  .password-checklist li{display:flex;align-items:center;gap:7px;padding:2px 0;color:var(--muted);}
+  .password-checklist li.met{color:#1f9254;}
+  .password-checklist .pw-check-icon{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;border:1.5px solid currentColor;font-size:10px;line-height:1;flex-shrink:0;}
+  .password-checklist li.met .pw-check-icon{background:#1f9254;border-color:#1f9254;color:#fff;}
   input[type=email], input[type=password]{
     width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;
     background:#fff;font-size:.95rem;color:var(--ink);
@@ -375,6 +380,36 @@ async function loadMyRoundsList(uid){
 function setKeepSignedIn(keep){
   return setPersistence(auth, keep ? browserLocalPersistence : browserSessionPersistence);
 }
+
+// Must match the password policy set in Firebase (Authentication > Settings > Password
+// policy) — one rule list feeds both the live tick-list and the submit-time check so
+// they can't drift apart, same approach PK Fishing uses.
+const PASSWORD_RULE_TEXT = 'At least 8 characters, with a lowercase letter, an uppercase letter, a number and a symbol.';
+const PASSWORD_RULES = [
+  {label: 'At least 8 characters', test: pw => pw.length >= 8},
+  {label: 'A lowercase letter (a-z)', test: pw => /[a-z]/.test(pw)},
+  {label: 'An uppercase letter (A-Z)', test: pw => /[A-Z]/.test(pw)},
+  {label: 'A number (0-9)', test: pw => /[0-9]/.test(pw)},
+  {label: 'A symbol (e.g. ! ? # $)', test: pw => /[^A-Za-z0-9]/.test(pw)}
+];
+function passwordProblem(pw){
+  const ok = PASSWORD_RULES.every(r => r.test(pw));
+  return ok ? '' : 'Password needs: ' + PASSWORD_RULE_TEXT;
+}
+function passwordChecklistHtml(pw){
+  return PASSWORD_RULES.map(r => {
+    const met = r.test(pw);
+    return '<li class="' + (met ? 'met' : '') + '"><span class="pw-check-icon">' + (met ? '✓' : '') + '</span>' + r.label + '</li>';
+  }).join('');
+}
+function wirePasswordChecklist(inputId, listId){
+  const input = document.getElementById(inputId);
+  const list = document.getElementById(listId);
+  if (!input || !list) return;
+  const update = () => { list.innerHTML = passwordChecklistHtml(input.value); };
+  input.addEventListener('input', update);
+  update();
+}
 async function doSignUp(name, handicap, email, password, keepSignedIn){
   await setKeepSignedIn(keepSignedIn);
   const cred = await createUserWithEmailAndPassword(auth, email, password);
@@ -583,7 +618,7 @@ function authHeaderHtml(gate, title, subtitle){
 
 function signInFormHtml(gate){
   return `
-    ${authHeaderHtml(gate, "Sign in", "Sign in to save your handicap and round history.")}
+    ${authHeaderHtml(gate, "Sign in", "")}
     <label>Email</label>
     <input type="email" id="signinEmail" placeholder="you@example.com">
     <label>Password</label>
@@ -630,7 +665,8 @@ function signUpFormHtml(gate){
     <label>Email</label>
     <input type="email" id="signupEmail" placeholder="you@example.com">
     <label>Password</label>
-    <input type="password" id="signupPassword" placeholder="At least 6 characters">
+    <input type="password" id="signupPassword" placeholder="Min 8: a-z, A-Z, 0-9 and a symbol" autocomplete="new-password">
+    <ul class="password-checklist" id="signupPasswordChecklist"></ul>
     <div class="row" style="margin-top:4px;">
       <button id="signupBtn">Create account</button>
       <span id="accountMsg" class="muted"></span>
@@ -647,6 +683,8 @@ function wireAccountForm(renderCard){
   if (showSignup) showSignup.onclick = () => { accountMode = "signup"; renderCard(); };
   const showSignin = document.getElementById("showSigninLink");
   if (showSignin) showSignin.onclick = () => { accountMode = "signin"; renderCard(); };
+
+  wirePasswordChecklist("signupPassword", "signupPasswordChecklist");
 
   const forgotLink = document.getElementById("forgotPasswordLink");
   if (forgotLink) forgotLink.onclick = () => {
@@ -690,7 +728,8 @@ function wireAccountForm(renderCard){
     const password = document.getElementById("signupPassword").value;
     if (!name){ msg.textContent = "Enter your name."; return; }
     if (!email || !password){ msg.textContent = "Enter an email and password."; return; }
-    if (password.length < 6){ msg.textContent = "Password must be at least 6 characters."; return; }
+    const pwProblem = passwordProblem(password);
+    if (pwProblem){ msg.textContent = pwProblem; return; }
     msg.textContent = "Creating account…";
     try{ await doSignUp(name, 0, email, password, true); }
     catch(err){ msg.textContent = "Error: " + err.message; }
