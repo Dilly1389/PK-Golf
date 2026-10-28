@@ -2653,7 +2653,7 @@ function buildBoardsHtml(bundle, opts){
   if (round.gameModes.includes("matchplay")) html += buildMatchPlayBoard(players, holes, detail);
   if (round.gameModes.includes("matchplay3")) html += buildMatchPlay3Board(bundle, detail);
   if (round.gameModes.includes("betterball")) html += buildBetterballBoard(bundle, detail);
-  if (round.gameModes.includes("alliance")) html += buildAllianceBoard(bundle, detail);
+  if (round.gameModes.includes("alliance")) html += buildAllianceBoard(bundle, detail) + buildAllianceContributionBoard(bundle, detail);
   if (round.gameModes.includes("bbb")) html += buildBBBBoard(bundle, detail);
   if (round.gameModes.includes("piekfyn")) html += buildPiekfynBoard(bundle, detail);
   if (round.competitionId && !round.gameModes.includes("piekfyn") && opts.includeStandingsLink !== false){
@@ -2921,6 +2921,34 @@ function buildAllianceBoard(bundle, detail){
     <strong>Alliance</strong> <span class="muted">— best ${n} of ${players.length} net-stableford scores per hole</span>
     <p style="font-size:1.1rem;margin:10px 0 4px;">${thru ? total + " points" : "Not started"} <span class="muted" style="font-size:.85rem;">(thru ${thru})</span></p>
     <div class="team-scorecard-link">Fourball: ${players.map(p=>p.name).join(", ")} — view full scorecard</div>
+  </div>`;
+}
+
+// How many holes each player's score was unambiguously counted toward the team total
+// (see computeAllianceData's tie handling — a score only counts here when there was a
+// clear winner for that slot, not an arbitrary pick among tied players).
+function buildAllianceContributionBoard(bundle, detail){
+  const { players, round } = bundle;
+  const n = Math.max(1, Math.min(round.allianceCount || 2, players.length));
+  const data = computeAllianceData(bundle, detail);
+  const thru = data.filter(d => d.teamPts != null).length;
+  const rows = players
+    .map(p => ({ p, contributed: data.filter(d => d.counted.has(p.id)).length }))
+    .sort((a,b) => b.contributed - a.contributed);
+  return `
+  <div class="card">
+    <strong>Contribution</strong> <span class="muted">— holes each player's score clearly counted toward the team total (best ${n} of ${players.length})</span>
+    <table style="margin-top:8px;">
+      <tr><th class="name-col">Player</th><th>Contributed</th><th>Thru</th><th>%</th></tr>
+      ${rows.map((r,i) => `
+        <tr class="${i===0 && r.contributed>0 ? 'leader-row' : ''}">
+          <td class="name-col">${playerLink(r.p)}</td>
+          <td>${r.contributed}</td>
+          <td>${thru}</td>
+          <td>${thru ? Math.round(r.contributed / thru * 100) + "%" : "-"}</td>
+        </tr>`).join("")}
+    </table>
+    ${thru === 0 ? `<p class="muted" style="margin-top:6px;">No holes finished yet.</p>` : ""}
   </div>`;
 }
 
