@@ -2891,7 +2891,20 @@ function computeAllianceData(bundle, detail){
     if (allEntered){
       const sorted = [...entries].sort((a,b) => b.pts - a.pts);
       teamPts = sorted.slice(0, n).reduce((a,e) => a + e.pts, 0);
-      sorted.slice(0, n).forEach(e => counted.add(e.playerId));
+      // Mark a player's score as "counted" only when their place in the top n is
+      // unambiguous. A tie straddling the cutoff (e.g. needing 2 of 4 identical
+      // scores) means several players have an equally valid claim to the same
+      // slot(s), so none of that tied group gets marked — only a clean cutoff
+      // (nobody tied at the boundary, or a tie that exactly fills what's left)
+      // counts as a clear winner.
+      const cutoff = sorted[n - 1].pts;
+      const aboveCutoff = sorted.filter(e => e.pts > cutoff);
+      const atCutoff = sorted.filter(e => e.pts === cutoff);
+      const neededFromCutoff = n - aboveCutoff.length;
+      aboveCutoff.forEach(e => counted.add(e.playerId));
+      if (atCutoff.length === neededFromCutoff){
+        atCutoff.forEach(e => counted.add(e.playerId));
+      }
     }
     return { holeNumber: h.holeNumber, entries, counted, teamPts };
   });
