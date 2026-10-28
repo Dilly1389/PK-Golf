@@ -2932,18 +2932,24 @@ function buildAllianceContributionBoard(bundle, detail){
   const n = Math.max(1, Math.min(round.allianceCount || 2, players.length));
   const data = computeAllianceData(bundle, detail);
   const thru = data.filter(d => d.teamPts != null).length;
+  const hasScrambleDrive = !!round.scrambleDrive;
   const rows = players
-    .map(p => ({ p, contributed: data.filter(d => d.counted.has(p.id)).length }))
+    .map(p => ({
+      p,
+      contributed: data.filter(d => d.counted.has(p.id)).length,
+      drives: hasScrambleDrive ? (bundle.scrambleDrives || []).filter(s => s.playerId === p.id).length : 0
+    }))
     .sort((a,b) => b.contributed - a.contributed);
   return `
   <div class="card">
-    <strong>Contribution</strong> <span class="muted">— holes each player's score clearly counted toward the team total (best ${n} of ${players.length})</span>
+    <strong>Contribution</strong> <span class="muted">— holes each player's score clearly counted toward the team total (best ${n} of ${players.length})${hasScrambleDrive ? ", plus whose tee shot the team played from" : ""}</span>
     <table style="margin-top:8px;">
-      <tr><th class="name-col">Player</th><th>Contributed</th><th>Thru</th><th>%</th></tr>
+      <tr><th class="name-col">Player</th><th>Contributed</th>${hasScrambleDrive ? `<th>Drives</th>` : ""}<th>Thru</th><th>%</th></tr>
       ${rows.map((r,i) => `
         <tr class="${i===0 && r.contributed>0 ? 'leader-row' : ''}">
           <td class="name-col">${playerLink(r.p)}</td>
           <td>${r.contributed}</td>
+          ${hasScrambleDrive ? `<td>${r.drives}</td>` : ""}
           <td>${thru}</td>
           <td>${thru ? Math.round(r.contributed / thru * 100) + "%" : "-"}</td>
         </tr>`).join("")}
