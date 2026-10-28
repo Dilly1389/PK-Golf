@@ -2652,7 +2652,7 @@ function buildBoardsHtml(bundle, opts){
   if (round.gameModes.includes("stroke")) html += buildStrokeBoard(players, holes, detail);
   if (round.gameModes.includes("matchplay")) html += buildMatchPlayBoard(players, holes, detail);
   if (round.gameModes.includes("matchplay3")) html += buildMatchPlay3Board(bundle, detail);
-  if (round.gameModes.includes("betterball")) html += buildBetterballBoard(bundle, detail);
+  if (round.gameModes.includes("betterball")) html += buildBetterballBoard(bundle, detail) + buildBetterballContributionBoard(bundle, detail);
   if (round.gameModes.includes("alliance")) html += buildAllianceBoard(bundle, detail) + buildAllianceContributionBoard(bundle, detail);
   if (round.gameModes.includes("bbb")) html += buildBBBBoard(bundle, detail);
   if (round.gameModes.includes("piekfyn")) html += buildPiekfynBoard(bundle, detail);
@@ -2835,12 +2835,12 @@ function computeBetterballData(bundle, detail){
   const teamA = players.filter(p => p.team === "A");
   const teamB = players.filter(p => p.team === "B");
   function bestFor(teamPlayers, holeNumber){
-    let best = null, bestPlayerId = null;
-    teamPlayers.forEach(p => {
-      const v = detail[p.id][holeNumber].pts;
-      if (v != null && (best == null || v > best)){ best = v; bestPlayerId = p.id; }
-    });
-    return { best, bestPlayerId };
+    const entries = teamPlayers
+      .map(p => ({ playerId: p.id, pts: detail[p.id][holeNumber].pts }))
+      .filter(e => e.pts != null);
+    if (!entries.length) return { best: null, bestPlayerId: null };
+    const { sum, counted } = unambiguousTopN(entries, 1);
+    return { best: sum, bestPlayerId: counted.size ? [...counted][0] : null };
   }
   return holes.map(h => ({
     holeNumber: h.holeNumber,
@@ -2880,31 +2880,84 @@ function buildBetterballBoard(bundle, detail){
   </div>`;
 }
 
+// How many holes each player's score was the clear one that counted for their pair
+// (only 1 of each team's 2 scores counts per hole — see unambiguousTopN for the tie rule).
+function buildBetterballContributionBoard(bundle, detail){
+  const { players, round } = bundle;
+  const teamA = players.filter(p => p.team === "A");
+  const teamB = players.filter(p => p.team === "B");
+  if (teamA.length === 0 || teamB.length === 0) return "";
+  const data = computeBetterballData(bundle, detail);
+  const hasScrambleDrive = !!round.scrambleDrive;
+
+  function groupFor(teamPlayers, teamKey){
+    const thru = data.filter(d => d[teamKey].best != null).length;
+    const rows = teamPlayers
+      .map(p => ({
+        p,
+        contributed: data.filter(d => d[teamKey].bestPlayerId === p.id).length,
+        drives: hasScrambleDrive ? (bundle.scrambleDrives || []).filter(s => s[teamKey] === p.id).length : 0
+      }))
+      .sort((a,b) => b.contributed - a.contributed);
+    return { rows, thru };
+  }
+  function rowsHtml(group, teamClass){
+    return group.rows.map((r,i) => `
+      <tr class="${i===0 && r.contributed>0 ? 'leader-row' : ''}">
+        <td class="name-col ${teamClass}">${playerLink(r.p)}</td>
+        <td>${r.contributed}</td>
+        ${hasScrambleDrive ? `<td>${r.drives}</td>` : ""}
+        <td>${group.thru}</td>
+        <td>${group.thru ? Math.round(r.contributed / group.thru * 100) + "%" : "-"}</td>
+      </tr>`).join("");
+  }
+
+  const a = groupFor(teamA, "teamA");
+  const b = groupFor(teamB, "teamB");
+  return `
+  <div class="card">
+    <strong>Contribution</strong> <span class="muted">— holes each player's score was the clear one that counted for their pair${hasScrambleDrive ? ", plus whose tee shot the pair played from" : ""}</span>
+    <table style="margin-top:8px;">
+      <tr><th class="name-col">Player</th><th>Contributed</th>${hasScrambleDrive ? `<th>Drives</th>` : ""}<th>Thru</th><th>%</th></tr>
+      ${rowsHtml(a, "team-a")}
+      ${rowsHtml(b, "team-b")}
+    </table>
+  </div>`;
+}
+
+// Picks the best n of a set of {playerId, pts} entries, but only credits ("counts") a
+// player when their place in the top n is unambiguous. A tie straddling the cutoff
+// (e.g. needing 2 of 4 identical scores, or 1 of 2 tied Betterball partners) means
+// several players have an equally valid claim to the same slot(s), so none of that
+// tied group gets marked — only a clean cutoff (nobody tied at the boundary, or a tie
+// that exactly fills what's left) counts as a clear winner. The sum itself is always
+// correct regardless, since it's tie-invariant.
+function unambiguousTopN(entries, n){
+  const sorted = [...entries].sort((a,b) => b.pts - a.pts);
+  const sum = sorted.slice(0, n).reduce((a,e) => a + e.pts, 0);
+  const counted = new Set();
+  const cutoff = sorted[n - 1].pts;
+  const aboveCutoff = sorted.filter(e => e.pts > cutoff);
+  const atCutoff = sorted.filter(e => e.pts === cutoff);
+  const neededFromCutoff = n - aboveCutoff.length;
+  aboveCutoff.forEach(e => counted.add(e.playerId));
+  if (atCutoff.length === neededFromCutoff){
+    atCutoff.forEach(e => counted.add(e.playerId));
+  }
+  return { sum, counted };
+}
+
 function computeAllianceData(bundle, detail){
   const { players, holes, round } = bundle;
   const n = Math.max(1, Math.min(round.allianceCount || 2, players.length));
   return holes.map(h => {
     const entries = players.map(p => ({ playerId: p.id, pts: detail[p.id][h.holeNumber].pts }));
     const allEntered = entries.every(e => e.pts != null);
-    const counted = new Set();
-    let teamPts = null;
+    let counted = new Set(), teamPts = null;
     if (allEntered){
-      const sorted = [...entries].sort((a,b) => b.pts - a.pts);
-      teamPts = sorted.slice(0, n).reduce((a,e) => a + e.pts, 0);
-      // Mark a player's score as "counted" only when their place in the top n is
-      // unambiguous. A tie straddling the cutoff (e.g. needing 2 of 4 identical
-      // scores) means several players have an equally valid claim to the same
-      // slot(s), so none of that tied group gets marked — only a clean cutoff
-      // (nobody tied at the boundary, or a tie that exactly fills what's left)
-      // counts as a clear winner.
-      const cutoff = sorted[n - 1].pts;
-      const aboveCutoff = sorted.filter(e => e.pts > cutoff);
-      const atCutoff = sorted.filter(e => e.pts === cutoff);
-      const neededFromCutoff = n - aboveCutoff.length;
-      aboveCutoff.forEach(e => counted.add(e.playerId));
-      if (atCutoff.length === neededFromCutoff){
-        atCutoff.forEach(e => counted.add(e.playerId));
-      }
+      const r = unambiguousTopN(entries, n);
+      teamPts = r.sum;
+      counted = r.counted;
     }
     return { holeNumber: h.holeNumber, entries, counted, teamPts };
   });
