@@ -519,6 +519,7 @@ async function render(){
   if (!authResolved) return renderAuthLoading();
   if (!currentUser) return renderSignInGate();
   if (parts[0] === "new-round") return renderNewRound();
+  if (parts[0] === "history") return renderHistory();
   return renderHome();
 }
 
@@ -838,10 +839,7 @@ function renderHome(){
       <div class="card" id="myRoundsListCard"><p class="muted">Loading…</p></div>
     </div>
 
-    <h2>All rounds</h2>
-    <p class="muted" style="font-size:.78rem;margin:-6px 0 8px;">Every round on PK Golf, not just yours.</p>
-    <button class="ghost" id="toggleAllRoundsBtn" type="button" style="font-size:.78rem;padding:5px 12px;margin-bottom:10px;">Show all rounds</button>
-    <div class="card" id="roundsListCard" style="display:none;"><p class="muted">Loading…</p></div>
+    <button class="ghost" id="historyBtn" type="button" style="margin-bottom:8px;">History</button>
 
     <h2>Competitions</h2>
     <div class="card" id="competitionsListCard"><p class="muted">Loading…</p></div>
@@ -849,6 +847,7 @@ function renderHome(){
   `;
 
   document.getElementById("newRoundBtn").onclick = () => { location.hash = "#/new-round"; };
+  document.getElementById("historyBtn").onclick = () => { location.hash = "#/history"; };
 
   function populateCompetitionsList(){
     const card = document.getElementById("competitionsListCard");
@@ -903,18 +902,46 @@ function renderHome(){
     });
   }
 
+  populateCompetitionsList();
+
+  if (currentUser){
+    document.getElementById("myRoundsSection").style.display = "";
+    loadMyRoundsList(currentUser.uid).then(rounds => {
+      const card = document.getElementById("myRoundsListCard");
+      const active = rounds.filter(r => !r.deleted);
+      card.innerHTML = active.length === 0
+        ? `<p class="muted">No rounds yet under this account — rounds you create while signed in will show up here.</p>`
+        : active.map(r => `
+          <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);">
+            <div class="round-item" data-round="${r.id}" style="cursor:pointer;flex:1;">
+              <strong>${r.name}</strong>
+              <div class="muted" style="font-size:.78rem;">${r.courseName || ""}${r.roundDate ? " · " + r.roundDate : ""}${r.teeBox ? " · " + r.teeBox + " tees" : ""}</div>
+            </div>
+            <span class="pill mode" style="background:${r.status==='finished' ? 'var(--brand-dim)' : 'var(--gold-dim)'};">${r.status === "finished" ? "Final" : "Active"}</span>
+          </div>`).join("");
+      card.querySelectorAll(".round-item").forEach(el => {
+        el.addEventListener("click", () => { location.hash = `#/score/${el.dataset.round}`; });
+      });
+    });
+  }
+}
+
+function renderHistory(){
+  const app = document.getElementById("app");
+  app.innerHTML = `
+    ${renderAppHeader("History", "Every round on PK Golf, not just yours.")}
+    <div class="content">
+    <button id="backToHomeBtn" class="secondary" type="button" style="margin-bottom:14px;">← Back to rounds</button>
+    <div class="card" id="roundsListCard"><p class="muted">Loading…</p></div>
+    </div>
+  `;
+
+  document.getElementById("backToHomeBtn").onclick = () => { location.hash = ""; };
+
   loadRoundsList().then(rounds => {
     const card = document.getElementById("roundsListCard");
     const active = rounds.filter(r => !r.deleted);
     const deleted = rounds.filter(r => r.deleted);
-
-    const toggleAllBtn = document.getElementById("toggleAllRoundsBtn");
-    toggleAllBtn.textContent = `Show all rounds (${active.length})`;
-    toggleAllBtn.onclick = () => {
-      const showing = card.style.display !== "none";
-      card.style.display = showing ? "none" : "";
-      toggleAllBtn.textContent = showing ? `Show all rounds (${active.length})` : "Hide all rounds";
-    };
 
     const itemHtml = (r, isDeleted) => `
       <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);${isDeleted ? "opacity:.6;" : ""}">
@@ -928,7 +955,7 @@ function renderHome(){
       </div>`;
 
     let html = active.length === 0
-      ? `<p class="muted">No rounds yet — create one below.</p>`
+      ? `<p class="muted">No rounds yet.</p>`
       : active.map(r => itemHtml(r, false)).join("");
 
     if (deleted.length > 0){
@@ -955,33 +982,10 @@ function renderHome(){
     card.querySelectorAll(".restore-item").forEach(btn => {
       btn.onclick = async () => {
         await updateDoc(doc(db, "golf_rounds", btn.dataset.round), { deleted: false, deletedAt: null });
-        renderHome();
+        renderHistory();
       };
     });
   });
-
-  populateCompetitionsList();
-
-  if (currentUser){
-    document.getElementById("myRoundsSection").style.display = "";
-    loadMyRoundsList(currentUser.uid).then(rounds => {
-      const card = document.getElementById("myRoundsListCard");
-      const active = rounds.filter(r => !r.deleted);
-      card.innerHTML = active.length === 0
-        ? `<p class="muted">No rounds yet under this account — rounds you create while signed in will show up here.</p>`
-        : active.map(r => `
-          <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);">
-            <div class="round-item" data-round="${r.id}" style="cursor:pointer;flex:1;">
-              <strong>${r.name}</strong>
-              <div class="muted" style="font-size:.78rem;">${r.courseName || ""}${r.roundDate ? " · " + r.roundDate : ""}${r.teeBox ? " · " + r.teeBox + " tees" : ""}</div>
-            </div>
-            <span class="pill mode" style="background:${r.status==='finished' ? 'var(--brand-dim)' : 'var(--gold-dim)'};">${r.status === "finished" ? "Final" : "Active"}</span>
-          </div>`).join("");
-      card.querySelectorAll(".round-item").forEach(el => {
-        el.addEventListener("click", () => { location.hash = `#/score/${el.dataset.round}`; });
-      });
-    });
-  }
 }
 
 function renderNewRound(){
