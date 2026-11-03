@@ -286,13 +286,70 @@ function fmtDiff(n){
 function slugify(name){
   return (name || "course").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "course";
 }
-async function saveCourseToDatabase(courseName, holes){
+async function saveCourseToDatabase(courseName, holes, source){
   const slug = slugify(courseName);
-  await setDoc(doc(db, "golf_courses", slug), {
+  const data = {
     name: courseName,
     holes: holes.map(h => ({ holeNumber: h.holeNumber, par: h.par, strokeIndex: h.strokeIndex })),
     updatedAt: serverTimestamp()
-  });
+  };
+  if (source){ data.source = source.name; data.sourceUrl = source.url; }
+  await setDoc(doc(db, "golf_courses", slug), data);
+}
+
+// GolfCore course search (api.golfcore.org) — free tier, keyless until 2026-12-04 per their
+// docs. ToS permits caching/displaying this to our own users with attribution + a link back
+// to the source course page, which golfcoreSourceSelected carries through to saveCourseToDatabase.
+let golfcoreSourceSelected = null;
+async function searchGolfCore(){
+  const q = document.getElementById("golfcoreSearchInput").value.trim();
+  const resultsEl = document.getElementById("golfcoreResults");
+  if (!q){ resultsEl.innerHTML = ""; return; }
+  resultsEl.innerHTML = `<p class="muted" style="font-size:.78rem;">Searching…</p>`;
+  try{
+    const res = await fetch(`https://api.golfcore.org/v1/courses?q=${encodeURIComponent(q)}&limit=8`);
+    const data = await res.json();
+    const courses = data.courses || [];
+    resultsEl.innerHTML = courses.length === 0
+      ? `<p class="muted" style="font-size:.78rem;">No matches.</p>`
+      : courses.map(c => `
+        <div class="golfcore-result" data-slug="${c.slug}" data-url="${c.url}" style="cursor:pointer;padding:8px 10px;border:1px solid var(--line);border-radius:6px;margin-top:6px;">
+          <strong>${c.name}</strong>
+          <div class="muted" style="font-size:.78rem;">${c.city || ""}${c.region ? ", " + c.region : ""}${c.country ? " · " + c.country.toUpperCase() : ""} · Par ${c.par_total || "?"}</div>
+        </div>`).join("");
+    resultsEl.querySelectorAll(".golfcore-result").forEach(el => {
+      el.onclick = () => selectGolfCoreCourse(el.dataset.slug, el.dataset.url);
+    });
+  } catch(err){
+    resultsEl.innerHTML = `<p class="muted" style="font-size:.78rem;">Search failed — check the connection and try again.</p>`;
+  }
+}
+async function selectGolfCoreCourse(slug, url){
+  const resultsEl = document.getElementById("golfcoreResults");
+  resultsEl.innerHTML = `<p class="muted" style="font-size:.78rem;">Loading scorecard…</p>`;
+  try{
+    const res = await fetch(`https://api.golfcore.org/v1/courses/${slug}`);
+    const data = await res.json();
+    const layout = (data.layouts || [])[0];
+    if (!layout || !layout.holes || layout.holes.length !== 18){
+      resultsEl.innerHTML = `<p class="muted" style="font-size:.78rem;">That course doesn't have a full 18-hole scorecard available.</p>`;
+      return;
+    }
+    document.getElementById("courseName").value = data.name;
+    layout.holes.forEach(h => {
+      const parCell = document.querySelector(`.h-par[data-hole="${h.position}"]`);
+      const siCell = document.querySelector(`.h-si[data-hole="${h.position}"]`);
+      if (parCell) parCell.value = h.par;
+      if (siCell) siCell.value = h.stroke_index;
+    });
+    golfcoreSourceSelected = { name: "GolfCore", url };
+    resultsEl.innerHTML = `<p class="muted" style="font-size:.78rem;">Loaded ${data.name} — par &amp; stroke index filled in below.</p>`;
+    const credit = document.getElementById("golfcoreCredit");
+    credit.style.display = "";
+    credit.innerHTML = `Course data via <a href="${url}" target="_blank" rel="noopener">GolfCore</a>`;
+  } catch(err){
+    resultsEl.innerHTML = `<p class="muted" style="font-size:.78rem;">Couldn't load that course's scorecard.</p>`;
+  }
 }
 async function loadCoursesList(){
   const snap = await getDocs(collection(db, "golf_courses"));
@@ -1000,6 +1057,14 @@ function renderNewRound(){
       <select id="savedCourseSelect"><option value="">— none —</option></select>
       <p class="muted" style="font-size:.78rem;margin:4px 0 0;">Some ready-made courses come from OpenStreetMap contributors and may have mistakes — check them against the club scorecard.</p>
 
+      <label>Or search GolfCore for a course (optional)</label>
+      <div class="row" style="gap:8px;flex-wrap:nowrap;">
+        <input type="text" id="golfcoreSearchInput" placeholder="e.g. Glenvista Country Club" style="flex:1;">
+        <button id="golfcoreSearchBtn" class="secondary" type="button" style="white-space:nowrap;">Search</button>
+      </div>
+      <div id="golfcoreResults"></div>
+      <p id="golfcoreCredit" class="muted" style="font-size:.78rem;margin:4px 0 0;display:none;"></p>
+
       <label>Round name</label>
       <input type="text" id="roundName" placeholder="e.g. Saturday Fourball">
       <label>Course name</label>
@@ -1045,6 +1110,13 @@ function renderNewRound(){
   `;
 
   document.getElementById("backToHomeBtn").onclick = () => { location.hash = ""; };
+
+  golfcoreSourceSelected = null;
+  document.getElementById("courseName").addEventListener("input", () => { golfcoreSourceSelected = null; });
+  document.getElementById("golfcoreSearchBtn").onclick = () => searchGolfCore();
+  document.getElementById("golfcoreSearchInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter"){ e.preventDefault(); searchGolfCore(); }
+  });
 
   loadCoursesList().then(courses => {
     const select = document.getElementById("savedCourseSelect");
@@ -1364,7 +1436,7 @@ async function createRound(){
       batch.set(pRef, p);
     });
     await batch.commit();
-    await saveCourseToDatabase(courseName, holes);
+    await saveCourseToDatabase(courseName, holes, golfcoreSourceSelected);
 
     location.hash = `#/score/${roundRef.id}`;
   } catch(err){
@@ -1416,7 +1488,7 @@ async function createCompetition(cfg){
     await batch.commit();
   }
 
-  await saveCourseToDatabase(courseName, holes);
+  await saveCourseToDatabase(courseName, holes, golfcoreSourceSelected);
   location.hash = `#/competition/${compRef.id}`;
 }
 
