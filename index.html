@@ -1541,6 +1541,8 @@ async function renderScorer(roundId){
     </div>
     <div class="content">
 
+    <div id="fourballSwitcher"></div>
+
     ${scorerData.round.deleted ? `
       <div class="card" style="border-color:var(--danger);background:var(--gold-dim);text-align:center;">
         <strong>This round has been deleted</strong>
@@ -1616,7 +1618,7 @@ async function renderScorer(roundId){
     renderBoards();
   });
 
-  loadSiblingBundles(scorerData.round);
+  loadSiblingBundles(scorerData.round).then(() => renderFourballSwitcher(roundId, "score"));
 }
 
 /* ---------- Schedule tab: view mode + edit mode ---------- */
@@ -1662,6 +1664,8 @@ async function renderScoringOnly(roundId){
       <button class="tab-btn" id="tabBoardsBtn">Leaderboards</button>
     </div>
     <div class="content">
+
+    <div id="fourballSwitcher"></div>
 
     ${scorerData.round.deleted ? `
       <div class="card" style="border-color:var(--danger);background:var(--gold-dim);text-align:center;">
@@ -1742,7 +1746,7 @@ async function renderScoringOnly(roundId){
     renderBoards();
   });
 
-  loadSiblingBundles(scorerData.round);
+  loadSiblingBundles(scorerData.round).then(() => renderFourballSwitcher(roundId, "play"));
 }
 
 /* ---------- Schedule tab: view mode + edit mode ---------- */
@@ -2363,6 +2367,21 @@ async function loadSiblingBundles(round){
     return unsubs;
   });
   renderBoards();   // sibling data just arrived — refresh once now, on top of the live updates above
+}
+
+// Lets a marshal/marker scoring a whole competition jump straight between fourballs
+// without backing out to the competition page each time.
+function renderFourballSwitcher(roundId, routePrefix){
+  const el = document.getElementById("fourballSwitcher");
+  if (!el) return;
+  if (!siblingBundles.length){ el.innerHTML = ""; return; }
+  const all = [scorerData, ...siblingBundles].sort((a,b) => (a.round.fourballIndex||0) - (b.round.fourballIndex||0));
+  el.innerHTML = `
+    <label style="margin-top:0;">Switch fourball</label>
+    <select id="fourballSwitchSelect">
+      ${all.map(b => `<option value="${b.round.id}" ${b.round.id===roundId?"selected":""}>Fourball ${b.round.fourballIndex||"?"} — ${b.players.map(p=>p.name).join(", ")}</option>`).join("")}
+    </select>`;
+  document.getElementById("fourballSwitchSelect").onchange = (e) => { location.hash = `#/${routePrefix}/${e.target.value}`; };
 }
 
 function renderBoards(){
