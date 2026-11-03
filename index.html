@@ -22,13 +22,13 @@
     --ink:#1a1a1a;
     --paper:#ffffff;
     --line:#e0d5d5;
-    --green-dark:#7a0f0f;
-    --green:#a11212;
-    --green-light:#c41818;
-    --green-dim:#fbe9e9;
+    --brand-dark:#7a0f0f;
+    --brand:#a11212;
+    --brand-light:#c41818;
+    --brand-dim:#fbe9e9;
     --gold:#c9a227;
     --gold-dim:#fdf6e3;
-    --red:#3a3a3a;
+    --danger:#3a3a3a;
     --muted:#7a7a7a;
   }
   *{box-sizing:border-box;}
@@ -41,7 +41,7 @@
   .wrap{max-width:960px;margin:0 auto;padding:0 0 80px;}
   .content{padding:20px 16px 0;}
   .app-header{
-    background:linear-gradient(135deg, var(--green-dark), var(--green));
+    background:linear-gradient(135deg, var(--brand-dark), var(--brand));
     color:var(--gold-dim);
     padding:18px 16px 16px;
     border-bottom:3px solid var(--gold);
@@ -49,19 +49,19 @@
   .app-header h1{color:#fff;margin:0 0 2px;font-size:1.3rem;letter-spacing:-0.01em;}
   .app-header .subtitle{color:var(--gold-dim);opacity:.85;margin:0;font-size:.85rem;}
   .app-header .top-bar{margin-bottom:0;}
-  h2{font-size:1.02rem;margin:22px 0 10px;color:var(--green-dark);border-bottom:2px solid var(--gold-dim);padding-bottom:6px;font-weight:700;}
+  h2{font-size:1.02rem;margin:22px 0 10px;color:var(--brand-dark);border-bottom:2px solid var(--gold-dim);padding-bottom:6px;font-weight:700;}
   label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:4px;margin-top:12px;}
   input[type=text], input[type=number], select{
     width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;
     background:#fff;font-size:.95rem;color:var(--ink);
   }
-  input:focus, select:focus{outline:2px solid var(--green-light);outline-offset:1px;}
+  input:focus, select:focus{outline:2px solid var(--brand-light);outline-offset:1px;}
   button{
     font-family:inherit;font-size:.9rem;font-weight:600;
-    border:1px solid var(--green-dark);background:var(--green-dark);color:var(--gold-dim);
+    border:1px solid var(--brand-dark);background:var(--brand-dark);color:var(--gold-dim);
     padding:9px 16px;border-radius:6px;cursor:pointer;
   }
-  button.secondary{background:transparent;color:var(--green-dark);}
+  button.secondary{background:transparent;color:var(--brand-dark);}
   .cta-new-round{display:block;width:100%;padding:14px 16px;font-size:1.05rem;font-weight:700;border-radius:14px;margin:14px 0 22px;box-shadow:0 4px 14px rgba(122,15,15,.22);}
   button.ghost{background:transparent;color:var(--muted);border-color:var(--line);}
   button:disabled{opacity:.4;cursor:not-allowed;}
@@ -69,7 +69,7 @@
   .card{border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:12px;background:#fff;box-shadow:0 1px 3px rgba(26,10,10,.06), 0 1px 2px rgba(26,10,10,.04);}
   table{width:100%;border-collapse:collapse;font-size:.85rem;}
   th,td{border:1px solid var(--line);padding:5px 6px;text-align:center;}
-  th{background:var(--green-dark);font-weight:600;font-size:.75rem;color:#fff;}
+  th{background:var(--brand-dark);font-weight:600;font-size:.75rem;color:#fff;}
   td.name-col, th.name-col{text-align:left;min-width:110px;}
   .hole-input{width:52px;padding:6px 2px;text-align:center;font-size:1rem;}
   .hole-input::-webkit-outer-spin-button,
@@ -77,37 +77,37 @@
   .hole-input[type=number]{-moz-appearance:textfield;}
   /* Hole Par/S.I. editor — one row per hole, Front 9 / Back 9 side by side */
   .holes-editor-grid{align-items:start;}
-  .holes-editor-label{font-weight:700;color:var(--green-dark);font-size:.85rem;margin:0 0 4px;}
+  .holes-editor-label{font-weight:700;color:var(--brand-dark);font-size:.85rem;margin:0 0 4px;}
   table.holes-table{font-size:.9rem;}
   table.holes-table th,table.holes-table td{padding:6px 4px;}
-  table.holes-table td.hole-num-col{font-weight:700;color:var(--green-dark);background:var(--gold-dim);width:20%;}
+  table.holes-table td.hole-num-col{font-weight:700;color:var(--brand-dark);background:var(--gold-dim);width:20%;}
   table.holes-table .hole-input{width:100%;box-sizing:border-box;padding:9px 2px;font-size:1.05rem;}
   .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:.72rem;font-weight:600;}
-  .pill.mode{background:var(--gold-dim);color:var(--green-dark);margin:2px 4px 2px 0;border:1px solid var(--gold);}
+  .pill.mode{background:var(--gold-dim);color:var(--brand-dark);margin:2px 4px 2px 0;border:1px solid var(--gold);}
   .checkbox-row{display:flex;align-items:center;gap:8px;margin:8px 0;}
   .checkbox-row input{width:auto;}
   .link-box{display:flex;gap:8px;align-items:center;background:var(--gold-dim);border:1px solid var(--gold);border-radius:8px;padding:10px 12px;margin-top:8px;}
   .link-box input{background:#fff;font-size:.8rem;}
   .muted{color:var(--muted);font-size:.82rem;}
-  .team-a{color:var(--green-light);font-weight:600;}
+  .team-a{color:var(--brand-light);font-weight:600;}
   .team-b{color:var(--ink);font-weight:700;}
-  .status-up{color:var(--green-light);font-weight:700;}
-  .status-down{color:var(--red);font-weight:700;}
+  .status-up{color:var(--brand-light);font-weight:700;}
+  .status-down{color:var(--danger);font-weight:700;}
   .status-all-sq{color:var(--muted);font-weight:700;}
   .leader-row{font-weight:700;background:var(--gold-dim);}
   .top-bar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px;}
-  .badge-live{display:inline-flex;align-items:center;gap:6px;font-size:.75rem;color:var(--gold);}
-  .conn-indicator{display:inline-flex;align-items:center;gap:5px;font-size:.68rem;opacity:.85;}
+  .badge-live{display:inline-flex;align-items:center;gap:6px;font-size:.85rem;font-weight:600;color:var(--gold);padding:4px 2px;}
+  .conn-indicator{display:inline-flex;align-items:center;gap:6px;font-size:.85rem;opacity:.95;padding:4px 2px;}
   .conn-indicator.conn-online{color:#8fd9a8;}
   .conn-indicator.conn-offline{color:#ffb4a8;}
-  .conn-dot{width:6px;height:6px;border-radius:50%;}
+  .conn-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
   .conn-online .conn-dot{background:#4caf50;}
   .conn-offline .conn-dot{background:#e05a4a;}
-  .dot{width:7px;height:7px;border-radius:50%;background:var(--gold);animation:pulse 1.6s infinite;}
-  .account-chip{font-size:.72rem;color:var(--gold-dim);opacity:.9;text-decoration:none;}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--gold);animation:pulse 1.6s infinite;}
+  .account-chip{display:inline-flex;align-items:center;gap:5px;font-size:.92rem;font-weight:700;color:var(--gold-dim);opacity:.95;text-decoration:none;padding:6px 2px;}
   .account-chip:hover{opacity:1;text-decoration:underline;}
   .auth-gate{
-    min-height:100vh;background:linear-gradient(135deg, var(--green-dark), var(--green));
+    min-height:100vh;background:linear-gradient(135deg, var(--brand-dark), var(--brand));
     display:flex;align-items:center;justify-content:center;padding:24px 16px;
   }
   .auth-gate-card{
@@ -115,7 +115,7 @@
     padding:28px 24px 24px;box-shadow:0 10px 40px rgba(0,0,0,.25);
   }
   .auth-gate-logo{width:96px;height:96px;border-radius:20px;margin:0 auto 14px;display:block;box-shadow:0 4px 14px rgba(0,0,0,.2);}
-  .auth-gate-appname{color:var(--green-dark);font-size:1.4rem;font-weight:800;margin:0 0 2px;}
+  .auth-gate-appname{color:var(--brand-dark);font-size:1.4rem;font-weight:800;margin:0 0 2px;}
   .password-checklist{list-style:none;padding:0;margin:8px 0 0;font-size:12px;}
   .password-checklist li{display:flex;align-items:center;gap:7px;padding:2px 0;color:var(--muted);}
   .password-checklist li.met{color:#1f9254;}
@@ -125,38 +125,38 @@
     width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;
     background:#fff;font-size:.95rem;color:var(--ink);
   }
-  .auth-switch-link{background:none;border:none;color:var(--green-light);font-weight:700;cursor:pointer;font-family:inherit;font-size:inherit;padding:0;text-decoration:underline;}
+  .auth-switch-link{background:none;border:none;color:var(--brand-light);font-weight:700;cursor:pointer;font-family:inherit;font-size:inherit;padding:0;text-decoration:underline;}
   @keyframes pulse{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
   .hole-nav{display:flex;align-items:center;gap:10px;margin:10px 0;}
   .hole-nav button{padding:6px 10px;}
-  .hole-nav .current{font-weight:700;font-size:1.05rem;min-width:110px;text-align:center;color:var(--green-dark);}
+  .hole-nav .current{font-weight:700;font-size:1.05rem;min-width:110px;text-align:center;color:var(--brand-dark);}
   .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
   @media (max-width:600px){.grid-2{grid-template-columns:1fr;}}
   .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
   @media (max-width:600px){.grid-3{grid-template-columns:1fr;}}
   .config-note{font-size:.78rem;color:var(--muted);border:1px dashed var(--line);padding:8px 10px;border-radius:8px;margin-bottom:16px;}
-  a{color:var(--green-light);}
+  a{color:var(--brand-light);}
 
   /* tab bar, matching the tabbed layout of the other apps */
   .tab-bar{
-    display:flex;gap:4px;background:var(--green-dark);
+    display:flex;gap:4px;background:var(--brand-dark);
     padding:4px;margin:0;position:sticky;top:0;z-index:5;
   }
   .tab-btn{
     flex:1;background:transparent;border:none;color:var(--gold-dim);
     padding:10px 8px;font-size:.85rem;font-weight:600;border-radius:6px;opacity:.7;
   }
-  .tab-btn.active{background:var(--gold);color:var(--green-dark);opacity:1;}
+  .tab-btn.active{background:var(--gold);color:var(--brand-dark);opacity:1;}
 
   /* clickable player names */
-  .player-name-link{color:var(--green-light);cursor:pointer;font-weight:700;text-decoration:underline;text-decoration-style:dotted;}
-  .player-name-link:hover{color:var(--green-dark);}
-  .team-scorecard-link{color:var(--green-light);cursor:pointer;font-weight:700;text-decoration:underline;text-decoration-style:dotted;margin-top:6px;font-size:.85rem;}
-  .team-scorecard-link:hover{color:var(--green-dark);}
+  .player-name-link{color:var(--brand-light);cursor:pointer;font-weight:700;text-decoration:underline;text-decoration-style:dotted;}
+  .player-name-link:hover{color:var(--brand-dark);}
+  .team-scorecard-link{color:var(--brand-light);cursor:pointer;font-weight:700;text-decoration:underline;text-decoration-style:dotted;margin-top:6px;font-size:.85rem;}
+  .team-scorecard-link:hover{color:var(--brand-dark);}
   .circled-score{
     display:inline-flex;align-items:center;justify-content:center;
     min-width:20px;height:20px;border-radius:50%;
-    border:2px solid var(--green-dark);background:var(--gold-dim);
+    border:2px solid var(--brand-dark);background:var(--gold-dim);
     font-weight:800;padding:0 2px;margin-top:2px;font-size:.75rem;
   }
   .shot-count{font-size:.65rem;color:var(--muted);line-height:1;}
@@ -171,14 +171,14 @@
   .scorecard-panel{
     background:#fffdf8;border-radius:14px;max-width:820px;width:100%;
     padding:18px 16px 20px;position:relative;box-shadow:0 10px 40px rgba(0,0,0,.35);
-    border:2px solid var(--green-dark);
+    border:2px solid var(--brand-dark);
   }
   .scorecard-close{
     position:absolute;top:8px;right:10px;background:transparent;border:none;
     color:var(--muted);font-size:1.4rem;cursor:pointer;padding:4px 10px;line-height:1;
   }
   .scorecard-heading{text-align:center;margin-bottom:12px;}
-  .scorecard-heading .course{font-weight:700;color:var(--green-dark);font-size:1.05rem;letter-spacing:.02em;text-transform:uppercase;}
+  .scorecard-heading .course{font-weight:700;color:var(--brand-dark);font-size:1.05rem;letter-spacing:.02em;text-transform:uppercase;}
   .scorecard-heading .meta{color:var(--muted);font-size:.78rem;margin-top:2px;}
   .scorecard-player-name{font-size:1.3rem;font-weight:800;color:var(--ink);text-align:center;margin:6px 0 14px;}
   .scorecard-table-wrap{overflow-x:auto;}
@@ -189,13 +189,13 @@
   table.scorecard-table th.label-col, table.scorecard-table td.label-col{
     text-align:left;min-width:64px;font-weight:700;background:var(--gold-dim);position:sticky;left:0;
   }
-  table.scorecard-table thead th{background:var(--green-dark);color:#fff;font-size:.68rem;}
+  table.scorecard-table thead th{background:var(--brand-dark);color:#fff;font-size:.68rem;}
   table.scorecard-table td.agg-col, table.scorecard-table th.agg-col{background:var(--gold-dim);font-weight:800;}
-  table.scorecard-table tr.gross-row td{font-weight:800;font-size:.8rem;color:var(--green-dark);}
-  table.scorecard-table tr.gross-row td.label-col{background:var(--green-dim);}
+  table.scorecard-table tr.gross-row td{font-weight:800;font-size:.8rem;color:var(--brand-dark);}
+  table.scorecard-table tr.gross-row td.label-col{background:var(--brand-dim);}
   .scorecard-summary{display:flex;justify-content:center;gap:22px;margin-top:14px;flex-wrap:wrap;}
   .scorecard-summary div{text-align:center;}
-  .scorecard-summary .val{font-size:1.3rem;font-weight:800;color:var(--green-dark);}
+  .scorecard-summary .val{font-size:1.3rem;font-weight:800;color:var(--brand-dark);}
   .scorecard-summary .lbl{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;}
 </style>
 </head>
@@ -472,7 +472,7 @@ function renderAppHeader(title, subtitle, badge){
           <h1><img src="/golf/icon-header.png" alt="" style="height:30px;width:30px;vertical-align:-7px;margin-right:6px;">${title}</h1>
           <p class="subtitle">${subtitle || ""}</p>
         </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
           ${badgeHtml}
           ${connHtml}
           ${accountHtml}
@@ -924,7 +924,7 @@ function renderHome(){
         </div>
         ${isDeleted
           ? `<button class="ghost restore-item" data-round="${r.id}" style="font-size:.75rem;padding:4px 10px;">Restore</button>`
-          : `<span class="pill mode" style="background:${r.status==='finished' ? 'var(--green-dim)' : 'var(--gold-dim)'};">${r.status === "finished" ? "Final" : "Active"}</span>`}
+          : `<span class="pill mode" style="background:${r.status==='finished' ? 'var(--brand-dim)' : 'var(--gold-dim)'};">${r.status === "finished" ? "Final" : "Active"}</span>`}
       </div>`;
 
     let html = active.length === 0
@@ -975,7 +975,7 @@ function renderHome(){
               <strong>${r.name}</strong>
               <div class="muted" style="font-size:.78rem;">${r.courseName || ""}${r.roundDate ? " · " + r.roundDate : ""}${r.teeBox ? " · " + r.teeBox + " tees" : ""}</div>
             </div>
-            <span class="pill mode" style="background:${r.status==='finished' ? 'var(--green-dim)' : 'var(--gold-dim)'};">${r.status === "finished" ? "Final" : "Active"}</span>
+            <span class="pill mode" style="background:${r.status==='finished' ? 'var(--brand-dim)' : 'var(--gold-dim)'};">${r.status === "finished" ? "Final" : "Active"}</span>
           </div>`).join("");
       card.querySelectorAll(".round-item").forEach(el => {
         el.addEventListener("click", () => { location.hash = `#/score/${el.dataset.round}`; });
@@ -1529,7 +1529,7 @@ async function renderScorer(roundId){
     <div class="content">
 
     ${scorerData.round.deleted ? `
-      <div class="card" style="border-color:var(--red);background:var(--gold-dim);text-align:center;">
+      <div class="card" style="border-color:var(--danger);background:var(--gold-dim);text-align:center;">
         <strong>This round has been deleted</strong>
         <p class="muted" style="margin:4px 0 10px;">It's hidden from your rounds list but hasn't been erased.</p>
         <button id="restoreBannerBtn">Restore round</button>
@@ -1541,10 +1541,10 @@ async function renderScorer(roundId){
     <div id="scoreTab">
       <div>${scorerData.round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
       ${finished
-        ? `<div class="card" style="text-align:center;border-color:var(--green);"><strong>Round finished</strong><p class="muted" style="margin:4px 0 0;">Scores are locked. See the Leaderboards tab for final results.${finishedDurationText(scorerData.round)}</p></div>`
+        ? `<div class="card" style="text-align:center;border-color:var(--brand);"><strong>Round finished</strong><p class="muted" style="margin:4px 0 0;">Scores are locked. See the Leaderboards tab for final results.${finishedDurationText(scorerData.round)}</p></div>`
         : needsStart
           ? buildStartGateHtml(scorerData.players)
-          : `<div class="row" style="margin:10px 0;justify-content:space-between;align-items:center;"><button id="finishBtn" style="background:var(--red);border-color:var(--red);">Finish round</button><span id="elapsedTimer" class="muted" style="font-size:.85rem;"></span></div>`}
+          : `<div class="row" style="margin:10px 0;justify-content:space-between;align-items:center;"><button id="finishBtn" style="background:var(--danger);border-color:var(--danger);">Finish round</button><span id="elapsedTimer" class="muted" style="font-size:.85rem;"></span></div>`}
       ${needsStart ? "" : `
       <div class="hole-nav">
         <button id="prevHole" class="secondary">&larr;</button>
@@ -1651,7 +1651,7 @@ async function renderScoringOnly(roundId){
     <div class="content">
 
     ${scorerData.round.deleted ? `
-      <div class="card" style="border-color:var(--red);background:var(--gold-dim);text-align:center;">
+      <div class="card" style="border-color:var(--danger);background:var(--gold-dim);text-align:center;">
         <strong>This round has been deleted</strong>
         <p class="muted" style="margin:4px 0 10px;">It's hidden from your rounds list but hasn't been erased.</p>
         <button id="restoreBannerBtn">Restore round</button>
@@ -1666,10 +1666,10 @@ async function renderScoringOnly(roundId){
         <button class="ghost" id="copyBtn">Copy</button>
       </div>
       ${finished
-        ? `<div class="card" style="text-align:center;border-color:var(--green);"><strong>Round finished</strong><p class="muted" style="margin:4px 0 0;">Scores are locked. See the Leaderboards tab for final results.${finishedDurationText(scorerData.round)}</p></div>`
+        ? `<div class="card" style="text-align:center;border-color:var(--brand);"><strong>Round finished</strong><p class="muted" style="margin:4px 0 0;">Scores are locked. See the Leaderboards tab for final results.${finishedDurationText(scorerData.round)}</p></div>`
         : needsStart
           ? buildStartGateHtml(scorerData.players)
-          : `<div class="row" style="margin:10px 0;justify-content:space-between;align-items:center;"><button id="finishBtn" style="background:var(--red);border-color:var(--red);">Finish round</button><span id="elapsedTimer" class="muted" style="font-size:.85rem;"></span></div>`}
+          : `<div class="row" style="margin:10px 0;justify-content:space-between;align-items:center;"><button id="finishBtn" style="background:var(--danger);border-color:var(--danger);">Finish round</button><span id="elapsedTimer" class="muted" style="font-size:.85rem;"></span></div>`}
       ${needsStart ? "" : `
       <div class="hole-nav">
         <button id="prevHole" class="secondary">&larr;</button>
@@ -1738,7 +1738,7 @@ function buildScheduleViewHtml(bundle, spectatorUrl){
   return `
     <div class="row" style="justify-content:flex-end;gap:8px;margin-top:8px;">
       <button class="secondary" id="editScheduleBtn">Edit</button>
-      ${!round.deleted ? `<button id="deleteRoundBtn" style="background:var(--red);border-color:var(--red);">Delete round</button>` : ""}
+      ${!round.deleted ? `<button id="deleteRoundBtn" style="background:var(--danger);border-color:var(--danger);">Delete round</button>` : ""}
     </div>
 
     <h2>Round details</h2>
@@ -2096,9 +2096,9 @@ function renderEntry(){
       const pts = stablefordPoints(hole.par, val - sr);
       return `<button type="button" class="score-chip" data-player="${p.id}" data-val="${val}"
         style="flex:1;min-width:0;padding:10px 2px;font-size:.95rem;
-        background:${isActive ? "var(--green-dark)" : "#fff"};
+        background:${isActive ? "var(--brand-dark)" : "#fff"};
         color:${isActive ? "#fff" : "var(--ink)"};
-        border:1px solid ${isActive ? "var(--green-dark)" : "var(--line)"};
+        border:1px solid ${isActive ? "var(--brand-dark)" : "var(--line)"};
         border-radius:8px;" ${finished ? "disabled" : ""}>
         <div style="font-weight:700;">${val}</div>
         <div style="font-size:.62rem;opacity:.75;">${SCORE_LABELS[String(off)]}</div>
@@ -2176,7 +2176,7 @@ function buildScrambleDriveHtml(finished){
           return `<button type="button" class="scramble-pick" data-player="${p.id}"
             style="flex:1;min-width:0;padding:8px 2px;font-size:.78rem;
             background:${isActive ? "var(--gold)" : "#fff"};
-            color:${isActive ? "var(--green-dark)" : "var(--ink)"};
+            color:${isActive ? "var(--brand-dark)" : "var(--ink)"};
             border:1px solid ${isActive ? "var(--gold)" : "var(--line)"};
             border-radius:8px;font-weight:${isActive ? "800" : "500"};" ${finished ? "disabled" : ""}>
             ${p.name}
@@ -2203,7 +2203,7 @@ function buildScrambleDriveTeamHtml(finished, teamKey, colorClass){
           return `<button type="button" class="scramble-pick-team" data-field="${field}" data-player="${p.id}"
             style="flex:1;min-width:0;padding:8px 2px;font-size:.78rem;
             background:${isActive ? "var(--gold)" : "#fff"};
-            color:${isActive ? "var(--green-dark)" : "var(--ink)"};
+            color:${isActive ? "var(--brand-dark)" : "var(--ink)"};
             border:1px solid ${isActive ? "var(--gold)" : "var(--line)"};
             border-radius:8px;font-weight:${isActive ? "800" : "500"};" ${finished ? "disabled" : ""}>
             ${p.name}
@@ -2263,7 +2263,7 @@ function renderBBBPicker(finished){
               return `<button type="button" class="bbb-pick" data-cat="${cat.key}" data-player="${p.id}"
                 style="flex:1;min-width:0;padding:8px 2px;font-size:.75rem;
                 background:${isActive ? "var(--gold)" : "#fff"};
-                color:${isActive ? "var(--green-dark)" : "var(--ink)"};
+                color:${isActive ? "var(--brand-dark)" : "var(--ink)"};
                 border:1px solid ${isActive ? "var(--gold)" : "var(--line)"};
                 border-radius:8px;font-weight:${isActive ? "800" : "500"};" ${finished ? "disabled" : ""}>
                 ${p.name}
@@ -2388,7 +2388,7 @@ async function renderSpectator(code){
     ${renderAppHeader(bundle.round.name, bundle.round.courseName, bundle.round.status === "finished" ? "final" : "live")}
     <div class="content">
     <div>${bundle.round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
-    ${bundle.round.status === "finished" ? `<div class="card" style="text-align:center;border-color:var(--green);"><strong>Final result</strong></div>` : ""}
+    ${bundle.round.status === "finished" ? `<div class="card" style="text-align:center;border-color:var(--brand);"><strong>Final result</strong></div>` : ""}
     <h2>Leaderboards</h2>
     <div id="boards">${buildBoardsHtml(bundle, {alwaysIncludeStableford: false})}</div>
     </div>
@@ -2425,7 +2425,7 @@ let competitionEditMode = false;
 function buildCompetitionControlsHtml(comp){
   if (comp.deleted){
     return `
-      <div class="card" style="border-color:var(--red);background:var(--gold-dim);text-align:center;">
+      <div class="card" style="border-color:var(--danger);background:var(--gold-dim);text-align:center;">
         <strong>This competition has been deleted</strong>
         <p class="muted" style="margin:4px 0 10px;">It's hidden from your competitions list but hasn't been erased.</p>
         <button id="restoreCompetitionBtn">Restore competition</button>
@@ -2434,7 +2434,7 @@ function buildCompetitionControlsHtml(comp){
   return `
     <div class="row" style="justify-content:flex-end;gap:8px;margin-bottom:10px;">
       <button class="secondary" id="editCompetitionBtn">Edit</button>
-      <button id="deleteCompetitionBtn" style="background:var(--red);border-color:var(--red);">Delete competition</button>
+      <button id="deleteCompetitionBtn" style="background:var(--danger);border-color:var(--danger);">Delete competition</button>
     </div>`;
 }
 
