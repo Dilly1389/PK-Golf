@@ -319,7 +319,7 @@ async function loadCompetitionsList(){
 }
 
 // Deleting/restoring a competition cascades to every fourball round linked to it, so the whole
-// thing disappears from (or comes back to) both the Competitions and Existing rounds lists together.
+// thing disappears from (or comes back to) both the Competitions and All rounds lists together.
 // Nothing is erased — same soft-delete pattern a single round already uses.
 async function deleteCompetition(competitionId){
   const roundsSnap = await getDocs(query(collection(db, "golf_rounds"), where("competitionId", "==", competitionId)));
@@ -838,8 +838,10 @@ function renderHome(){
       <div class="card" id="myRoundsListCard"><p class="muted">Loading…</p></div>
     </div>
 
-    <h2>Existing rounds</h2>
-    <div class="card" id="roundsListCard"><p class="muted">Loading…</p></div>
+    <h2>All rounds</h2>
+    <p class="muted" style="font-size:.78rem;margin:-6px 0 8px;">Every round on PK Golf, not just yours.</p>
+    <button class="ghost" id="toggleAllRoundsBtn" type="button" style="font-size:.78rem;padding:5px 12px;margin-bottom:10px;">Show all rounds</button>
+    <div class="card" id="roundsListCard" style="display:none;"><p class="muted">Loading…</p></div>
 
     <h2>Competitions</h2>
     <div class="card" id="competitionsListCard"><p class="muted">Loading…</p></div>
@@ -905,6 +907,14 @@ function renderHome(){
     const card = document.getElementById("roundsListCard");
     const active = rounds.filter(r => !r.deleted);
     const deleted = rounds.filter(r => r.deleted);
+
+    const toggleAllBtn = document.getElementById("toggleAllRoundsBtn");
+    toggleAllBtn.textContent = `Show all rounds (${active.length})`;
+    toggleAllBtn.onclick = () => {
+      const showing = card.style.display !== "none";
+      card.style.display = showing ? "none" : "";
+      toggleAllBtn.textContent = showing ? `Show all rounds (${active.length})` : "Hide all rounds";
+    };
 
     const itemHtml = (r, isDeleted) => `
       <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);${isDeleted ? "opacity:.6;" : ""}">
