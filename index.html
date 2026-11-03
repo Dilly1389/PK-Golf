@@ -2077,6 +2077,12 @@ function buildScheduleEditHtml(bundle){
           <select id="editTeeBox">${teeBoxOptions(round.teeBox || "White")}</select>
         </div>
       </div>
+      <label style="margin-top:14px;">Are you playing?</label>
+      <div class="row" style="gap:18px;">
+        <label class="row" style="gap:6px;"><input type="radio" name="editCreatorRole" value="playing" ${round.creatorIsPlaying !== false ? "checked" : ""}> I'm playing</label>
+        <label class="row" style="gap:6px;"><input type="radio" name="editCreatorRole" value="marking" ${round.creatorIsPlaying === false ? "checked" : ""}> I'm scoring/marking only</label>
+      </div>
+      <p class="muted" style="font-size:.78rem;margin:4px 0 0;">Marking-only rounds won't count as rounds you've played in your history.</p>
     </div>
 
     ${buildPlayersEditSection(bundle)}
@@ -2110,6 +2116,7 @@ async function saveSchedule(spectatorUrl){
   const roundDate = document.getElementById("editRoundDate").value.trim();
   const teeTime = document.getElementById("editTeeTime").value.trim();
   const teeBox = document.getElementById("editTeeBox").value;
+  const creatorIsPlaying = (document.querySelector('input[name="editCreatorRole"]:checked') || {}).value !== "marking";
   const holes = scorerData.holes.map(h => ({
     holeNumber: h.holeNumber,
     par: parseInt(document.querySelector(`.h-par-edit[data-hole="${h.holeNumber}"]`).value || h.par, 10),
@@ -2123,7 +2130,7 @@ async function saveSchedule(spectatorUrl){
     team: document.querySelector(`.edit-p-team[data-id="${p.id}"]`).value,
   }));
 
-  const updates = { courseName, roundDate, teeTime, teeBox };
+  const updates = { courseName, roundDate, teeTime, teeBox, creatorIsPlaying };
   if (scorerData.round.gameModes.includes("alliance")){
     const allianceCountEl = document.getElementById("editAllianceCount");
     if (allianceCountEl) updates.allianceCount = parseInt(allianceCountEl.value, 10);
