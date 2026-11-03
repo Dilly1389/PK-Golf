@@ -286,7 +286,7 @@ function fmtDiff(n){
 function slugify(name){
   return (name || "course").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "course";
 }
-async function saveCourseToDatabase(courseName, holes, source, extra){
+async function saveCourseToDatabase(courseName, holes, source, extra, ratingSlope){
   const slug = slugify(courseName);
   const data = {
     name: courseName,
@@ -302,7 +302,31 @@ async function saveCourseToDatabase(courseName, holes, source, extra){
     if (extra.parTotal) data.parTotal = extra.parTotal;
     if (extra.tees && extra.tees.length) data.tees = extra.tees;
   }
+  // Editable on New Round, re-saved every time a round is created with this course — so a
+  // club re-rating its slope/course rating actually sticks instead of staying stale forever.
+  if (ratingSlope){
+    if (ratingSlope.courseRating != null) data.courseRating = ratingSlope.courseRating;
+    if (ratingSlope.slopeRating != null) data.slopeRating = ratingSlope.slopeRating;
+  }
   await setDoc(doc(db, "golf_courses", slug), data);
+}
+function matchTeeRatingSlope(tees, teeBoxName){
+  if (!tees || !tees.length) return null;
+  const target = (teeBoxName || "").trim().toLowerCase();
+  const exact = tees.find(t => (t.name || "").trim().toLowerCase() === target);
+  const starts = exact || tees.find(t => (t.name || "").trim().toLowerCase().startsWith(target));
+  const tee = starts || tees[0];
+  return (tee && tee.rating != null && tee.slope != null) ? { courseRating: tee.rating, slopeRating: tee.slope } : null;
+}
+// Remembers the loaded course's tees so the teeBox dropdown's change handler (wired in
+// renderNewRound) can re-pick rating/slope without a re-fetch.
+let currentCourseTees = null;
+function fillRatingSlope(tees, flat){
+  currentCourseTees = tees || null;
+  const teeBox = document.getElementById("teeBox").value;
+  const picked = flat || matchTeeRatingSlope(currentCourseTees, teeBox);
+  document.getElementById("courseRating").value = picked ? picked.courseRating : "";
+  document.getElementById("slopeRating").value = picked ? picked.slopeRating : "";
 }
 
 // GolfCore course search (api.golfcore.org) — free tier, keyless until 2026-12-04 per their
@@ -354,6 +378,7 @@ async function selectGolfCoreCourse(slug, url){
     });
     const tees = (layout.tees || []).map(t => ({ name: t.name, rating: t.rating, slope: t.slope, yards: t.yards, par: t.par }));
     golfcoreSourceSelected = { name: "GolfCore", url, parTotal: data.par_total || layout.par, tees, holesYards };
+    fillRatingSlope(tees, null);
     const teeInfo = tees.length ? ` (${tees.length} tee${tees.length>1?"s":""} — rating/slope saved)` : "";
     resultsEl.innerHTML = `<p class="muted" style="font-size:.78rem;">Loaded ${data.name} — par, stroke index &amp; yardage filled in below${teeInfo}.</p>`;
     const credit = document.getElementById("golfcoreCredit");
@@ -1065,22 +1090,20 @@ function renderNewRound(){
     <button id="backToHomeBtn" class="secondary" type="button" style="margin-bottom:14px;">← Back to rounds</button>
 
     <div class="card">
-      <label>Load saved course (optional)</label>
-      <select id="savedCourseSelect"><option value="">— none —</option></select>
-      <p class="muted" style="font-size:.78rem;margin:4px 0 0;">Some ready-made courses come from OpenStreetMap contributors and may have mistakes — check them against the club scorecard.</p>
+      <label>Round name</label>
+      <input type="text" id="roundName" placeholder="e.g. Saturday Fourball">
+      <label>Course name</label>
+      <input type="text" id="courseName" placeholder="Start typing — saved courses appear as you type" list="courseNameDatalist" autocomplete="off">
+      <datalist id="courseNameDatalist"></datalist>
+      <p class="muted" style="font-size:.78rem;margin:4px 0 0;">Pick a match to fill in par, stroke index, rating &amp; slope — some saved courses come from OpenStreetMap contributors and may have mistakes, check against the club scorecard.</p>
 
-      <label>Or search GolfCore for a course (optional)</label>
+      <label>Or search GolfCore for a course not saved yet (optional)</label>
       <div class="row" style="gap:8px;flex-wrap:nowrap;">
         <input type="text" id="golfcoreSearchInput" placeholder="e.g. Glenvista Country Club" style="flex:1;">
         <button id="golfcoreSearchBtn" class="secondary" type="button" style="white-space:nowrap;">Search</button>
       </div>
       <div id="golfcoreResults"></div>
       <p id="golfcoreCredit" class="muted" style="font-size:.78rem;margin:4px 0 0;display:none;"></p>
-
-      <label>Round name</label>
-      <input type="text" id="roundName" placeholder="e.g. Saturday Fourball">
-      <label>Course name</label>
-      <input type="text" id="courseName" placeholder="e.g. Leopard Creek Country Club">
       <div class="grid-3">
         <div>
           <label>Date</label>
@@ -1101,6 +1124,18 @@ function renderNewRound(){
 
       <h2>Players &amp; handicaps</h2>
       <div id="playersBox"></div>
+
+      <div class="grid-3">
+        <div>
+          <label>Course rating</label>
+          <input type="number" id="courseRating" step="0.1" placeholder="e.g. 72.3">
+        </div>
+        <div>
+          <label>Slope rating</label>
+          <input type="number" id="slopeRating" placeholder="e.g. 133">
+        </div>
+      </div>
+      <p class="muted" style="font-size:.78rem;margin:4px 0 12px;">For the tee box above — edit if the club has re-rated it since this was last saved.</p>
 
       <h2>Holes — par &amp; stroke index</h2>
       <p class="muted">Quick default fills par 4 / sequential SI — edit any cell, or load a saved course above.</p>
@@ -1124,29 +1159,41 @@ function renderNewRound(){
   document.getElementById("backToHomeBtn").onclick = () => { location.hash = ""; };
 
   golfcoreSourceSelected = null;
-  document.getElementById("courseName").addEventListener("input", () => { golfcoreSourceSelected = null; });
   document.getElementById("golfcoreSearchBtn").onclick = () => searchGolfCore();
   document.getElementById("golfcoreSearchInput").addEventListener("keydown", (e) => {
     if (e.key === "Enter"){ e.preventDefault(); searchGolfCore(); }
   });
 
+  currentCourseTees = null;
+  document.getElementById("teeBox").addEventListener("change", () => {
+    if (!currentCourseTees) return;
+    const picked = matchTeeRatingSlope(currentCourseTees, document.getElementById("teeBox").value);
+    if (picked){
+      document.getElementById("courseRating").value = picked.courseRating;
+      document.getElementById("slopeRating").value = picked.slopeRating;
+    }
+  });
+
   loadCoursesList().then(courses => {
-    const select = document.getElementById("savedCourseSelect");
+    const datalist = document.getElementById("courseNameDatalist");
     courses.forEach(c => {
       const opt = document.createElement("option");
-      opt.value = c.id; opt.textContent = c.name;
-      select.appendChild(opt);
+      opt.value = c.name;
+      datalist.appendChild(opt);
     });
-    select.addEventListener("change", () => {
-      const course = courses.find(c => c.id === select.value);
+    const courseNameInput = document.getElementById("courseName");
+    courseNameInput.addEventListener("input", () => {
+      golfcoreSourceSelected = null;
+      const typed = courseNameInput.value.trim().toLowerCase();
+      const course = courses.find(c => c.name.trim().toLowerCase() === typed);
       if (!course) return;
-      document.getElementById("courseName").value = course.name;
       course.holes.forEach(h => {
         const parCell = document.querySelector(`.h-par[data-hole="${h.holeNumber}"]`);
         const siCell = document.querySelector(`.h-si[data-hole="${h.holeNumber}"]`);
         if (parCell) parCell.value = h.par;
         if (siCell) siCell.value = h.strokeIndex;
       });
+      fillRatingSlope(course.tees, course.courseRating != null && course.slopeRating != null ? { courseRating: course.courseRating, slopeRating: course.slopeRating } : null);
     });
   });
 
@@ -1362,6 +1409,9 @@ async function createRound(){
   const roundDate = document.getElementById("roundDate").value.trim();
   const teeTime = document.getElementById("teeTime").value.trim();
   const teeBox = document.getElementById("teeBox").value;
+  const courseRatingVal = parseFloat(document.getElementById("courseRating").value);
+  const slopeRatingVal = parseInt(document.getElementById("slopeRating").value, 10);
+  const ratingSlope = (!isNaN(courseRatingVal) && !isNaN(slopeRatingVal)) ? { courseRating: courseRatingVal, slopeRating: slopeRatingVal } : null;
   const modes = Array.from(document.querySelectorAll(".mode-cb:checked")).map(cb => cb.value);
   if (modes.length === 0){ msg.textContent = "Pick at least one game mode."; return; }
   const allianceCount = parseInt(document.getElementById("allianceCount").value, 10);
@@ -1427,7 +1477,7 @@ async function createRound(){
       const teeTimesByFourball = Array.from({length: fourballCount}, (_, idx) => readTeeTimeForFourball(idx + 1));
       await createCompetition({
         roundName, courseName, roundDate, teeBox, modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
-        teamAName, teamBName, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount, creatorIsPlaying
+        teamAName, teamBName, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount, creatorIsPlaying, ratingSlope
       });
       return;
     }
@@ -1451,7 +1501,7 @@ async function createRound(){
       batch.set(pRef, p);
     });
     await batch.commit();
-    await saveCourseToDatabase(courseName, holes, golfcoreSourceSelected, golfcoreSourceSelected);
+    await saveCourseToDatabase(courseName, holes, golfcoreSourceSelected, golfcoreSourceSelected, ratingSlope);
 
     location.hash = `#/score/${roundRef.id}`;
   } catch(err){
@@ -1472,7 +1522,7 @@ function defaultPairsFor(players){
 async function createCompetition(cfg){
   const {
     roundName, courseName, roundDate, teeBox, modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
-    teamAName, teamBName, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount, creatorIsPlaying
+    teamAName, teamBName, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount, creatorIsPlaying, ratingSlope
   } = cfg;
   const isPiekfyn = modes.includes("piekfyn");
 
@@ -1503,7 +1553,7 @@ async function createCompetition(cfg){
     await batch.commit();
   }
 
-  await saveCourseToDatabase(courseName, holes, golfcoreSourceSelected, golfcoreSourceSelected);
+  await saveCourseToDatabase(courseName, holes, golfcoreSourceSelected, golfcoreSourceSelected, ratingSlope);
   location.hash = `#/competition/${compRef.id}`;
 }
 
