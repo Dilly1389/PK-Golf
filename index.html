@@ -286,14 +286,22 @@ function fmtDiff(n){
 function slugify(name){
   return (name || "course").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "course";
 }
-async function saveCourseToDatabase(courseName, holes, source){
+async function saveCourseToDatabase(courseName, holes, source, extra){
   const slug = slugify(courseName);
   const data = {
     name: courseName,
-    holes: holes.map(h => ({ holeNumber: h.holeNumber, par: h.par, strokeIndex: h.strokeIndex })),
+    holes: holes.map(h => {
+      const hole = { holeNumber: h.holeNumber, par: h.par, strokeIndex: h.strokeIndex };
+      if (h.yards) hole.yards = h.yards;
+      return hole;
+    }),
     updatedAt: serverTimestamp()
   };
   if (source){ data.source = source.name; data.sourceUrl = source.url; }
+  if (extra){
+    if (extra.parTotal) data.parTotal = extra.parTotal;
+    if (extra.tees && extra.tees.length) data.tees = extra.tees;
+  }
   await setDoc(doc(db, "golf_courses", slug), data);
 }
 
@@ -336,14 +344,18 @@ async function selectGolfCoreCourse(slug, url){
       return;
     }
     document.getElementById("courseName").value = data.name;
+    const holesYards = {};
     layout.holes.forEach(h => {
       const parCell = document.querySelector(`.h-par[data-hole="${h.position}"]`);
       const siCell = document.querySelector(`.h-si[data-hole="${h.position}"]`);
       if (parCell) parCell.value = h.par;
       if (siCell) siCell.value = h.stroke_index;
+      if (h.yards) holesYards[h.position] = h.yards;
     });
-    golfcoreSourceSelected = { name: "GolfCore", url };
-    resultsEl.innerHTML = `<p class="muted" style="font-size:.78rem;">Loaded ${data.name} — par &amp; stroke index filled in below.</p>`;
+    const tees = (layout.tees || []).map(t => ({ name: t.name, rating: t.rating, slope: t.slope, yards: t.yards, par: t.par }));
+    golfcoreSourceSelected = { name: "GolfCore", url, parTotal: data.par_total || layout.par, tees, holesYards };
+    const teeInfo = tees.length ? ` (${tees.length} tee${tees.length>1?"s":""} — rating/slope saved)` : "";
+    resultsEl.innerHTML = `<p class="muted" style="font-size:.78rem;">Loaded ${data.name} — par, stroke index &amp; yardage filled in below${teeInfo}.</p>`;
     const credit = document.getElementById("golfcoreCredit");
     credit.style.display = "";
     credit.innerHTML = `Course data via <a href="${url}" target="_blank" rel="noopener">GolfCore</a>`;
@@ -1396,11 +1408,14 @@ async function createRound(){
 
   const holes = Array.from({length:18},(_,i)=>{
     const n = i+1;
-    return {
+    const hole = {
       holeNumber: n,
       par: parseInt(document.querySelector(`.h-par[data-hole="${n}"]`).value || "4", 10),
       strokeIndex: parseInt(document.querySelector(`.h-si[data-hole="${n}"]`).value || String(n), 10),
     };
+    const yards = golfcoreSourceSelected && golfcoreSourceSelected.holesYards && golfcoreSourceSelected.holesYards[n];
+    if (yards) hole.yards = yards;
+    return hole;
   });
 
   const creatorIsPlaying = (document.querySelector('input[name="creatorRole"]:checked') || {}).value !== "marking";
@@ -1436,7 +1451,7 @@ async function createRound(){
       batch.set(pRef, p);
     });
     await batch.commit();
-    await saveCourseToDatabase(courseName, holes, golfcoreSourceSelected);
+    await saveCourseToDatabase(courseName, holes, golfcoreSourceSelected, golfcoreSourceSelected);
 
     location.hash = `#/score/${roundRef.id}`;
   } catch(err){
@@ -1488,7 +1503,7 @@ async function createCompetition(cfg){
     await batch.commit();
   }
 
-  await saveCourseToDatabase(courseName, holes, golfcoreSourceSelected);
+  await saveCourseToDatabase(courseName, holes, golfcoreSourceSelected, golfcoreSourceSelected);
   location.hash = `#/competition/${compRef.id}`;
 }
 
