@@ -834,12 +834,7 @@ function renderHome(){
 
     <button id="newRoundBtn" class="cta-new-round" type="button">+ New round</button>
 
-    <div id="myRoundsSection" style="display:none;">
-      <h2>My rounds</h2>
-      <div class="card" id="myRoundsListCard"><p class="muted">Loading…</p></div>
-    </div>
-
-    <button class="ghost" id="historyBtn" type="button" style="margin-bottom:8px;">History</button>
+    <button class="ghost" id="historyBtn" type="button" style="margin-bottom:22px;">🕒 Playing history</button>
 
     <h2>Competitions</h2>
     <div class="card" id="competitionsListCard"><p class="muted">Loading…</p></div>
@@ -903,9 +898,26 @@ function renderHome(){
   }
 
   populateCompetitionsList();
+}
+
+function renderHistory(){
+  const app = document.getElementById("app");
+  app.innerHTML = `
+    ${renderAppHeader("Playing history", "Your rounds, and every round on PK Golf.")}
+    <div class="content">
+    <button id="backToHomeBtn" class="secondary" type="button" style="margin-bottom:14px;">← Back to rounds</button>
+
+    <h2>My rounds</h2>
+    <div class="card" id="myRoundsListCard"><p class="muted">Loading…</p></div>
+
+    <h2>All rounds</h2>
+    <div class="card" id="roundsListCard"><p class="muted">Loading…</p></div>
+    </div>
+  `;
+
+  document.getElementById("backToHomeBtn").onclick = () => { location.hash = ""; };
 
   if (currentUser){
-    document.getElementById("myRoundsSection").style.display = "";
     loadMyRoundsList(currentUser.uid).then(rounds => {
       const card = document.getElementById("myRoundsListCard");
       const active = rounds.filter(r => !r.deleted);
@@ -924,19 +936,6 @@ function renderHome(){
       });
     });
   }
-}
-
-function renderHistory(){
-  const app = document.getElementById("app");
-  app.innerHTML = `
-    ${renderAppHeader("History", "Every round on PK Golf, not just yours.")}
-    <div class="content">
-    <button id="backToHomeBtn" class="secondary" type="button" style="margin-bottom:14px;">← Back to rounds</button>
-    <div class="card" id="roundsListCard"><p class="muted">Loading…</p></div>
-    </div>
-  `;
-
-  document.getElementById("backToHomeBtn").onclick = () => { location.hash = ""; };
 
   loadRoundsList().then(rounds => {
     const card = document.getElementById("roundsListCard");
