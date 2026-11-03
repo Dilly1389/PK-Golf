@@ -927,7 +927,7 @@ function renderHistory(){
         : active.map(r => `
           <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);">
             <div class="round-item" data-round="${r.id}" style="cursor:pointer;flex:1;">
-              <strong>${r.name}</strong>
+              <strong>${r.name}</strong>${r.creatorIsPlaying === false ? ` <span class="pill mode" style="background:var(--gold-dim);">Marking</span>` : ""}
               <div class="muted" style="font-size:.78rem;">${r.courseName || ""}${r.roundDate ? " · " + r.roundDate : ""}${r.teeBox ? " · " + r.teeBox + " tees" : ""}</div>
             </div>
             <span class="pill mode" style="background:${r.status==='finished' ? 'var(--brand-dim)' : 'var(--gold-dim)'};">${r.status === "finished" ? "Final" : "Active"}</span>
@@ -1028,6 +1028,13 @@ function renderNewRound(){
       <h2>Holes — par &amp; stroke index</h2>
       <p class="muted">Quick default fills par 4 / sequential SI — edit any cell, or load a saved course above.</p>
       <div id="holesTable"></div>
+
+      <h2>Are you playing?</h2>
+      <div class="row" style="gap:18px;margin-bottom:4px;">
+        <label class="row" style="gap:6px;"><input type="radio" name="creatorRole" value="playing" checked> I'm playing</label>
+        <label class="row" style="gap:6px;"><input type="radio" name="creatorRole" value="marking"> I'm scoring/marking only</label>
+      </div>
+      <p class="muted" style="font-size:.78rem;margin:0 0 16px;">Marking-only rounds won't count as rounds you've played in your history.</p>
 
       <div class="row" style="margin-top:16px;">
         <button id="createBtn">Create round</button>
@@ -1324,6 +1331,8 @@ async function createRound(){
     };
   });
 
+  const creatorIsPlaying = (document.querySelector('input[name="creatorRole"]:checked') || {}).value !== "marking";
+
   msg.textContent = "Creating…";
   try{
     if (fourballCount > 1){
@@ -1331,7 +1340,7 @@ async function createRound(){
       const teeTimesByFourball = Array.from({length: fourballCount}, (_, idx) => readTeeTimeForFourball(idx + 1));
       await createCompetition({
         roundName, courseName, roundDate, teeBox, modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
-        teamAName, teamBName, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount
+        teamAName, teamBName, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount, creatorIsPlaying
       });
       return;
     }
@@ -1340,7 +1349,7 @@ async function createRound(){
 
     const roundRef = await addDoc(collection(db, "golf_rounds"), {
       name: roundName, courseName, roundDate, teeTime, teeBox, gameModes: modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
-      teamAName, teamBName, piekfynPairs, spectatorCode, ownerUid: currentUser ? currentUser.uid : null,
+      teamAName, teamBName, piekfynPairs, spectatorCode, ownerUid: currentUser ? currentUser.uid : null, creatorIsPlaying,
       status: "active", deleted: false, startedAt: null, finishedAt: null, createdAt: serverTimestamp()
     });
 
@@ -1376,7 +1385,7 @@ function defaultPairsFor(players){
 async function createCompetition(cfg){
   const {
     roundName, courseName, roundDate, teeBox, modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
-    teamAName, teamBName, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount
+    teamAName, teamBName, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount, creatorIsPlaying
   } = cfg;
   const isPiekfyn = modes.includes("piekfyn");
 
@@ -1394,7 +1403,7 @@ async function createCompetition(cfg){
       gameModes: modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
       teamAName: isPiekfyn ? teamAName : null, teamBName: isPiekfyn ? teamBName : null,
       piekfynPairs: isPiekfyn ? (isFirst ? piekfynPairs : defaultPairsFor(playersByFourball[fb - 1])) : null,
-      spectatorCode, competitionId: compRef.id, fourballIndex: fb, ownerUid: currentUser ? currentUser.uid : null,
+      spectatorCode, competitionId: compRef.id, fourballIndex: fb, ownerUid: currentUser ? currentUser.uid : null, creatorIsPlaying,
       status: "active", deleted: false, startedAt: null, finishedAt: null, createdAt: serverTimestamp()
     });
 
