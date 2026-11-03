@@ -62,6 +62,7 @@
     padding:9px 16px;border-radius:6px;cursor:pointer;
   }
   button.secondary{background:transparent;color:var(--green-dark);}
+  .cta-new-round{display:block;width:100%;padding:14px 16px;font-size:1.05rem;font-weight:700;border-radius:10px;margin:14px 0 22px;}
   button.ghost{background:transparent;color:var(--muted);border-color:var(--line);}
   button:disabled{opacity:.4;cursor:not-allowed;}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
@@ -517,7 +518,8 @@ async function render(){
   // scoring links above stay open to anyone with the link regardless of auth state.
   if (!authResolved) return renderAuthLoading();
   if (!currentUser) return renderSignInGate();
-  return renderSetup();
+  if (parts[0] === "new-round") return renderNewRound();
+  return renderHome();
 }
 
 /* ============================================================
@@ -823,11 +825,13 @@ function holesReadOnlyHtml(holes){
   return `<div class="grid-2 holes-editor-grid">${half("Front 9", 1)}${half("Back 9", 10)}</div>`;
 }
 
-function renderSetup(){
+function renderHome(){
   const app = document.getElementById("app");
   app.innerHTML = `
     ${renderAppHeader("PK Golf", "Set up a round, score it live, share a spectator link.")}
     <div class="content">
+
+    <button id="newRoundBtn" class="cta-new-round" type="button">+ New round</button>
 
     <div id="myRoundsSection" style="display:none;">
       <h2>My rounds</h2>
@@ -839,49 +843,10 @@ function renderSetup(){
 
     <h2>Competitions</h2>
     <div class="card" id="competitionsListCard"><p class="muted">Loading…</p></div>
-
-    <h2>New round</h2>
-    <div class="card">
-      <label>Load saved course (optional)</label>
-      <select id="savedCourseSelect"><option value="">— none —</option></select>
-      <p class="muted" style="font-size:.78rem;margin:4px 0 0;">Some ready-made courses come from OpenStreetMap contributors and may have mistakes — check them against the club scorecard.</p>
-
-      <label>Round name</label>
-      <input type="text" id="roundName" placeholder="e.g. Saturday Fourball">
-      <label>Course name</label>
-      <input type="text" id="courseName" placeholder="e.g. Leopard Creek Country Club">
-      <div class="grid-3">
-        <div>
-          <label>Date</label>
-          <input type="text" id="roundDate" placeholder="e.g. 2026-08-29" value="${new Date().toISOString().slice(0,10)}">
-        </div>
-        <div>
-          <label id="teeTimeLabel">Tee time</label>
-          <input type="text" id="teeTime" placeholder="e.g. 07:30">
-        </div>
-        <div>
-          <label>Tee box</label>
-          <select id="teeBox">${teeBoxOptions("White")}</select>
-        </div>
-      </div>
-
-      <h2>Game mode</h2>
-      <div id="modesBox"></div>
-
-      <h2>Players &amp; handicaps</h2>
-      <div id="playersBox"></div>
-
-      <h2>Holes — par &amp; stroke index</h2>
-      <p class="muted">Quick default fills par 4 / sequential SI — edit any cell, or load a saved course above.</p>
-      <div id="holesTable"></div>
-
-      <div class="row" style="margin-top:16px;">
-        <button id="createBtn">Create round</button>
-        <span id="createMsg" class="muted"></span>
-      </div>
-    </div>
     </div>
   `;
+
+  document.getElementById("newRoundBtn").onclick = () => { location.hash = "#/new-round"; };
 
   function populateCompetitionsList(){
     const card = document.getElementById("competitionsListCard");
@@ -980,7 +945,7 @@ function renderSetup(){
     card.querySelectorAll(".restore-item").forEach(btn => {
       btn.onclick = async () => {
         await updateDoc(doc(db, "golf_rounds", btn.dataset.round), { deleted: false, deletedAt: null });
-        renderSetup();
+        renderHome();
       };
     });
   });
@@ -1007,6 +972,58 @@ function renderSetup(){
       });
     });
   }
+}
+
+function renderNewRound(){
+  const app = document.getElementById("app");
+  app.innerHTML = `
+    ${renderAppHeader("New round", "Set up players, scoring and holes.")}
+    <div class="content">
+    <button id="backToHomeBtn" class="secondary" type="button" style="margin-bottom:14px;">← Back to rounds</button>
+
+    <div class="card">
+      <label>Load saved course (optional)</label>
+      <select id="savedCourseSelect"><option value="">— none —</option></select>
+      <p class="muted" style="font-size:.78rem;margin:4px 0 0;">Some ready-made courses come from OpenStreetMap contributors and may have mistakes — check them against the club scorecard.</p>
+
+      <label>Round name</label>
+      <input type="text" id="roundName" placeholder="e.g. Saturday Fourball">
+      <label>Course name</label>
+      <input type="text" id="courseName" placeholder="e.g. Leopard Creek Country Club">
+      <div class="grid-3">
+        <div>
+          <label>Date</label>
+          <input type="text" id="roundDate" placeholder="e.g. 2026-08-29" value="${new Date().toISOString().slice(0,10)}">
+        </div>
+        <div>
+          <label id="teeTimeLabel">Tee time</label>
+          <input type="text" id="teeTime" placeholder="e.g. 07:30">
+        </div>
+        <div>
+          <label>Tee box</label>
+          <select id="teeBox">${teeBoxOptions("White")}</select>
+        </div>
+      </div>
+
+      <h2>Game mode</h2>
+      <div id="modesBox"></div>
+
+      <h2>Players &amp; handicaps</h2>
+      <div id="playersBox"></div>
+
+      <h2>Holes — par &amp; stroke index</h2>
+      <p class="muted">Quick default fills par 4 / sequential SI — edit any cell, or load a saved course above.</p>
+      <div id="holesTable"></div>
+
+      <div class="row" style="margin-top:16px;">
+        <button id="createBtn">Create round</button>
+        <span id="createMsg" class="muted"></span>
+      </div>
+    </div>
+    </div>
+  `;
+
+  document.getElementById("backToHomeBtn").onclick = () => { location.hash = ""; };
 
   loadCoursesList().then(courses => {
     const select = document.getElementById("savedCourseSelect");
