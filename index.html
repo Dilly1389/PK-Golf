@@ -3003,7 +3003,7 @@ function buildMatchPlayBoard(players, holes, detail){
   for (const h of holes){
     const aNets = teamA.map(p => detail[p.id][h.holeNumber].net).filter(v => v != null);
     const bNets = teamB.map(p => detail[p.id][h.holeNumber].net).filter(v => v != null);
-    if (aNets.length < teamA.length || bNets.length < teamB.length) break;
+    if (aNets.length < teamA.length || bNets.length < teamB.length) continue;   // skip holes not scored yet (a round can start on any hole)
     const aBest = Math.min(...aNets), bBest = Math.min(...bNets);
     holesPlayed++;
     if (aBest < bBest) holesUp++;
@@ -3046,7 +3046,7 @@ function computeMatchPlay3Points(players, holes, detail){
 
   for (const h of holes){
     const nets = players.map(p => ({ p, net: detail[p.id][h.holeNumber].net }));
-    if (nets.some(n => n.net == null)) break;   // stop at the first hole anyone hasn't entered yet
+    if (nets.some(n => n.net == null)) continue;   // skip holes not scored yet (a round can start on any hole)
 
     const best = Math.min(...nets.map(n => n.net));
     const winners = nets.filter(n => n.net === best);
@@ -3483,7 +3483,7 @@ function computeMatch(holes, detail, sideAPlayers, sideBPlayers){
   for (const h of holes){
     const aNets = sideAPlayers.map(p => detail[p.id][h.holeNumber].net).filter(v => v != null);
     const bNets = sideBPlayers.map(p => detail[p.id][h.holeNumber].net).filter(v => v != null);
-    if (aNets.length < sideAPlayers.length || bNets.length < sideBPlayers.length) break;
+    if (aNets.length < sideAPlayers.length || bNets.length < sideBPlayers.length) continue;   // skip holes not scored yet (a round can start on any hole)
     const aBest = Math.min(...aNets), bBest = Math.min(...bNets);
     holesPlayed++;
     if (aBest < bBest) holesUp++;
