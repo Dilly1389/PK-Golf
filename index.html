@@ -162,6 +162,13 @@
   .pf-fb-card{padding:14px 16px;}
   .pf-match-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;}
   .pf-match-row + .pf-match-row{border-top:1px solid var(--line);}
+  .pf-match-row[data-match]{cursor:pointer;}
+  .pf-match-row[data-match]:active{background:var(--gold-dim);}
+  .pf-match-row .pf-chev{color:var(--muted);font-size:1.1rem;line-height:1;margin-left:2px;}
+  table.scorecard-table td.mc-up{background:#e6f2e6;color:#1d5e1d;font-weight:800;}
+  table.scorecard-table td.mc-down{background:#fbe8e8;color:var(--danger);font-weight:800;}
+  table.scorecard-table td.mc-sq{font-weight:700;color:var(--muted);}
+  table.scorecard-table tr.mc-side-row td.label-col{font-weight:800;}
   .pf-pill{font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;flex-shrink:0;}
   .pf-pill.status-up{background:var(--brand-dark);color:#fff;}
   .pf-pill.status-down{background:var(--team-b);color:#fff;}
@@ -3618,8 +3625,8 @@ function buildPiekfynCompetitionBoard(comp, bundles){
     inProgressCount += pts.inProgress;
 
     const matchRows = [
-      ...pts.matches.map(({pA,pB,m}) => ({ label: `${pA.name} vs ${pB.name}`, text: formatMatchStatus(m, pA.name, pB.name), cls: piekfynStatusClass(m) })),
-      { label: `${teamAName} vs ${teamBName} (fourball)`, text: formatMatchStatus(pts.teamMatch, teamAName, teamBName), cls: piekfynStatusClass(pts.teamMatch) },
+      ...pts.matches.map(({pA,pB,m}, i) => ({ key: String(i), label: `${pA.name} vs ${pB.name}`, text: formatMatchStatus(m, pA.name, pB.name), cls: piekfynStatusClass(m) })),
+      { key: "team", label: `${teamAName} vs ${teamBName} (fourball)`, text: formatMatchStatus(pts.teamMatch, teamAName, teamBName), cls: piekfynStatusClass(pts.teamMatch) },
     ];
 
     return `
@@ -3630,9 +3637,9 @@ function buildPiekfynCompetitionBoard(comp, bundles){
         </div>
         <div class="muted" style="font-size:.78rem;margin:2px 0 6px;">${bundle.players.filter(p=>p.team==="A").map(p=>p.name).join(" & ")} &nbsp;vs&nbsp; ${bundle.players.filter(p=>p.team==="B").map(p=>p.name).join(" & ")}</div>
         ${matchRows.map(r => `
-          <div class="pf-match-row">
+          <div class="pf-match-row" data-match="${r.key}" data-round="${bundle.round.id}" role="button" tabindex="0">
             <span style="font-size:.84rem;">${r.label}</span>
-            <span class="pf-pill ${r.cls}">${r.text}</span>
+            <span class="row" style="gap:2px;flex-wrap:nowrap;"><span class="pf-pill ${r.cls}">${r.text}</span><span class="pf-chev">&rsaquo;</span></span>
           </div>`).join("")}
         <div class="row" style="justify-content:center;align-items:baseline;gap:7px;margin-top:9px;padding-top:9px;border-top:1px solid var(--line);">
           <strong style="color:var(--brand-dark);font-size:.92rem;">${pts.teamAPts}</strong>
@@ -4183,9 +4190,133 @@ function openBetterballScorecard(){
   overlay.addEventListener("click", (e) => { if (e.target === overlay) closeScorecard(); });
 }
 
+
+/* ---------- Piekfyn match scorecard (tap a match on the Fourballs tab) ---------- */
+// Rounds can start on any hole (shotgun), so the running count has to follow the order the
+// holes were actually played, not 1..18. Start = a scored hole whose previous hole (wrapping
+// 1 -> 18) wasn't scored.
+function inferPlayOrder(holes, detail, players){
+  const scored = h => players.some(p => detail[p.id][h.holeNumber].gross != null);
+  const nums = holes.map(h => h.holeNumber);
+  const scoredNums = holes.filter(scored).map(h => h.holeNumber);
+  if (!scoredNums.length) return nums;
+  const has = n => scoredNums.includes(n);
+  const prev = n => n === nums[0] ? nums[nums.length - 1] : n - 1;
+  const start = scoredNums.find(n => !has(prev(n))) || nums[0];
+  const i = nums.indexOf(start);
+  return [...nums.slice(i), ...nums.slice(0, i)];
+}
+
+function openMatchScorecard(bundle, matchKey){
+  const { round, holes, players } = bundle;
+  const detail = computeDetail(bundle);
+  const byOrder = {};
+  players.forEach(p => byOrder[p.sortOrder] = p);
+  const teamAName = round.teamAName || "Team A", teamBName = round.teamBName || "Team B";
+
+  let sideA, sideB, nameA, nameB, title;
+  if (matchKey === "team"){
+    sideA = players.filter(p => p.team === "A"); sideB = players.filter(p => p.team === "B");
+    nameA = teamAName; nameB = teamBName;
+    title = `${teamAName} vs ${teamBName} (fourball)`;
+  } else {
+    const pair = (round.piekfynPairs || [])[parseInt(matchKey, 10)];
+    const pA = pair && byOrder[pair.a], pB = pair && byOrder[pair.b];
+    if (!pA || !pB) return;
+    sideA = [pA]; sideB = [pB]; nameA = pA.name; nameB = pB.name;
+    title = `${pA.name} vs ${pB.name}`;
+  }
+
+  // Hole-by-hole result, in playing order. diff: +1 side A won the hole, -1 side B won, 0 halved.
+  const best = (side, h) => {
+    const nets = side.map(p => detail[p.id][h.holeNumber].net);
+    return nets.some(n => n == null) ? null : Math.min(...nets);
+  };
+  const result = {}; // holeNumber -> { diff, running (from side A's view) }
+  let running = 0;
+  const holeByNum = {}; holes.forEach(h => holeByNum[h.holeNumber] = h);
+  inferPlayOrder(holes, detail, players).forEach(n => {
+    const h = holeByNum[n];
+    const a = best(sideA, h), b = best(sideB, h);
+    if (a == null || b == null) return;
+    const diff = a < b ? 1 : (b < a ? -1 : 0);
+    running += diff;
+    result[n] = { diff, running, aBest: a, bBest: b };
+  });
+
+  const m = computeMatch(holes, detail, sideA, sideB);
+  // Columns follow the order the holes were played (a shotgun start on 10 reads 10..18, 1..9).
+  const cols = inferPlayOrder(holes, detail, players).map(n => holeByNum[n]);
+
+  // The running count sits in each side's own row: up when they win a hole, down when they lose it.
+  const statusCells = (subset, sign) => subset.map(h => {
+    const r = result[h.holeNumber];
+    if (!r) return `<td>-</td>`;
+    const v = r.running * sign;
+    const cls = v > 0 ? "mc-up" : (v < 0 ? "mc-down" : "mc-sq");
+    return `<td class="${cls}">${v > 0 ? v + " UP" : (v < 0 ? Math.abs(v) + " DN" : "AS")}</td>`;
+  }).join("");
+  const nets = (subset, side, p) => subset.map(h => {
+    const v = detail[p.id][h.holeNumber].net;
+    if (v == null) return `<td>-</td>`;
+    const counted = side.length > 1 && best(side, h) === v;   // the better-ball score that counts
+    return `<td>${counted ? `<span class="circled-score">${v}</span>` : v}</td>`;
+  }).join("");
+  const sideRows = (side, sideName, sign) => `
+    ${side.map(p => `
+      <tr><td class="label-col">${p.name}${side.length > 1 ? "" : ""}</td>${nets(cols, side, p)}</tr>`).join("")}
+    <tr class="mc-side-row"><td class="label-col">${side.length > 1 ? sideName : "Match"}</td>${statusCells(cols, sign)}</tr>`;
+
+  const html = `
+    <div class="scorecard-overlay" id="scorecardOverlay">
+      <div class="scorecard-panel">
+        <button class="scorecard-close" id="scorecardCloseBtn">&times;</button>
+        <div class="scorecard-heading">
+          <div class="course">${round.courseName}</div>
+          <div class="meta">${round.roundDate || ""}${round.teeBox ? " · " + round.teeBox + " tees" : ""}</div>
+        </div>
+        <div class="scorecard-player-name">${title}</div>
+        <p style="margin:2px 0 10px;font-weight:700;">${formatMatchStatus(m, nameA, nameB)}</p>
+        <div class="scorecard-table-wrap">
+        <table class="scorecard-table">
+          <thead><tr>
+            <th style="text-align:left;">Hole</th>
+            ${cols.map(h=>`<th>${h.holeNumber}</th>`).join("")}
+          </tr></thead>
+          <tbody>
+            <tr><td class="label-col">Par</td>${cols.map(h=>`<td>${h.par}</td>`).join("")}</tr>
+            <tr><td class="label-col">S.I.</td>${cols.map(h=>`<td>${h.strokeIndex}</td>`).join("")}</tr>
+            ${sideRows(sideA, nameA, 1)}
+            ${sideRows(sideB, nameB, -1)}
+          </tbody>
+        </table>
+        </div>
+        <p class="muted" style="font-size:.75rem;margin:10px 0 0;">Net scores${matchKeyIsTeam(matchKey) ? " (circled = the better ball that counts)" : ""}. The count in each row is that side's lead: it goes up when they win a hole and down when they lose one, in the order the holes were played.</p>
+      </div>
+    </div>`;
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = html;
+  document.body.appendChild(wrapper.firstElementChild);
+  const overlay = document.getElementById("scorecardOverlay");
+  document.getElementById("scorecardCloseBtn").onclick = closeScorecard;
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeScorecard(); });
+}
+function matchKeyIsTeam(k){ return k === "team"; }
+
 let competitionBundlesForLinks = [];   // set by renderCompetition/renderStandings so player links on a
                                         // combined leaderboard open the right fourball's scorecard
 document.addEventListener("click", (e) => {
+  const matchRow = e.target.closest(".pf-match-row[data-match]");
+  if (matchRow){
+    // Competition/standings pages keep their live bundles in competitionBundlesForLinks; the
+    // scorer and spectator pages keep theirs in currentBundle.
+    const onCompPage = document.getElementById("competitionBody") || document.getElementById("standingsBody");
+    const bundle = onCompPage
+      ? competitionBundlesForLinks.find(b => b.round.id === matchRow.dataset.round)
+      : currentBundle;
+    if (bundle) openMatchScorecard(bundle, matchRow.dataset.match);
+    return;
+  }
   const link = e.target.closest(".player-name-link");
   if (link){
     if (link.dataset.round){
