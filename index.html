@@ -2560,6 +2560,7 @@ function renderBoards(){
     html += `<h2 style="margin-top:20px;">Full leaderboard</h2>` + buildCompetitionBody({}, mode, allBundles);
   }
   document.getElementById("boards").innerHTML = html;
+  if (round.gameModes.includes("piekfyn")) wirePiekfynTabs();
 }
 
 /* ============================================================
@@ -2581,35 +2582,41 @@ async function renderSpectator(code){
   const bundle = await loadRoundBundle(roundId);
   currentBundle = bundle;
 
+  function renderSpectatorBoards(){
+    document.getElementById("boards").innerHTML = buildBoardsHtml(bundle, {alwaysIncludeStableford: false});
+    if (bundle.round.gameModes.includes("piekfyn")) wirePiekfynTabs();
+  }
+
   app.innerHTML = `
     ${renderAppHeader(bundle.round.name, bundle.round.courseName, bundle.round.status === "finished" ? "final" : "live")}
     <div class="content">
     <div>${bundle.round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
     ${bundle.round.status === "finished" ? `<div class="card" style="text-align:center;border-color:var(--brand);"><strong>Final result</strong></div>` : ""}
     <h2>Leaderboards</h2>
-    <div id="boards">${buildBoardsHtml(bundle, {alwaysIncludeStableford: false})}</div>
+    <div id="boards"></div>
     </div>
   `;
+  renderSpectatorBoards();
 
   if (spectatorUnsub) spectatorUnsub();
   spectatorUnsub = onSnapshot(collection(db, "golf_rounds", roundId, "scores"), snap => {
     bundle.scores = snap.docs.map(d => d.data());
     currentBundle = bundle;
-    document.getElementById("boards").innerHTML = buildBoardsHtml(bundle, {alwaysIncludeStableford: false});
+    renderSpectatorBoards();
   });
 
   if (spectatorBbbUnsub) spectatorBbbUnsub();
   spectatorBbbUnsub = onSnapshot(collection(db, "golf_rounds", roundId, "bbb"), snap => {
     bundle.bbb = snap.docs.map(d => d.data());
     currentBundle = bundle;
-    document.getElementById("boards").innerHTML = buildBoardsHtml(bundle, {alwaysIncludeStableford: false});
+    renderSpectatorBoards();
   });
 
   if (spectatorScrambleUnsub) spectatorScrambleUnsub();
   spectatorScrambleUnsub = onSnapshot(collection(db, "golf_rounds", roundId, "scrambleDrives"), snap => {
     bundle.scrambleDrives = snap.docs.map(d => d.data());
     currentBundle = bundle;
-    document.getElementById("boards").innerHTML = buildBoardsHtml(bundle, {alwaysIncludeStableford: false});
+    renderSpectatorBoards();
   });
 }
 
@@ -2873,15 +2880,18 @@ function buildBoardsHtml(bundle, opts){
   // false), which shows only the actual mode(s) being played. Never duplicated
   // when Stableford is itself the selected mode.
   const isStablefordMode = round.gameModes.includes("stableford");
+  const isPiekfynMode = round.gameModes.includes("piekfyn");
   const alwaysIncludeStableford = opts.alwaysIncludeStableford !== false;
-  if (isStablefordMode || alwaysIncludeStableford) html += buildStablefordBoard(players, holes, detail);
+  // Piekfyn's own board (below) already has an Individual result tab covering this same
+  // per-player Stableford data, so skip the standalone board here to avoid showing it twice.
+  if ((isStablefordMode || alwaysIncludeStableford) && !isPiekfynMode) html += buildStablefordBoard(players, holes, detail);
   if (round.gameModes.includes("stroke")) html += buildStrokeBoard(players, holes, detail);
   if (round.gameModes.includes("matchplay")) html += buildMatchPlayBoard(players, holes, detail);
   if (round.gameModes.includes("matchplay3")) html += buildMatchPlay3Board(bundle, detail);
   if (round.gameModes.includes("betterball")) html += buildBetterballBoard(bundle, detail) + buildBetterballContributionBoard(bundle, detail);
   if (round.gameModes.includes("alliance")) html += buildAllianceBoard(bundle, detail) + buildAllianceContributionBoard(bundle, detail);
   if (round.gameModes.includes("bbb")) html += buildBBBBoard(bundle, detail);
-  if (round.gameModes.includes("piekfyn")) html += buildPiekfynBoard(bundle, detail);
+  if (isPiekfynMode) html += buildPiekfynRoundBoard(bundle);
   if (round.competitionId && !round.gameModes.includes("piekfyn") && opts.includeStandingsLink !== false){
     html += `<div class="team-scorecard-link" data-standings-link="${round.competitionId}">Part of a multi-fourball competition — view overall leaderboard</div>`;
   }
@@ -3276,7 +3286,7 @@ function buildBBBBoard(bundle, detail){
 
 /* ============================================================
    MULTI-FOURBALL COMPETITION BOARDS (non-Piekfyn modes)
-   Piekfyn already links fourballs together via computePiekfynPoints/buildPiekfynBoard,
+   Piekfyn already links fourballs together via computePiekfynPoints/buildPiekfynCompetitionBoard,
    below. These give the other modes the same ability: several fourballs sharing one
    competition, with a leaderboard that makes sense for that mode.
    ============================================================ */
@@ -3508,34 +3518,15 @@ function piekfynStatusClass(m){
   return m.holesUp === 0 ? "status-all-sq" : (m.holesUp > 0 ? "status-up" : "status-down");
 }
 
-function buildPiekfynBoard(bundle, detail){
-  const { round } = bundle;
-  const teamAName = round.teamAName || "Team A";
-  const teamBName = round.teamBName || "Team B";
-  const { matches, teamMatch, teamAPts, teamBPts, decidedCount } = computePiekfynPoints(bundle, detail);
-
-  function matchLine(label, m, nameA, nameB){
-    return `<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);">
-      <span>${label}</span>
-      <span class="${piekfynStatusClass(m)}">${formatMatchStatus(m, nameA, nameB)}</span>
-    </div>`;
-  }
-
-  return `
-  <div class="card">
-    <strong>Piekfyn Kompetisie</strong> <span class="muted">— ${teamAName} vs ${teamBName}</span>
-    ${round.competitionId ? `<div class="team-scorecard-link" data-standings-link="${round.competitionId}">Part of a multi-fourball competition — view overall standings</div>` : ""}
-    <div style="margin-top:8px;">
-      ${matches.map(({pA,pB,m}) => matchLine(`${playerLink(pA)} vs ${playerLink(pB)}`, m, pA.name, pB.name)).join("")}
-      ${matchLine(`${teamAName} vs ${teamBName} (fourball)`, teamMatch, teamAName, teamBName)}
-    </div>
-    <p style="font-size:1.2rem;margin:12px 0 0;text-align:center;">
-      <strong>${teamAName} ${teamAPts}</strong> — <strong>${teamBPts} ${teamBName}</strong>
-    </p>
-    <p class="muted" style="text-align:center;font-size:.78rem;margin-top:2px;">
-      ${decidedCount < 3 ? `${decidedCount} of 3 matches decided` : (teamAPts>teamBPts ? `${teamAName} win` : teamAPts<teamBPts ? `${teamBName} win` : "Tied — halved competition")}
-    </p>
-  </div>`;
+// Same Ryder Cup-style scoreboard as a multi-fourball competition (buildPiekfynCompetitionBoard
+// below), reused for a single standalone Piekfyn round by treating it as a one-fourball
+// "competition" — the round itself already carries teamAName/teamBName, so it stands in for
+// the comp argument directly.
+function buildPiekfynRoundBoard(bundle){
+  const linkHtml = bundle.round.competitionId
+    ? `<div class="team-scorecard-link" data-standings-link="${bundle.round.competitionId}">Part of a multi-fourball competition — view overall standings</div>`
+    : "";
+  return linkHtml + buildPiekfynCompetitionBoard(bundle.round, [bundle]);
 }
 
 // Which Piekfyn tab is open on the competition/standings scoreboard — module-level so it
