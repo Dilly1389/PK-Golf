@@ -244,7 +244,8 @@ const firebaseConfig = {
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
 import {
   getFirestore, collection, doc, setDoc, addDoc, getDoc, getDocs, updateDoc, deleteDoc,
-  query, where, orderBy, onSnapshot, writeBatch, serverTimestamp, limit
+  query, where, orderBy, onSnapshot, writeBatch, serverTimestamp, limit,
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager
 } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 import {
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
@@ -257,7 +258,14 @@ let db = null;
 let auth = null;
 if (configured){
   const app = initializeApp(firebaseConfig);
-  db = getFirestore(app);
+  // Persistent cache: scores captured with no signal on the course are kept on the device and
+  // synced when the connection returns, even if the page is reloaded in between. Falls back to
+  // the default in-memory cache where IndexedDB isn't available.
+  try{
+    db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+  } catch(err){
+    db = getFirestore(app);
+  }
   auth = getAuth(app);
 }
 
@@ -604,7 +612,19 @@ function parseHash(){
 }
 window.addEventListener("hashchange", render);
 
+// Every view opens its own live listeners. Without this, leaving a view left them running and they
+// kept re-rendering into whatever page came next (both scorer and spectator draw into #boards).
+function stopLiveListeners(){
+  [scorerUnsub, scorerBbbUnsub, scorerScrambleUnsub, spectatorUnsub, spectatorBbbUnsub, spectatorScrambleUnsub]
+    .forEach(u => { if (u) u(); });
+  scorerUnsub = scorerBbbUnsub = scorerScrambleUnsub = null;
+  spectatorUnsub = spectatorBbbUnsub = spectatorScrambleUnsub = null;
+  siblingUnsubs.forEach(u => u()); siblingUnsubs = [];
+  competitionUnsubs.forEach(u => u()); competitionUnsubs = [];
+}
+
 async function render(){
+  stopLiveListeners();
   const parts = parseHash();
   const app = document.getElementById("app");
 
@@ -1760,6 +1780,7 @@ async function renderScorer(roundId){
   if (scorerUnsub) scorerUnsub();
   scorerUnsub = onSnapshot(collection(db, "golf_rounds", roundId, "scores"), snap => {
     scorerData.scores = snap.docs.map(d => d.data());
+    renderEntry();
     renderBoards();
   });
 
@@ -1889,6 +1910,7 @@ async function renderScoringOnly(roundId){
   if (scorerUnsub) scorerUnsub();
   scorerUnsub = onSnapshot(collection(db, "golf_rounds", roundId, "scores"), snap => {
     scorerData.scores = snap.docs.map(d => d.data());
+    renderEntry();
     renderBoards();
   });
 
@@ -2481,25 +2503,33 @@ async function saveBBB(category, playerId){
   renderBoards();
 }
 
-async function saveScore(playerId, val){
-  const docId = `${playerId}_${scorerHole}`;
-  await setDoc(doc(db, "golf_rounds", scorerData.round.id, "scores", docId), {
-    playerId, holeNumber: scorerHole, grossStrokes: val, updatedAt: serverTimestamp()
-  });
-  const idx = scorerData.scores.findIndex(s => s.playerId === playerId && s.holeNumber === scorerHole);
-  const rec = { playerId, holeNumber: scorerHole, grossStrokes: val };
+// Scores are applied to the screen first and written to Firestore after: setDoc only resolves once
+// the server acknowledges, so awaiting it first left the chip, thru-count and every board frozen
+// on a weak course signal. The write is queued by the SDK either way; a failure is surfaced.
+function showScoreError(err){
+  console.error(err);
+  const el = document.getElementById("connIndicator");
+  if (el){ el.className = "conn-indicator conn-offline"; el.innerHTML = `<span class="conn-dot"></span>Score not saved - retry`; }
+}
+function saveScore(playerId, val){
+  const hole = scorerHole;
+  const idx = scorerData.scores.findIndex(s => s.playerId === playerId && s.holeNumber === hole);
+  const rec = { playerId, holeNumber: hole, grossStrokes: val };
   if (idx >= 0) scorerData.scores[idx] = rec; else scorerData.scores.push(rec);
   renderEntry();
   renderBoards();
+  return setDoc(doc(db, "golf_rounds", scorerData.round.id, "scores", `${playerId}_${hole}`), {
+    playerId, holeNumber: hole, grossStrokes: val, updatedAt: serverTimestamp()
+  }).catch(showScoreError);
 }
 
-async function clearScore(playerId){
-  const docId = `${playerId}_${scorerHole}`;
-  await deleteDoc(doc(db, "golf_rounds", scorerData.round.id, "scores", docId));
-  const idx = scorerData.scores.findIndex(s => s.playerId === playerId && s.holeNumber === scorerHole);
+function clearScore(playerId){
+  const hole = scorerHole;
+  const idx = scorerData.scores.findIndex(s => s.playerId === playerId && s.holeNumber === hole);
   if (idx >= 0) scorerData.scores.splice(idx, 1);
   renderEntry();
   renderBoards();
+  return deleteDoc(doc(db, "golf_rounds", scorerData.round.id, "scores", `${playerId}_${hole}`)).catch(showScoreError);
 }
 
 // While scoring a fourball that's part of a (non-Piekfyn) competition, its own Leaderboards tab
@@ -3514,7 +3544,19 @@ function computePiekfynPoints(bundle, detail){
   tally(teamMatch);
 
   const decidedCount = matches.filter(({m}) => m.decided).length + (teamMatch.decided ? 1 : 0);
-  return { matches, teamMatch, teamAPts, teamBPts, decidedCount };
+
+  // "If play stopped now": decided matches as above, plus every match in progress counted for
+  // whoever is up (halves for all square). Decided points alone sit at 0-0 until a match is
+  // mathematically over, which tells nobody what's happening live.
+  let liveA = teamAPts, liveB = teamBPts, inProgress = 0;
+  [...matches.map(x => x.m), teamMatch].forEach(m => {
+    if (m.decided || m.holesPlayed === 0) return;
+    inProgress++;
+    if (m.holesUp > 0) liveA += 1;
+    else if (m.holesUp < 0) liveB += 1;
+    else { liveA += 0.5; liveB += 0.5; }
+  });
+  return { matches, teamMatch, teamAPts, teamBPts, decidedCount, liveA, liveB, inProgress };
 }
 
 function piekfynStatusClass(m){
@@ -3564,13 +3606,16 @@ function buildPiekfynCompetitionBoard(comp, bundles){
   const teamBName = comp.teamBName || "Team B";
   const isMulti = bundles.length > 1; // single standalone round: the Fourball column has nothing to say
 
-  let teamATotal = 0, teamBTotal = 0, decidedCount = 0;
+  let teamATotal = 0, teamBTotal = 0, decidedCount = 0, liveATotal = 0, liveBTotal = 0, inProgressCount = 0;
   const fourballCards = bundles.map((bundle, idx) => {
     const detail = computeDetail(bundle);
     const pts = computePiekfynPoints(bundle, detail);
     teamATotal += pts.teamAPts;
     teamBTotal += pts.teamBPts;
     decidedCount += pts.decidedCount;
+    liveATotal += pts.liveA;
+    liveBTotal += pts.liveB;
+    inProgressCount += pts.inProgress;
 
     const matchRows = [
       ...pts.matches.map(({pA,pB,m}) => ({ label: `${pA.name} vs ${pB.name}`, text: formatMatchStatus(m, pA.name, pB.name), cls: piekfynStatusClass(m) })),
@@ -3581,7 +3626,7 @@ function buildPiekfynCompetitionBoard(comp, bundles){
       <div class="card pf-fb-card">
         <div class="row" style="justify-content:space-between;align-items:baseline;">
           <strong style="font-size:.92rem;">Fourball ${bundle.round.fourballIndex || idx+1}</strong>
-          <span class="muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;">${pts.decidedCount === 3 ? "Final" : "In progress"}</span>
+          <span class="muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;">${pts.decidedCount === 3 ? "Final" : (pts.teamMatch.holesPlayed === 0 && !pts.inProgress ? "Not started" : "In progress")}</span>
         </div>
         <div class="muted" style="font-size:.78rem;margin:2px 0 6px;">${bundle.players.filter(p=>p.team==="A").map(p=>p.name).join(" & ")} &nbsp;vs&nbsp; ${bundle.players.filter(p=>p.team==="B").map(p=>p.name).join(" & ")}</div>
         ${matchRows.map(r => `
@@ -3660,6 +3705,7 @@ function buildPiekfynCompetitionBoard(comp, bundles){
       <span class="muted">${decidedCount} of ${totalMatches} matches decided</span>
       <span class="muted">${pointsToWin} points wins the Kompetisie</span>
     </div>
+    ${inProgressCount ? `<div class="muted" style="font-size:.78rem;margin-top:8px;text-align:center;">Live, if play stopped now: <strong style="color:var(--brand-dark);">${teamAName} ${liveATotal}</strong> &ndash; <strong style="color:var(--team-b);">${liveBTotal} ${teamBName}</strong> (${inProgressCount} match${inProgressCount===1?"":"es"} in progress)</div>` : ""}
   </div>
 
   <div class="pf-tab-bar">
