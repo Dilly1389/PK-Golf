@@ -3557,6 +3557,7 @@ function wirePiekfynTabs(){
 function buildPiekfynCompetitionBoard(comp, bundles){
   const teamAName = comp.teamAName || "Team A";
   const teamBName = comp.teamBName || "Team B";
+  const isMulti = bundles.length > 1; // single standalone round: the Fourball column has nothing to say
 
   let teamATotal = 0, teamBTotal = 0, decidedCount = 0;
   const fourballCards = bundles.map((bundle, idx) => {
@@ -3669,12 +3670,12 @@ function buildPiekfynCompetitionBoard(comp, bundles){
   <div id="pfTabIndividual" class="pf-tab-panel${isTab("individual")}">
     <div class="card">
       <table>
-        <tr><th class="name-col">Player</th><th>Team</th><th>Fourball</th><th>Thru</th><th>Points</th></tr>
+        <tr><th class="name-col">Player</th><th>Team</th>${isMulti ? "<th>Fourball</th>" : ""}<th>Thru</th><th>Points</th></tr>
         ${indivRows.map((r,i) => `
           <tr class="${i===0 && r.count ? 'leader-row' : ''}">
             <td class="name-col">${playerLink(r.p, r.roundId)}</td>
             <td><span class="pf-team-tag pf-team-${(r.team||"").toLowerCase()}">${r.team || "-"}</span></td>
-            <td class="muted">Fourball ${r.fourballIndex || "?"}</td>
+            ${isMulti ? `<td class="muted">Fourball ${r.fourballIndex || "?"}</td>` : ""}
             <td>${r.count}</td>
             <td>${r.count ? r.sum : "-"}</td>
           </tr>`).join("")}
@@ -3685,11 +3686,11 @@ function buildPiekfynCompetitionBoard(comp, bundles){
   <div id="pfTabTeam" class="pf-tab-panel${isTab("team")}">
     <div class="card">
       <table>
-        <tr><th class="name-col">Pairing</th><th>Fourball</th><th>Thru</th><th>Combined</th></tr>
+        <tr><th class="name-col">Pairing</th>${isMulti ? "<th>Fourball</th>" : ""}<th>Thru</th><th>Combined</th></tr>
         ${pairRows.map((r,i) => `
           <tr class="${i===0 && r.count ? 'leader-row' : ''}">
             <td class="name-col">${r.label} <span class="pf-team-tag pf-team-${r.team.toLowerCase()}">${r.team}</span></td>
-            <td class="muted">Fourball ${r.fourballIndex || "?"}</td>
+            ${isMulti ? `<td class="muted">Fourball ${r.fourballIndex || "?"}</td>` : ""}
             <td>${r.count}</td>
             <td>${r.count ? r.sum : "-"}</td>
           </tr>`).join("")}
