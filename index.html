@@ -969,6 +969,40 @@ function holesReadOnlyHtml(holes){
   return `<div class="grid-2 holes-editor-grid">${half("Front 9", 1)}${half("Back 9", 10)}</div>`;
 }
 
+// The installed app always reopens at /golf (the #/score/... part of the address is lost), and the
+// home screen used to list only competitions - so a standalone round could only be reached through
+// Playing history. Remember the round being scored on this device so Home can offer it straight away.
+function rememberRound(round, route){
+  try{ localStorage.setItem("pkgolf_last_round", JSON.stringify({ id: round.id, route })); } catch(e){}
+}
+function recallRound(){
+  try{ return JSON.parse(localStorage.getItem("pkgolf_last_round") || "null"); } catch(e){ return null; }
+}
+async function loadCurrentRounds(){
+  const routeById = {};
+  const found = {};
+  if (currentUser){
+    try{
+      (await loadMyRoundsList(currentUser.uid))
+        .filter(r => !r.deleted && r.status !== "finished" && !r.competitionId)
+        .forEach(r => { found[r.id] = r; routeById[r.id] = "score"; });
+    } catch(e){}
+  }
+  const last = recallRound();
+  if (last && last.id && !found[last.id]){
+    try{
+      const snap = await getDoc(doc(db, "golf_rounds", last.id));
+      if (snap.exists()){
+        const r = { id: snap.id, ...snap.data() };
+        if (!r.deleted && r.status !== "finished"){ found[r.id] = r; routeById[r.id] = last.route === "play" ? "play" : "score"; }
+      }
+    } catch(e){}
+  }
+  return Object.values(found)
+    .sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+    .map(r => ({ r, route: routeById[r.id] }));
+}
+
 function renderHome(){
   const app = document.getElementById("app");
   app.innerHTML = `
@@ -979,10 +1013,33 @@ function renderHome(){
 
     <button class="btn-pill-secondary" id="historyBtn" type="button">🕒 Playing history</button>
 
+    <div id="currentRoundsBlock" style="display:none;">
+      <h2>Current round</h2>
+      <div class="card" id="currentRoundsCard"></div>
+    </div>
+
     <h2>Competitions</h2>
     <div class="card" id="competitionsListCard"><p class="muted">Loading…</p></div>
     </div>
   `;
+
+  loadCurrentRounds().then(list => {
+    const block = document.getElementById("currentRoundsBlock");
+    const card = document.getElementById("currentRoundsCard");
+    if (!block || !card || !list.length) return;
+    card.innerHTML = list.map(({r, route}) => `
+      <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);">
+        <div class="current-round-item" data-round="${r.id}" data-route="${route}" style="cursor:pointer;flex:1;">
+          <strong>${r.name}</strong>
+          <div class="muted" style="font-size:.78rem;">${r.courseName || ""}${r.roundDate ? " · " + r.roundDate : ""}</div>
+        </div>
+        <span class="pill mode" style="background:var(--gold-dim);">Resume</span>
+      </div>`).join("");
+    card.querySelectorAll(".current-round-item").forEach(el => {
+      el.addEventListener("click", () => { location.hash = `#/${el.dataset.route}/${el.dataset.round}`; });
+    });
+    block.style.display = "";
+  });
 
   document.getElementById("newRoundBtn").onclick = () => { location.hash = "#/new-round"; };
   document.getElementById("historyBtn").onclick = () => { location.hash = "#/history"; };
@@ -1713,6 +1770,7 @@ async function renderScorer(roundId){
   if (!scorerData.round){ app.innerHTML = `<p>Round not found.</p>`; return; }
   scheduleEditMode = false;
   piekfynActiveTab = "fourballs";
+  rememberRound(scorerData.round, "score");
 
   const spectatorUrl = location.origin + location.pathname + `#/spectate/${scorerData.round.spectatorCode}`;
   const finished = scorerData.round.status === "finished";
@@ -1840,6 +1898,7 @@ async function renderScoringOnly(roundId){
   if (!scorerData.round){ app.innerHTML = `<p>Round not found.</p>`; return; }
   scheduleEditMode = false;
   piekfynActiveTab = "fourballs";
+  rememberRound(scorerData.round, "play");
 
   const spectatorUrl = location.origin + location.pathname + `#/spectate/${scorerData.round.spectatorCode}`;
   const finished = scorerData.round.status === "finished";
@@ -3613,16 +3672,15 @@ function buildPiekfynCompetitionBoard(comp, bundles){
   const teamBName = comp.teamBName || "Team B";
   const isMulti = bundles.length > 1; // single standalone round: the Fourball column has nothing to say
 
-  let teamATotal = 0, teamBTotal = 0, decidedCount = 0, liveATotal = 0, liveBTotal = 0, inProgressCount = 0;
+  let teamATotal = 0, teamBTotal = 0, decidedCount = 0;
   const fourballCards = bundles.map((bundle, idx) => {
     const detail = computeDetail(bundle);
     const pts = computePiekfynPoints(bundle, detail);
-    teamATotal += pts.teamAPts;
-    teamBTotal += pts.teamBPts;
+    // Running points: a match counts for whoever is up in it right now (halved if all square), so
+    // the headline moves hole by hole instead of sitting at 0-0 until a match is mathematically over.
+    teamATotal += pts.liveA;
+    teamBTotal += pts.liveB;
     decidedCount += pts.decidedCount;
-    liveATotal += pts.liveA;
-    liveBTotal += pts.liveB;
-    inProgressCount += pts.inProgress;
 
     const matchRows = [
       ...pts.matches.map(({pA,pB,m}, i) => ({ key: String(i), label: `${pA.name} vs ${pB.name}`, text: formatMatchStatus(m, pA.name, pB.name), cls: piekfynStatusClass(m) })),
@@ -3642,9 +3700,9 @@ function buildPiekfynCompetitionBoard(comp, bundles){
             <span class="row" style="gap:2px;flex-wrap:nowrap;"><span class="pf-pill ${r.cls}">${r.text}</span><span class="pf-chev">&rsaquo;</span></span>
           </div>`).join("")}
         <div class="row" style="justify-content:center;align-items:baseline;gap:7px;margin-top:9px;padding-top:9px;border-top:1px solid var(--line);">
-          <strong style="color:var(--brand-dark);font-size:.92rem;">${pts.teamAPts}</strong>
+          <strong style="color:var(--brand-dark);font-size:.92rem;">${pts.liveA}</strong>
           <span class="muted" style="font-size:.7rem;">points</span>
-          <strong style="color:var(--team-b);font-size:.92rem;">${pts.teamBPts}</strong>
+          <strong style="color:var(--team-b);font-size:.92rem;">${pts.liveB}</strong>
         </div>
       </div>`;
   }).join("");
@@ -3712,7 +3770,6 @@ function buildPiekfynCompetitionBoard(comp, bundles){
       <span class="muted">${decidedCount} of ${totalMatches} matches decided</span>
       <span class="muted">${pointsToWin} points wins the Kompetisie</span>
     </div>
-    ${inProgressCount ? `<div class="muted" style="font-size:.78rem;margin-top:8px;text-align:center;">Live, if play stopped now: <strong style="color:var(--brand-dark);">${teamAName} ${liveATotal}</strong> &ndash; <strong style="color:var(--team-b);">${liveBTotal} ${teamBName}</strong> (${inProgressCount} match${inProgressCount===1?"":"es"} in progress)</div>` : ""}
   </div>
 
   <div class="pf-tab-bar">
