@@ -3077,20 +3077,12 @@ function buildMatchPlayBoard(players, holes, detail){
   if (teamA.length === 0 || teamB.length === 0){
     return `<div class="card"><strong>Match play</strong><p class="muted">Needs players on both Team A and Team B.</p></div>`;
   }
-  let holesUp = 0, holesPlayed = 0;
-  for (const h of holes){
-    const aNets = teamA.map(p => detail[p.id][h.holeNumber].net).filter(v => v != null);
-    const bNets = teamB.map(p => detail[p.id][h.holeNumber].net).filter(v => v != null);
-    if (aNets.length < teamA.length || bNets.length < teamB.length) continue;   // skip holes not scored yet (a round can start on any hole)
-    const aBest = Math.min(...aNets), bBest = Math.min(...bNets);
-    holesPlayed++;
-    if (aBest < bBest) holesUp++;
-    else if (bBest < aBest) holesUp--;
-  }
-  const remaining = 18 - holesPlayed;
+  const mp = computeMatch(holes, detail, teamA, teamB, inferPlayOrder(holes, detail, players));   // locks once decided
+  const holesUp = mp.holesUp, holesPlayed = mp.holesPlayed;
+  const remaining = mp.remaining;
   let statusText, statusClass;
   if (holesPlayed === 0){ statusText = "Not started"; statusClass = "status-all-sq"; }
-  else if (Math.abs(holesUp) > remaining){
+  else if (remaining > 0 && Math.abs(holesUp) > remaining){
     statusText = `${Math.abs(holesUp)} & ${remaining} — Team ${holesUp>0?'A':'B'} wins`;
     statusClass = holesUp>0 ? "status-up" : "status-down";
   } else if (holesUp === 0){ statusText = "All square"; statusClass = "status-all-sq"; }
@@ -3556,29 +3548,34 @@ function buildCompetitionBody(comp, mode, bundles){
 }
 
 /* ---------- Piekfyn Kompetisie: 2 singles matches + 1 team match, 1pt win / 0.5pt halve ---------- */
-function computeMatch(holes, detail, sideAPlayers, sideBPlayers){
-  let holesUp = 0, holesPlayed = 0;
-  for (const h of holes){
+// `order` is the sequence of hole numbers in the order they were played (a round can start on any
+// hole). Once the match can't be caught (e.g. 4 up with 3 to play = "4 & 3") the result is locked:
+// holes scored after that are ignored, so a closed-out match can't change or reopen.
+// `steps` holds the running count after each hole that counted, for the match scorecard.
+function computeMatch(holes, detail, sideAPlayers, sideBPlayers, order){
+  const byNum = {}; holes.forEach(h => byNum[h.holeNumber] = h);
+  const seq = (order || holes.map(h => h.holeNumber)).map(n => byNum[n]).filter(Boolean);
+  let holesUp = 0, holesPlayed = 0, decided = false, winner = null;
+  const steps = {};
+  for (const h of seq){
     const aNets = sideAPlayers.map(p => detail[p.id][h.holeNumber].net).filter(v => v != null);
     const bNets = sideBPlayers.map(p => detail[p.id][h.holeNumber].net).filter(v => v != null);
-    if (aNets.length < sideAPlayers.length || bNets.length < sideBPlayers.length) continue;   // skip holes not scored yet (a round can start on any hole)
+    if (aNets.length < sideAPlayers.length || bNets.length < sideBPlayers.length) continue;   // not scored yet
     const aBest = Math.min(...aNets), bBest = Math.min(...bNets);
     holesPlayed++;
     if (aBest < bBest) holesUp++;
     else if (bBest < aBest) holesUp--;
-  }
-  const remaining = 18 - holesPlayed;
-  let decided = false, winner = null;
-  if (holesPlayed > 0){
-    if (Math.abs(holesUp) > remaining){
-      decided = true;
-      winner = holesUp > 0 ? "A" : "B";
-    } else if (holesPlayed === 18){
-      decided = true;
-      winner = holesUp === 0 ? null : (holesUp > 0 ? "A" : "B");
+    steps[h.holeNumber] = { running: holesUp, aBest, bBest };
+    const left = 18 - holesPlayed;
+    if (Math.abs(holesUp) > left){
+      decided = true; winner = holesUp > 0 ? "A" : "B";
+      break;
+    }
+    if (holesPlayed === 18){
+      decided = true; winner = holesUp === 0 ? null : (holesUp > 0 ? "A" : "B");
     }
   }
-  return { holesUp, holesPlayed, decided, winner, remaining };
+  return { holesUp, holesPlayed, decided, winner, remaining: 18 - holesPlayed, steps };
 }
 
 function formatMatchStatus(m, nameA, nameB){
@@ -3586,7 +3583,7 @@ function formatMatchStatus(m, nameA, nameB){
   if (m.decided){
     if (m.winner === null) return "Halved";
     const name = m.winner === "A" ? nameA : nameB;
-    return Math.abs(m.holesUp) > m.remaining
+    return (m.remaining > 0 && Math.abs(m.holesUp) > m.remaining)
       ? `${name} ${Math.abs(m.holesUp)} & ${m.remaining}`
       : `${name} ${Math.abs(m.holesUp)} up`;
   }
@@ -3601,15 +3598,16 @@ function computePiekfynPoints(bundle, detail){
   const byOrder = {};
   players.forEach(p => byOrder[p.sortOrder] = p);
 
+  const playOrder = inferPlayOrder(holes, detail, players);
   const matches = pairs.map(pair => {
     const pA = byOrder[pair.a], pB = byOrder[pair.b];
     if (!pA || !pB) return null;
-    return { pA, pB, m: computeMatch(holes, detail, [pA], [pB]) };
+    return { pA, pB, m: computeMatch(holes, detail, [pA], [pB], playOrder) };
   }).filter(Boolean);
 
   const teamAPlayers = players.filter(p => p.team === "A");
   const teamBPlayers = players.filter(p => p.team === "B");
-  const teamMatch = computeMatch(holes, detail, teamAPlayers, teamBPlayers);
+  const teamMatch = computeMatch(holes, detail, teamAPlayers, teamBPlayers, playOrder);
 
   let teamAPts = 0, teamBPts = 0;
   function tally(m){
@@ -4298,26 +4296,18 @@ function openMatchScorecard(bundle, matchKey){
     title = `${pA.name} vs ${pB.name}`;
   }
 
-  // Hole-by-hole result, in playing order. diff: +1 side A won the hole, -1 side B won, 0 halved.
+  // Hole-by-hole running count, in playing order. It stops at the hole where the match was decided.
   const best = (side, h) => {
     const nets = side.map(p => detail[p.id][h.holeNumber].net);
     return nets.some(n => n == null) ? null : Math.min(...nets);
   };
-  const result = {}; // holeNumber -> { diff, running (from side A's view) }
-  let running = 0;
   const holeByNum = {}; holes.forEach(h => holeByNum[h.holeNumber] = h);
-  inferPlayOrder(holes, detail, players).forEach(n => {
-    const h = holeByNum[n];
-    const a = best(sideA, h), b = best(sideB, h);
-    if (a == null || b == null) return;
-    const diff = a < b ? 1 : (b < a ? -1 : 0);
-    running += diff;
-    result[n] = { diff, running, aBest: a, bBest: b };
-  });
-
-  const m = computeMatch(holes, detail, sideA, sideB);
+  const order = inferPlayOrder(holes, detail, players);
+  const m = computeMatch(holes, detail, sideA, sideB, order);
+  const result = {};
+  Object.keys(m.steps).forEach(n => { result[n] = { running: m.steps[n].running }; });
   // Columns follow the order the holes were played (a shotgun start on 10 reads 10..18, 1..9).
-  const cols = inferPlayOrder(holes, detail, players).map(n => holeByNum[n]);
+  const cols = order.map(n => holeByNum[n]);
 
   // The running count sits in each side's own row: up when they win a hole, down when they lose it.
   const statusCells = (subset, sign) => subset.map(h => {
