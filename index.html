@@ -30,6 +30,7 @@
     --gold-dim:#fdf6e3;
     --danger:#3a3a3a;
     --muted:#7a7a7a;
+    --team-b:#1c3f66;
   }
   *{box-sizing:border-box;}
   body{
@@ -148,6 +149,26 @@
     padding:10px 8px;font-size:.85rem;font-weight:600;border-radius:6px;opacity:.7;
   }
   .tab-btn.active{background:var(--gold);color:var(--brand-dark);opacity:1;}
+
+  /* Piekfyn Kompetisie scoreboard (competition/standings pages) */
+  .pf-bar-track{display:flex;height:12px;border-radius:6px;overflow:hidden;margin-top:18px;background:var(--line);}
+  .pf-bar-seg{height:100%;}
+  .pf-tab-bar{display:flex;gap:4px;background:var(--brand-dark);padding:4px;border-radius:8px;margin:14px 0;}
+  .pf-tab-btn{flex:1;background:transparent;border:none;color:var(--gold-dim);padding:10px 8px;font-size:.85rem;font-weight:600;border-radius:6px;opacity:.7;font-family:inherit;cursor:pointer;}
+  .pf-tab-btn.active{background:var(--gold);color:var(--brand-dark);opacity:1;}
+  .pf-tab-panel{display:none;}
+  .pf-tab-panel.active{display:block;}
+  .pf-fb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;}
+  .pf-fb-card{padding:14px 16px;}
+  .pf-match-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;}
+  .pf-match-row + .pf-match-row{border-top:1px solid var(--line);}
+  .pf-pill{font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;flex-shrink:0;}
+  .pf-pill.status-up{background:var(--brand-dark);color:#fff;}
+  .pf-pill.status-down{background:var(--team-b);color:#fff;}
+  .pf-pill.status-all-sq{background:var(--gold-dim);color:var(--ink);border:1px solid var(--gold);}
+  .pf-team-tag{display:inline-block;font-size:.65rem;font-weight:700;padding:2px 7px;border-radius:999px;}
+  .pf-team-tag.pf-team-a{background:var(--brand-dark);color:#fff;}
+  .pf-team-tag.pf-team-b{background:var(--team-b);color:#fff;}
 
   /* clickable player names */
   .player-name-link{color:var(--brand-light);cursor:pointer;font-weight:700;text-decoration:underline;text-decoration-style:dotted;}
@@ -2721,6 +2742,7 @@ async function renderCompetition(competitionId){
     document.querySelectorAll(".copy-link-btn").forEach(btn => {
       btn.onclick = () => navigator.clipboard.writeText(btn.dataset.url);
     });
+    if (mode === "piekfyn") wirePiekfynTabs();
   }
 
   const subtitle = mode === "piekfyn"
@@ -2784,6 +2806,7 @@ async function renderStandings(competitionId){
 
   function renderBody(){
     document.getElementById("standingsBody").innerHTML = buildCompetitionBody(comp, mode, bundles);
+    if (mode === "piekfyn") wirePiekfynTabs();
   }
 
   const subtitle = mode === "piekfyn"
@@ -3396,31 +3419,7 @@ function buildCompetitionBody(comp, mode, bundles){
     : "";
 
   if (mode === "piekfyn"){
-    let teamATotal = 0, teamBTotal = 0;
-    const rows = bundles.map((bundle, idx) => {
-      const detail = computeDetail(bundle);
-      const pts = computePiekfynPoints(bundle, detail);
-      teamATotal += pts.teamAPts;
-      teamBTotal += pts.teamBPts;
-      return `
-        <div class="card">
-          <div class="row" style="justify-content:space-between;">
-            <strong>Fourball ${bundle.round.fourballIndex || idx+1}</strong>
-            <span class="muted">${pts.decidedCount} of 3 decided</span>
-          </div>
-          <p class="muted" style="margin:4px 0 8px;">${bundle.players.map(p=>p.name).join(", ")}</p>
-          <p style="font-size:1.1rem;margin:0;text-align:center;">
-            <strong>${comp.teamAName || "Team A"} ${pts.teamAPts}</strong> — <strong>${pts.teamBPts} ${comp.teamBName || "Team B"}</strong>
-          </p>
-        </div>`;
-    }).join("");
-    return stablefordHtml + `
-      <p style="font-size:1.6rem;margin:0 0 4px;text-align:center;">
-        <strong>${comp.teamAName || "Team A"} ${teamATotal}</strong> — <strong>${teamBTotal} ${comp.teamBName || "Team B"}</strong>
-      </p>
-      <p class="muted" style="text-align:center;font-size:.82rem;margin-bottom:16px;">out of ${bundles.length * 3} points across ${bundles.length} fourball${bundles.length===1?"":"s"}</p>
-      ${rows || `<p class="muted">No fourballs found for this competition.</p>`}
-    `;
+    return bundles.length ? buildPiekfynCompetitionBoard(comp, bundles) : `<p class="muted">No fourballs found for this competition.</p>`;
   }
   if (bundles.length === 0) return `<p class="muted">No fourballs found for this competition.</p>`;
   if (mode === "stroke") return stablefordHtml + buildCombinedIndividualBoard(bundles, "net", {title:"Stroke play", unitLabel:"Net", sortAsc:true});
@@ -3537,6 +3536,176 @@ function buildPiekfynBoard(bundle, detail){
       ${decidedCount < 3 ? `${decidedCount} of 3 matches decided` : (teamAPts>teamBPts ? `${teamAName} win` : teamAPts<teamBPts ? `${teamBName} win` : "Tied — halved competition")}
     </p>
   </div>`;
+}
+
+// Which Piekfyn tab is open on the competition/standings scoreboard — module-level so it
+// survives the re-renders every live score update triggers (renderBody() regenerates the
+// whole innerHTML each time; without this the tab would snap back to "Fourballs" on every
+// score entered). null = all tabs collapsed (clicking the open tab again closes it).
+let piekfynActiveTab = "fourballs";
+function wirePiekfynTabs(){
+  const panelByTab = { fourballs: "pfTabFourballs", individual: "pfTabIndividual", team: "pfTabTeam" };
+  document.querySelectorAll(".pf-tab-btn").forEach(btn => {
+    btn.onclick = () => {
+      const alreadyActive = btn.classList.contains("active");
+      piekfynActiveTab = alreadyActive ? null : btn.dataset.pftab;
+      document.querySelectorAll(".pf-tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".pf-tab-panel").forEach(p => p.classList.remove("active"));
+      if (piekfynActiveTab){
+        btn.classList.add("active");
+        document.getElementById(panelByTab[piekfynActiveTab]).classList.add("active");
+      }
+    };
+  });
+}
+
+// Ryder Cup-style scoreboard for a Piekfyn Kompetisie competition: overall team score +
+// progress bar, then three tabs — the per-fourball match list (existing data), an individual
+// Stableford leaderboard across every fourball, and a "best team" board ranking each
+// fourball's own same-team pair (not the overall Team A/B split) by combined points.
+function buildPiekfynCompetitionBoard(comp, bundles){
+  const teamAName = comp.teamAName || "Team A";
+  const teamBName = comp.teamBName || "Team B";
+
+  let teamATotal = 0, teamBTotal = 0, decidedCount = 0;
+  const fourballCards = bundles.map((bundle, idx) => {
+    const detail = computeDetail(bundle);
+    const pts = computePiekfynPoints(bundle, detail);
+    teamATotal += pts.teamAPts;
+    teamBTotal += pts.teamBPts;
+    decidedCount += pts.decidedCount;
+
+    const matchRows = [
+      ...pts.matches.map(({pA,pB,m}) => ({ label: `${pA.name} vs ${pB.name}`, text: formatMatchStatus(m, pA.name, pB.name), cls: piekfynStatusClass(m) })),
+      { label: `${teamAName} vs ${teamBName} (fourball)`, text: formatMatchStatus(pts.teamMatch, teamAName, teamBName), cls: piekfynStatusClass(pts.teamMatch) },
+    ];
+
+    return `
+      <div class="card pf-fb-card">
+        <div class="row" style="justify-content:space-between;align-items:baseline;">
+          <strong style="font-size:.92rem;">Fourball ${bundle.round.fourballIndex || idx+1}</strong>
+          <span class="muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;">${pts.decidedCount === 3 ? "Final" : "In progress"}</span>
+        </div>
+        <div class="muted" style="font-size:.78rem;margin:2px 0 6px;">${bundle.players.filter(p=>p.team==="A").map(p=>p.name).join(" & ")} &nbsp;vs&nbsp; ${bundle.players.filter(p=>p.team==="B").map(p=>p.name).join(" & ")}</div>
+        ${matchRows.map(r => `
+          <div class="pf-match-row">
+            <span style="font-size:.84rem;">${r.label}</span>
+            <span class="pf-pill ${r.cls}">${r.text}</span>
+          </div>`).join("")}
+        <div class="row" style="justify-content:center;align-items:baseline;gap:7px;margin-top:9px;padding-top:9px;border-top:1px solid var(--line);">
+          <strong style="color:var(--brand-dark);font-size:.92rem;">${pts.teamAPts}</strong>
+          <span class="muted" style="font-size:.7rem;">points</span>
+          <strong style="color:var(--team-b);font-size:.92rem;">${pts.teamBPts}</strong>
+        </div>
+      </div>`;
+  }).join("");
+
+  const totalMatches = bundles.length * 3;
+  const barA = totalMatches ? Math.round((teamATotal / totalMatches) * 100) : 0;
+  const barB = totalMatches ? Math.round((teamBTotal / totalMatches) * 100) : 0;
+  const barUndecided = Math.max(0, 100 - barA - barB);
+  const pointsToWin = Math.floor(totalMatches / 2) + 0.5;
+
+  const indivRows = [];
+  bundles.forEach(bundle => {
+    const detail = computeDetail(bundle);
+    const pts = totalsFor(bundle.players, bundle.holes, detail, "pts");
+    bundle.players.forEach(p => {
+      indivRows.push({ p, team: p.team, fourballIndex: bundle.round.fourballIndex, roundId: bundle.round.id, count: pts[p.id].count, sum: pts[p.id].sum });
+    });
+  });
+  indivRows.sort((a,b) => (!a.count && !b.count) ? 0 : (!a.count ? 1 : (!b.count ? -1 : b.sum - a.sum)));
+
+  const pairRows = [];
+  bundles.forEach(bundle => {
+    const detail = computeDetail(bundle);
+    const pts = totalsFor(bundle.players, bundle.holes, detail, "pts");
+    ["A","B"].forEach(team => {
+      const teamPlayers = bundle.players.filter(p => p.team === team);
+      if (!teamPlayers.length) return;
+      pairRows.push({
+        fourballIndex: bundle.round.fourballIndex,
+        roundId: bundle.round.id,
+        team,
+        label: teamPlayers.map(p=>p.name).join(" & "),
+        count: Math.min(...teamPlayers.map(p => pts[p.id].count)),
+        sum: teamPlayers.reduce((a,p) => a + pts[p.id].sum, 0),
+      });
+    });
+  });
+  pairRows.sort((a,b) => (!a.count && !b.count) ? 0 : (!a.count ? 1 : (!b.count ? -1 : b.sum - a.sum)));
+
+  const isTab = t => piekfynActiveTab === t ? " active" : "";
+
+  return `
+  <div class="card" style="padding:22px 24px;">
+    <div class="row" style="justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:110px;">
+        <div class="muted" style="font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;">Team A</div>
+        <strong style="font-size:1.05rem;color:var(--brand-dark);">${teamAName}</strong>
+      </div>
+      <div class="row" style="align-items:baseline;gap:14px;">
+        <span style="font-size:2.4rem;font-weight:800;color:var(--brand-dark);line-height:1;">${teamATotal}</span>
+        <span class="muted">&mdash;</span>
+        <span style="font-size:2.4rem;font-weight:800;color:var(--team-b);line-height:1;">${teamBTotal}</span>
+      </div>
+      <div style="flex:1;min-width:110px;text-align:right;">
+        <div class="muted" style="font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;">Team B</div>
+        <strong style="font-size:1.05rem;color:var(--team-b);">${teamBName}</strong>
+      </div>
+    </div>
+    <div class="pf-bar-track">
+      <div class="pf-bar-seg" style="width:${barA}%;background:var(--brand-dark);"></div>
+      <div style="width:${barUndecided}%;"></div>
+      <div class="pf-bar-seg" style="width:${barB}%;background:var(--team-b);"></div>
+    </div>
+    <div class="row" style="justify-content:space-between;font-size:.72rem;margin-top:6px;">
+      <span class="muted">${decidedCount} of ${totalMatches} matches decided</span>
+      <span class="muted">${pointsToWin} points wins the Kompetisie</span>
+    </div>
+  </div>
+
+  <div class="pf-tab-bar">
+    <button class="pf-tab-btn${isTab("fourballs")}" data-pftab="fourballs" type="button">Fourballs</button>
+    <button class="pf-tab-btn${isTab("individual")}" data-pftab="individual" type="button">Individual result</button>
+    <button class="pf-tab-btn${isTab("team")}" data-pftab="team" type="button">Best team</button>
+  </div>
+
+  <div id="pfTabFourballs" class="pf-tab-panel${isTab("fourballs")}">
+    <div class="pf-fb-grid">${fourballCards}</div>
+  </div>
+
+  <div id="pfTabIndividual" class="pf-tab-panel${isTab("individual")}">
+    <div class="card">
+      <table>
+        <tr><th class="name-col">Player</th><th>Team</th><th>Fourball</th><th>Thru</th><th>Points</th></tr>
+        ${indivRows.map((r,i) => `
+          <tr class="${i===0 && r.count ? 'leader-row' : ''}">
+            <td class="name-col">${playerLink(r.p, r.roundId)}</td>
+            <td><span class="pf-team-tag pf-team-${(r.team||"").toLowerCase()}">${r.team || "-"}</span></td>
+            <td class="muted">Fourball ${r.fourballIndex || "?"}</td>
+            <td>${r.count}</td>
+            <td>${r.count ? r.sum : "-"}</td>
+          </tr>`).join("")}
+      </table>
+    </div>
+  </div>
+
+  <div id="pfTabTeam" class="pf-tab-panel${isTab("team")}">
+    <div class="card">
+      <table>
+        <tr><th class="name-col">Pairing</th><th>Fourball</th><th>Thru</th><th>Combined</th></tr>
+        ${pairRows.map((r,i) => `
+          <tr class="${i===0 && r.count ? 'leader-row' : ''}">
+            <td class="name-col">${r.label} <span class="pf-team-tag pf-team-${r.team.toLowerCase()}">${r.team}</span></td>
+            <td class="muted">Fourball ${r.fourballIndex || "?"}</td>
+            <td>${r.count}</td>
+            <td>${r.count ? r.sum : "-"}</td>
+          </tr>`).join("")}
+      </table>
+    </div>
+  </div>
+  `;
 }
 /* ============================================================
    INDIVIDUAL SCORECARD (clickable player names)
