@@ -1685,6 +1685,7 @@ async function renderScorer(roundId){
   scorerData = await loadRoundBundle(roundId);
   if (!scorerData.round){ app.innerHTML = `<p>Round not found.</p>`; return; }
   scheduleEditMode = false;
+  piekfynActiveTab = "fourballs";
 
   const spectatorUrl = location.origin + location.pathname + `#/spectate/${scorerData.round.spectatorCode}`;
   const finished = scorerData.round.status === "finished";
@@ -1810,6 +1811,7 @@ async function renderScoringOnly(roundId){
   scorerData = await loadRoundBundle(roundId);
   if (!scorerData.round){ app.innerHTML = `<p>Round not found.</p>`; return; }
   scheduleEditMode = false;
+  piekfynActiveTab = "fourballs";
 
   const spectatorUrl = location.origin + location.pathname + `#/spectate/${scorerData.round.spectatorCode}`;
   const finished = scorerData.round.status === "finished";
@@ -2581,6 +2583,7 @@ async function renderSpectator(code){
 
   const bundle = await loadRoundBundle(roundId);
   currentBundle = bundle;
+  piekfynActiveTab = "fourballs";
 
   function renderSpectatorBoards(){
     document.getElementById("boards").innerHTML = buildBoardsHtml(bundle, {alwaysIncludeStableford: false});
@@ -2711,6 +2714,7 @@ async function renderCompetition(competitionId){
   const comp = { id: compSnap.id, ...compSnap.data() };
   const mode = (comp.gameModes && comp.gameModes[0]) || "stroke";
   competitionEditMode = false;
+  piekfynActiveTab = "fourballs";
 
   const roundsSnap = await getDocs(query(collection(db, "golf_rounds"), where("competitionId", "==", competitionId)));
   const fourballRounds = roundsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -2802,6 +2806,7 @@ async function renderStandings(competitionId){
   if (!compSnap.exists()){ app.innerHTML = `<p>Competition not found.</p>`; return; }
   const comp = { id: compSnap.id, ...compSnap.data() };
   const mode = (comp.gameModes && comp.gameModes[0]) || "stroke";
+  piekfynActiveTab = "fourballs";
 
   const roundsSnap = await getDocs(query(collection(db, "golf_rounds"), where("competitionId", "==", competitionId)));
   const fourballRounds = roundsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
