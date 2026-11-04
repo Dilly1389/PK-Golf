@@ -3823,8 +3823,8 @@ function buildPiekfynCompetitionBoard(comp, bundles){
       <table>
         <tr><th class="name-col">Pairing</th>${isMulti ? "<th>Fourball</th>" : ""}<th>Thru</th><th>Best ball</th></tr>
         ${pairRows.map((r,i) => `
-          <tr class="${i===0 && r.count ? 'leader-row' : ''}">
-            <td class="name-col">${r.label} <span class="pf-team-tag pf-team-${r.team.toLowerCase()}">${r.team}</span></td>
+          <tr class="pf-team-row ${i===0 && r.count ? 'leader-row' : ''}" data-bestteam="${r.team}" data-round="${r.roundId}" style="cursor:pointer;">
+            <td class="name-col">${r.label} <span class="pf-team-tag pf-team-${r.team.toLowerCase()}">${r.team}</span> <span class="pf-chev">&rsaquo;</span></td>
             ${isMulti ? `<td class="muted">Fourball ${r.fourballIndex || "?"}</td>` : ""}
             <td>${r.count}</td>
             <td>${r.count ? r.sum : "-"}</td>
@@ -4372,18 +4372,94 @@ function openMatchScorecard(bundle, matchKey){
 }
 function matchKeyIsTeam(k){ return k === "team"; }
 
+/* ---------- Best team scorecard (tap a pairing on the Best team tab) ---------- */
+// Better-ball Stableford for one same-team pair: each player's gross and Stableford points per
+// hole, the better of the two points circled, and a Best ball row that adds up to the total.
+function openBestTeamScorecard(bundle, team){
+  const { round, holes, players } = bundle;
+  const detail = computeDetail(bundle);
+  const pair = players.filter(p => p.team === team);
+  if (!pair.length) return;
+  const order = inferPlayOrder(holes, detail, players);
+  const holeByNum = {}; holes.forEach(h => holeByNum[h.holeNumber] = h);
+  const cols = order.map(n => holeByNum[n]);
+  const teamName = team === "A" ? (round.teamAName || "Team A") : (round.teamBName || "Team B");
+
+  const holePts = h => pair.map(p => detail[p.id][h.holeNumber].pts).filter(v => v != null);
+  const bestAt = h => { const v = holePts(h); return v.length ? Math.max(...v) : null; };
+  const total = cols.reduce((a,h) => a + (bestAt(h) || 0), 0);
+  const thru = cols.filter(h => bestAt(h) != null).length;
+
+  const grossRow = p => cols.map(h => {
+    const v = detail[p.id][h.holeNumber].gross;
+    return `<td>${v == null ? "-" : v}</td>`;
+  }).join("");
+  const ptsRow = p => cols.map(h => {
+    const v = detail[p.id][h.holeNumber].pts;
+    if (v == null) return `<td>-</td>`;
+    return `<td>${v === bestAt(h) ? `<span class="circled-score">${v}</span>` : v}</td>`;
+  }).join("");
+  const sumOf = (p, field) => {
+    const vals = cols.map(h => detail[p.id][h.holeNumber][field]).filter(v => v != null);
+    return vals.length ? vals.reduce((a,b) => a + b, 0) : "-";
+  };
+
+  const html = `
+    <div class="scorecard-overlay" id="scorecardOverlay">
+      <div class="scorecard-panel">
+        <button class="scorecard-close" id="scorecardCloseBtn">&times;</button>
+        <div class="scorecard-heading">
+          <div class="course">${round.courseName}</div>
+          <div class="meta">${round.roundDate || ""}${round.teeBox ? " · " + round.teeBox + " tees" : ""}</div>
+        </div>
+        <div class="scorecard-player-name">${pair.map(p => p.name).join(" &amp; ")} <span class="muted" style="font-size:.85rem;font-weight:600;">(${teamName})</span></div>
+        <p style="margin:2px 0 10px;font-weight:700;">Best ball Stableford: ${thru ? total : "-"} pts thru ${thru}</p>
+        <div class="scorecard-table-wrap">
+        <table class="scorecard-table">
+          <thead><tr>
+            <th style="text-align:left;">Hole</th>
+            ${cols.map(h => `<th>${h.holeNumber}</th>`).join("")}
+            <th class="agg-col">TOT</th>
+          </tr></thead>
+          <tbody>
+            <tr><td class="label-col">Par</td>${cols.map(h => `<td>${h.par}</td>`).join("")}<td class="agg-col">${cols.reduce((a,h)=>a+h.par,0)}</td></tr>
+            <tr><td class="label-col">S.I.</td>${cols.map(h => `<td>${h.strokeIndex}</td>`).join("")}<td class="agg-col">-</td></tr>
+            ${pair.map(p => `
+            <tr class="gross-row"><td class="label-col">${p.name}<br><span class="muted" style="font-size:.65rem;font-weight:600;">gross · hcp ${p.playingHandicap}</span></td>${grossRow(p)}<td class="agg-col">${sumOf(p, "gross")}</td></tr>
+            <tr><td class="label-col"><span class="muted" style="font-size:.7rem;">${p.name} pts</span></td>${ptsRow(p)}<td class="agg-col">${sumOf(p, "pts")}</td></tr>`).join("")}
+            <tr class="mc-side-row"><td class="label-col">Best ball</td>${cols.map(h => { const v = bestAt(h); return `<td class="${v == null ? "" : "mc-up"}">${v == null ? "-" : v}</td>`; }).join("")}<td class="agg-col"><strong>${thru ? total : "-"}</strong></td></tr>
+          </tbody>
+        </table>
+        </div>
+        <p class="muted" style="font-size:.75rem;margin:10px 0 0;">Stableford points per hole. The circled score is the better ball that counts for the pair; the Best ball row adds up to their total. Holes are in the order they were played.</p>
+      </div>
+    </div>`;
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = html;
+  document.body.appendChild(wrapper.firstElementChild);
+  const overlay = document.getElementById("scorecardOverlay");
+  document.getElementById("scorecardCloseBtn").onclick = closeScorecard;
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeScorecard(); });
+}
+
+
 let competitionBundlesForLinks = [];   // set by renderCompetition/renderStandings so player links on a
                                         // combined leaderboard open the right fourball's scorecard
 document.addEventListener("click", (e) => {
   const matchRow = e.target.closest(".pf-match-row[data-match]");
-  if (matchRow){
+  const teamRow = e.target.closest("tr[data-bestteam]");
+  if (matchRow || teamRow){
     // Competition/standings pages keep their live bundles in competitionBundlesForLinks; the
     // scorer and spectator pages keep theirs in currentBundle.
+    const el = matchRow || teamRow;
     const onCompPage = document.getElementById("competitionBody") || document.getElementById("standingsBody");
     const bundle = onCompPage
-      ? competitionBundlesForLinks.find(b => b.round.id === matchRow.dataset.round)
+      ? competitionBundlesForLinks.find(b => b.round.id === el.dataset.round)
       : currentBundle;
-    if (bundle) openMatchScorecard(bundle, matchRow.dataset.match);
+    if (bundle){
+      if (matchRow) openMatchScorecard(bundle, matchRow.dataset.match);
+      else openBestTeamScorecard(bundle, teamRow.dataset.bestteam);
+    }
     return;
   }
   const link = e.target.closest(".player-name-link");
