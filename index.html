@@ -2592,6 +2592,12 @@ function showScoreError(err){
 function saveScore(playerId, val){
   const hole = scorerHole;
   const idx = scorerData.scores.findIndex(s => s.playerId === playerId && s.holeNumber === hole);
+  // The hole of the very first score captured is where this round started - remember it, so the
+  // match counts follow the real playing order.
+  if (!scorerData.round.startHole && scorerData.scores.length === 0){
+    scorerData.round.startHole = hole;
+    updateDoc(doc(db, "golf_rounds", scorerData.round.id), { startHole: hole }).catch(() => {});
+  }
   const rec = { playerId, holeNumber: hole, grossStrokes: val };
   if (idx >= 0) scorerData.scores[idx] = rec; else scorerData.scores.push(rec);
   renderEntry();
@@ -2605,6 +2611,10 @@ function clearScore(playerId){
   const hole = scorerHole;
   const idx = scorerData.scores.findIndex(s => s.playerId === playerId && s.holeNumber === hole);
   if (idx >= 0) scorerData.scores.splice(idx, 1);
+  if (scorerData.scores.length === 0 && scorerData.round.startHole){
+    scorerData.round.startHole = null;   // nothing scored any more: the next first score sets it afresh
+    updateDoc(doc(db, "golf_rounds", scorerData.round.id), { startHole: null }).catch(() => {});
+  }
   renderEntry();
   renderBoards();
   return deleteDoc(doc(db, "golf_rounds", scorerData.round.id, "scores", `${playerId}_${hole}`)).catch(showScoreError);
@@ -2999,7 +3009,7 @@ function buildBoardsHtml(bundle, opts){
   // per-player Stableford data, so skip the standalone board here to avoid showing it twice.
   if ((isStablefordMode || alwaysIncludeStableford) && !isPiekfynMode) html += buildStablefordBoard(players, holes, detail);
   if (round.gameModes.includes("stroke")) html += buildStrokeBoard(players, holes, detail);
-  if (round.gameModes.includes("matchplay")) html += buildMatchPlayBoard(players, holes, detail);
+  if (round.gameModes.includes("matchplay")) html += buildMatchPlayBoard(players, holes, detail, startHoleFor(bundle));
   if (round.gameModes.includes("matchplay3")) html += buildMatchPlay3Board(bundle, detail);
   if (round.gameModes.includes("betterball")) html += buildBetterballBoard(bundle, detail) + buildBetterballContributionBoard(bundle, detail);
   if (round.gameModes.includes("alliance")) html += buildAllianceBoard(bundle, detail) + buildAllianceContributionBoard(bundle, detail);
@@ -3071,13 +3081,13 @@ function buildStablefordBoard(players, holes, detail){
   </div>`;
 }
 
-function buildMatchPlayBoard(players, holes, detail){
+function buildMatchPlayBoard(players, holes, detail, startHole){
   const teamA = players.filter(p => p.team === "A");
   const teamB = players.filter(p => p.team === "B");
   if (teamA.length === 0 || teamB.length === 0){
     return `<div class="card"><strong>Match play</strong><p class="muted">Needs players on both Team A and Team B.</p></div>`;
   }
-  const mp = computeMatch(holes, detail, teamA, teamB, inferPlayOrder(holes, detail, players));   // locks once decided
+  const mp = computeMatch(holes, detail, teamA, teamB, inferPlayOrder(holes, detail, players, startHole));   // locks once decided
   const holesUp = mp.holesUp, holesPlayed = mp.holesPlayed;
   const remaining = mp.remaining;
   let statusText, statusClass;
@@ -3541,7 +3551,7 @@ function buildCompetitionBody(comp, mode, bundles){
   if (mode === "stableford") return buildCombinedIndividualBoard(bundles, "pts", {title:"Stableford", unitLabel:"Points", sortAsc:false});
   if (mode === "bbb") return stablefordHtml + buildCombinedBBBBoard(bundles);
   if (mode === "alliance") return stablefordHtml + buildCombinedAllianceBoard(bundles);
-  if (mode === "matchplay") return stablefordHtml + buildPerFourballBoards(bundles, bundle => buildMatchPlayBoard(bundle.players, bundle.holes, computeDetail(bundle)));
+  if (mode === "matchplay") return stablefordHtml + buildPerFourballBoards(bundles, bundle => buildMatchPlayBoard(bundle.players, bundle.holes, computeDetail(bundle), startHoleFor(bundle)));
   if (mode === "matchplay3") return stablefordHtml + buildPerFourballBoards(bundles, bundle => buildMatchPlay3Board(bundle, computeDetail(bundle)));
   if (mode === "betterball") return stablefordHtml + buildPerFourballBoards(bundles, bundle => buildBetterballBoard(bundle, computeDetail(bundle)));
   return stablefordHtml + `<p class="muted">Unsupported game mode for a competition.</p>`;
@@ -3598,7 +3608,7 @@ function computePiekfynPoints(bundle, detail){
   const byOrder = {};
   players.forEach(p => byOrder[p.sortOrder] = p);
 
-  const playOrder = inferPlayOrder(holes, detail, players);
+  const playOrder = inferPlayOrder(holes, detail, players, startHoleFor(bundle));
   const matches = pairs.map(pair => {
     const pA = byOrder[pair.a], pB = byOrder[pair.b];
     if (!pA || !pB) return null;
@@ -4269,19 +4279,31 @@ function openBetterballScorecard(){
 
 
 /* ---------- Piekfyn match scorecard (tap a match on the Fourballs tab) ---------- */
-// Rounds can start on any hole (shotgun), so the running count has to follow the order the
-// holes were actually played, not 1..18. Start = a scored hole whose previous hole (wrapping
-// 1 -> 18) wasn't scored.
-function inferPlayOrder(holes, detail, players){
-  const scored = h => players.some(p => detail[p.id][h.holeNumber].gross != null);
+// Rounds can start on any hole (shotgun), so match counts and the lock-in have to follow the order
+// the holes were actually played, not 1..18. The start hole is the hole of the FIRST score captured:
+// stored on the round (startHole) when that score is saved, or - for rounds from before that was
+// recorded - the hole of the earliest-entered score. Only if neither is known does it fall back to
+// a scored hole whose previous hole (wrapping 1 -> 18) wasn't scored.
+function startHoleFor(bundle){
+  if (bundle.round && bundle.round.startHole) return bundle.round.startHole;
+  let first = null, firstMs = Infinity;
+  (bundle.scores || []).forEach(sc => {
+    const ms = sc.updatedAt && sc.updatedAt.toMillis ? sc.updatedAt.toMillis() : null;
+    if (ms != null && ms < firstMs){ firstMs = ms; first = sc.holeNumber; }
+  });
+  return first;
+}
+function inferPlayOrder(holes, detail, players, startHole){
   const nums = holes.map(h => h.holeNumber);
+  const rotateTo = start => { const i = nums.indexOf(start); return [...nums.slice(i), ...nums.slice(0, i)]; };
+  if (startHole && nums.includes(startHole)) return rotateTo(startHole);
+  const scored = h => players.some(p => detail[p.id][h.holeNumber].gross != null);
   const scoredNums = holes.filter(scored).map(h => h.holeNumber);
   if (!scoredNums.length) return nums;
   const has = n => scoredNums.includes(n);
   const prev = n => n === nums[0] ? nums[nums.length - 1] : n - 1;
   const start = scoredNums.find(n => !has(prev(n))) || nums[0];
-  const i = nums.indexOf(start);
-  return [...nums.slice(i), ...nums.slice(0, i)];
+  return rotateTo(start);
 }
 
 function openMatchScorecard(bundle, matchKey){
@@ -4310,7 +4332,7 @@ function openMatchScorecard(bundle, matchKey){
     return nets.some(n => n == null) ? null : Math.min(...nets);
   };
   const holeByNum = {}; holes.forEach(h => holeByNum[h.holeNumber] = h);
-  const order = inferPlayOrder(holes, detail, players);
+  const order = inferPlayOrder(holes, detail, players, startHoleFor(bundle));
   const m = computeMatch(holes, detail, sideA, sideB, order);
   const result = {};
   Object.keys(m.steps).forEach(n => { result[n] = { running: m.steps[n].running }; });
@@ -4380,7 +4402,7 @@ function openBestTeamScorecard(bundle, team){
   const detail = computeDetail(bundle);
   const pair = players.filter(p => p.team === team);
   if (!pair.length) return;
-  const order = inferPlayOrder(holes, detail, players);
+  const order = inferPlayOrder(holes, detail, players, startHoleFor(bundle));
   const holeByNum = {}; holes.forEach(h => holeByNum[h.holeNumber] = h);
   const cols = order.map(n => holeByNum[n]);
   const teamName = team === "A" ? (round.teamAName || "Team A") : (round.teamBName || "Team B");
