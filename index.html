@@ -169,6 +169,18 @@
   table.scorecard-table td.mc-down{background:#fbe8e8;color:var(--danger);font-weight:800;}
   table.scorecard-table td.mc-sq{font-weight:700;color:var(--muted);}
   table.scorecard-table tr.mc-side-row td.label-col{font-weight:800;}
+  .pf-score-row{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:8px;}
+  .pf-score-team{font-weight:800;font-size:clamp(.88rem,3.9vw,1.1rem);line-height:1.15;overflow-wrap:anywhere;}
+  .pf-score-team-a{color:var(--brand-dark);text-align:left;}
+  .pf-score-team-b{color:var(--team-b);text-align:right;}
+  .pf-score-nums{display:flex;align-items:baseline;gap:6px;font-size:clamp(2rem,10.5vw,2.9rem);font-weight:800;line-height:1;white-space:nowrap;}
+  .pf-score-dash{color:var(--muted);font-weight:600;font-size:.6em;}
+  .pf-live-wrap{display:flex;justify-content:center;margin-bottom:8px;}
+  .pf-live{display:inline-flex;align-items:center;gap:5px;font-size:.66rem;font-weight:800;letter-spacing:.08em;color:#c62828;background:#fdecea;border:1px solid #f3b8b3;padding:2px 9px;border-radius:999px;}
+  .pf-live.pf-final{color:var(--muted);background:var(--gold-dim);border-color:var(--line);}
+  .pf-live-dot{width:7px;height:7px;border-radius:50%;background:#e53935;animation:pfPulse 1.4s ease-in-out infinite;}
+  @keyframes pfPulse{0%,100%{opacity:1;}50%{opacity:.25;}}
+  @media (prefers-reduced-motion: reduce){.pf-live-dot{animation:none;}}
   .pf-pill{font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;flex-shrink:0;}
   .pf-pill.status-up{background:var(--brand-dark);color:#fff;}
   .pf-pill.status-down{background:var(--team-b);color:#fff;}
@@ -3744,22 +3756,24 @@ function buildPiekfynCompetitionBoard(comp, bundles){
 
   const isTab = t => piekfynActiveTab === t ? " active" : "";
 
+  // Small LIVE tag while any fourball is being scored; FINAL once every fourball is finished.
+  const allFinished = bundles.length > 0 && bundles.every(b => b.round.status === "finished");
+  const anyScored = bundles.some(b => b.round.status !== "finished" && b.scores.length > 0);
+  const liveBadge = allFinished
+    ? `<div class="pf-live-wrap"><span class="pf-live pf-final">FINAL</span></div>`
+    : (anyScored ? `<div class="pf-live-wrap"><span class="pf-live"><span class="pf-live-dot"></span>LIVE</span></div>` : "");
+
   return `
-  <div class="card" style="padding:22px 24px;">
-    <div class="row" style="justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;">
-      <div style="flex:1;min-width:110px;">
-        <div class="muted" style="font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;">Team A</div>
-        <strong style="font-size:1.05rem;color:var(--brand-dark);">${teamAName}</strong>
+  <div class="card" style="padding:14px 16px 16px;">
+    ${liveBadge}
+    <div class="pf-score-row">
+      <div class="pf-score-team pf-score-team-a">${teamAName}</div>
+      <div class="pf-score-nums">
+        <span style="color:var(--brand-dark);">${teamATotal}</span>
+        <span class="pf-score-dash">&ndash;</span>
+        <span style="color:var(--team-b);">${teamBTotal}</span>
       </div>
-      <div class="row" style="align-items:baseline;gap:14px;">
-        <span style="font-size:2.4rem;font-weight:800;color:var(--brand-dark);line-height:1;">${teamATotal}</span>
-        <span class="muted">&mdash;</span>
-        <span style="font-size:2.4rem;font-weight:800;color:var(--team-b);line-height:1;">${teamBTotal}</span>
-      </div>
-      <div style="flex:1;min-width:110px;text-align:right;">
-        <div class="muted" style="font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;">Team B</div>
-        <strong style="font-size:1.05rem;color:var(--team-b);">${teamBName}</strong>
-      </div>
+      <div class="pf-score-team pf-score-team-b">${teamBName}</div>
     </div>
     <div class="pf-bar-track">
       <div class="pf-bar-seg" style="width:${barA}%;background:var(--brand-dark);"></div>
