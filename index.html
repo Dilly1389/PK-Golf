@@ -3676,7 +3676,7 @@ function wirePiekfynTabs(){
 // Ryder Cup-style scoreboard for a Piekfyn Kompetisie competition: overall team score +
 // progress bar, then three tabs — the per-fourball match list (existing data), an individual
 // Stableford leaderboard across every fourball, and a "best team" board ranking each
-// fourball's own same-team pair (not the overall Team A/B split) by combined points.
+// fourball's own same-team pair (not the overall Team A/B split) by better-ball Stableford (the better of the two scores on each hole).
 function buildPiekfynCompetitionBoard(comp, bundles){
   const teamAName = comp.teamAName || "Team A";
   const teamBName = comp.teamBName || "Team B";
@@ -3736,17 +3736,25 @@ function buildPiekfynCompetitionBoard(comp, bundles){
   const pairRows = [];
   bundles.forEach(bundle => {
     const detail = computeDetail(bundle);
-    const pts = totalsFor(bundle.players, bundle.holes, detail, "pts");
     ["A","B"].forEach(team => {
       const teamPlayers = bundle.players.filter(p => p.team === team);
       if (!teamPlayers.length) return;
+      // Best team = better-ball Stableford: on each hole the pair's score is the better of the two
+      // players' Stableford points; those are added up over the holes played.
+      let count = 0, sum = 0;
+      bundle.holes.forEach(h => {
+        const holePts = teamPlayers.map(p => detail[p.id][h.holeNumber].pts).filter(v => v != null);
+        if (!holePts.length) return;
+        count++;
+        sum += Math.max(...holePts);
+      });
       pairRows.push({
         fourballIndex: bundle.round.fourballIndex,
         roundId: bundle.round.id,
         team,
         label: teamPlayers.map(p=>p.name).join(" & "),
-        count: Math.min(...teamPlayers.map(p => pts[p.id].count)),
-        sum: teamPlayers.reduce((a,p) => a + pts[p.id].sum, 0),
+        count,
+        sum,
       });
     });
   });
@@ -3813,7 +3821,7 @@ function buildPiekfynCompetitionBoard(comp, bundles){
   <div id="pfTabTeam" class="pf-tab-panel${isTab("team")}">
     <div class="card">
       <table>
-        <tr><th class="name-col">Pairing</th>${isMulti ? "<th>Fourball</th>" : ""}<th>Thru</th><th>Combined</th></tr>
+        <tr><th class="name-col">Pairing</th>${isMulti ? "<th>Fourball</th>" : ""}<th>Thru</th><th>Best ball</th></tr>
         ${pairRows.map((r,i) => `
           <tr class="${i===0 && r.count ? 'leader-row' : ''}">
             <td class="name-col">${r.label} <span class="pf-team-tag pf-team-${r.team.toLowerCase()}">${r.team}</span></td>
