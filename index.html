@@ -169,6 +169,8 @@
   table.scorecard-table td.mc-down{background:#fbe8e8;color:var(--danger);font-weight:800;}
   table.scorecard-table td.mc-sq{font-weight:700;color:var(--muted);}
   table.scorecard-table tr.mc-side-row td.label-col{font-weight:800;}
+  table.scorecard-table tr.mc-team-score-row{background:var(--gold-dim);}
+  table.scorecard-table tr.mc-team-score-row td.label-col{font-weight:800;color:var(--brand-dark);}
   .pf-score-row{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:8px;}
   .pf-score-team{font-weight:800;font-size:clamp(.88rem,3.9vw,1.1rem);line-height:1.15;overflow-wrap:anywhere;}
   .pf-score-team-a{color:var(--brand-dark);text-align:left;}
@@ -3731,7 +3733,6 @@ function buildPiekfynCompetitionBoard(comp, bundles){
   const barA = totalMatches ? Math.round((teamATotal / totalMatches) * 100) : 0;
   const barB = totalMatches ? Math.round((teamBTotal / totalMatches) * 100) : 0;
   const barUndecided = Math.max(0, 100 - barA - barB);
-  const pointsToWin = Math.floor(totalMatches / 2) + 0.5;
 
   const indivRows = [];
   bundles.forEach(bundle => {
@@ -3796,9 +3797,8 @@ function buildPiekfynCompetitionBoard(comp, bundles){
       <div style="width:${barUndecided}%;"></div>
       <div class="pf-bar-seg" style="width:${barB}%;background:var(--team-b);"></div>
     </div>
-    <div class="row" style="justify-content:space-between;font-size:.72rem;margin-top:6px;">
+    <div class="row" style="font-size:.72rem;margin-top:6px;">
       <span class="muted">${decidedCount} of ${totalMatches} matches decided</span>
-      <span class="muted">${pointsToWin} points wins the Kompetisie</span>
     </div>
   </div>
 
@@ -4353,10 +4353,19 @@ function openMatchScorecard(bundle, matchKey){
     const counted = side.length > 1 && best(side, h) === v;   // the better-ball score that counts
     return `<td>${counted ? `<span class="circled-score">${v}</span>` : v}</td>`;
   }).join("");
+  // The two-ball's own score per hole (the circled better-ball net, stated as its own row) —
+  // singles matches skip this since there's only one player's score to show.
+  const teamScoreRow = (side, sideName) => side.length > 1
+    ? `<tr class="mc-team-score-row"><td class="label-col">${sideName}</td>${cols.map(h => {
+        const v = best(side, h);
+        return v == null ? `<td>-</td>` : `<td><strong>${v}</strong></td>`;
+      }).join("")}</tr>`
+    : "";
   const sideRows = (side, sideName, sign) => `
     ${side.map(p => `
       <tr><td class="label-col">${p.name}${side.length > 1 ? "" : ""}</td>${nets(cols, side, p)}</tr>`).join("")}
-    <tr class="mc-side-row"><td class="label-col">${side.length > 1 ? sideName : "Match"}</td>${statusCells(cols, sign)}</tr>`;
+    ${teamScoreRow(side, sideName)}
+    <tr class="mc-side-row"><td class="label-col">Match</td>${statusCells(cols, sign)}</tr>`;
 
   const html = `
     <div class="scorecard-overlay" id="scorecardOverlay">
@@ -4382,7 +4391,7 @@ function openMatchScorecard(bundle, matchKey){
           </tbody>
         </table>
         </div>
-        <p class="muted" style="font-size:.75rem;margin:10px 0 0;">Net scores${matchKeyIsTeam(matchKey) ? " (circled = the better ball that counts)" : ""}. The count in each row is that side's lead: it goes up when they win a hole and down when they lose one, in the order the holes were played.</p>
+        <p class="muted" style="font-size:.75rem;margin:10px 0 0;">Net scores${matchKeyIsTeam(matchKey) ? " (circled = the better ball that counts, repeated as that two-ball's own score row)" : ""}. The Match row is that side's lead: it goes up when they win a hole and down when they lose one, in the order the holes were played.</p>
       </div>
     </div>`;
   const wrapper = document.createElement("div");
