@@ -152,7 +152,7 @@
 
   /* Piekfyn Kompetisie scoreboard (competition/standings pages) */
   .pf-bar-track{display:flex;height:12px;border-radius:6px;overflow:hidden;margin-top:18px;background:var(--line);}
-  .pf-bar-seg{height:100%;}
+  .pf-bar-seg, .pf-bar-seg-a, .pf-bar-seg-b{height:100%;}
   .pf-tab-bar{display:flex;gap:4px;background:var(--brand-dark);padding:4px;border-radius:8px;margin:14px 0;}
   .pf-tab-btn{flex:1;background:transparent;border:none;color:var(--gold-dim);padding:10px 8px;font-size:.85rem;font-weight:600;border-radius:6px;opacity:.7;font-family:inherit;cursor:pointer;}
   .pf-tab-btn.active{background:var(--gold);color:var(--brand-dark);opacity:1;}
@@ -171,12 +171,44 @@
   table.scorecard-table tr.mc-side-row td.label-col{font-weight:800;}
   table.scorecard-table tr.mc-team-score-row{background:var(--gold-dim);}
   table.scorecard-table tr.mc-team-score-row td.label-col{font-weight:800;color:var(--brand-dark);}
-  .pf-score-row{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:8px;}
-  .pf-score-team{font-weight:800;font-size:clamp(.88rem,3.9vw,1.1rem);line-height:1.15;overflow-wrap:anywhere;}
-  .pf-score-team-a{color:var(--brand-dark);text-align:left;}
-  .pf-score-team-b{color:var(--team-b);text-align:right;}
-  .pf-score-nums{display:flex;align-items:baseline;gap:6px;font-size:clamp(2rem,10.5vw,2.9rem);font-weight:800;line-height:1;white-space:nowrap;}
-  .pf-score-dash{color:var(--muted);font-weight:600;font-size:.6em;}
+  /* Hero team chips — two color styles: jersey-fade gradient (default) and flat plain red/white.
+     Both keep the same text colors (A white, B red); only the fill differs. */
+  .pf-hero-chips{display:flex;align-items:stretch;gap:8px;}
+  .pf-chip{flex:1;border-radius:10px;padding:12px 12px 14px;display:flex;flex-direction:column;justify-content:flex-start;min-width:0;position:relative;overflow:hidden;}
+  .pf-chip-kicker{font-size:10px;text-transform:uppercase;letter-spacing:.07em;opacity:.85;position:relative;}
+  .pf-chip-name{font-size:14px;font-weight:800;overflow-wrap:anywhere;position:relative;}
+  .pf-chip-num{font-size:clamp(1.6rem,8vw,2.2rem);font-weight:800;line-height:1;margin-top:4px;position:relative;}
+  .pf-chip-a{color:#fff;}
+  .pf-chip-a .pf-chip-kicker{color:var(--gold-dim);}
+  .pf-chip-b{color:var(--brand-dark);}
+  .pf-chip-b .pf-chip-kicker{opacity:.7;}
+  .pf-vs{display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--muted);width:18px;flex-shrink:0;}
+  .pf-chip-a.pf-gradient{
+    background:
+      repeating-linear-gradient(135deg, rgba(255,255,255,.07) 0 2px, transparent 2px 9px),
+      linear-gradient(180deg, var(--brand-dark) 0%, var(--brand) 45%, #fff 115%);
+  }
+  .pf-chip-b.pf-gradient{
+    background:
+      repeating-linear-gradient(135deg, rgba(122,15,15,.06) 0 2px, transparent 2px 9px),
+      linear-gradient(180deg, #fff 0%, #fff 45%, var(--brand) 115%);
+    border:1px solid var(--line);
+  }
+  .pf-chip-a.pf-flat{background:var(--brand-dark);}
+  .pf-chip-b.pf-flat{background:#fff;border:2px solid var(--brand-dark);}
+  .pf-bar-seg-a.pf-gradient{
+    background:
+      repeating-linear-gradient(135deg, rgba(255,255,255,.2) 0 1.5px, transparent 1.5px 6px),
+      linear-gradient(90deg, var(--brand-dark), var(--brand));
+  }
+  .pf-bar-seg-b.pf-gradient{
+    background:
+      repeating-linear-gradient(135deg, rgba(122,15,15,.15) 0 1.5px, transparent 1.5px 6px),
+      linear-gradient(90deg, #fff, var(--brand));
+    border-left:1px solid var(--line);box-sizing:border-box;
+  }
+  .pf-bar-seg-a.pf-flat{background:var(--brand-dark);}
+  .pf-bar-seg-b.pf-flat{background:#fff;border-left:2px solid var(--brand-dark);box-sizing:border-box;}
   .pf-live-wrap{display:flex;justify-content:center;margin-bottom:8px;}
   .pf-live{display:inline-flex;align-items:center;gap:5px;font-size:.66rem;font-weight:800;letter-spacing:.08em;color:#c62828;background:#fdecea;border:1px solid #f3b8b3;padding:2px 9px;border-radius:999px;}
   .pf-live.pf-final{color:var(--muted);background:var(--gold-dim);border-color:var(--line);}
@@ -1373,6 +1405,11 @@ function renderNewRound(){
           <input type="text" id="teamBName" placeholder="e.g. The Birdies">
         </div>
       </div>
+      <label>Team colors</label>
+      <div class="row" style="gap:18px;">
+        <label class="row" style="gap:6px;"><input type="radio" name="teamColorStyle" value="gradient" checked> Jersey fade</label>
+        <label class="row" style="gap:6px;"><input type="radio" name="teamColorStyle" value="flat"> Plain red &amp; white</label>
+      </div>
       <label>Fourball 1 — individual match pairings</label>
       <div id="pairingOptions"></div>
     </div>`;
@@ -1540,7 +1577,7 @@ async function createRound(){
     : [];
   const fourballCount = parseInt(document.getElementById("fourballCount").value, 10) || 1;
 
-  let teamAName = null, teamBName = null, piekfynPairs = null;
+  let teamAName = null, teamBName = null, piekfynPairs = null, teamColorStyle = null;
   if (modes.includes("piekfyn")){
     const teamACount = [1,2,3,4].filter(i => document.getElementById(`p${i}-team`).value === "A").length;
     const teamBCount = [1,2,3,4].filter(i => document.getElementById(`p${i}-team`).value === "B").length;
@@ -1555,6 +1592,7 @@ async function createRound(){
     }
     teamAName = document.getElementById("teamAName").value.trim() || "Team A";
     teamBName = document.getElementById("teamBName").value.trim() || "Team B";
+    teamColorStyle = (document.querySelector('input[name="teamColorStyle"]:checked') || {}).value || "gradient";
     piekfynPairs = JSON.parse(selectedRadio.value);
 
     for (let fb = 2; fb <= fourballCount; fb++){
@@ -1596,7 +1634,7 @@ async function createRound(){
       const teeTimesByFourball = Array.from({length: fourballCount}, (_, idx) => readTeeTimeForFourball(idx + 1));
       await createCompetition({
         roundName, courseName, roundDate, teeBox, modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
-        teamAName, teamBName, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount, creatorIsPlaying, ratingSlope
+        teamAName, teamBName, teamColorStyle, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount, creatorIsPlaying, ratingSlope
       });
       return;
     }
@@ -1605,7 +1643,7 @@ async function createRound(){
 
     const roundRef = await addDoc(collection(db, "golf_rounds"), {
       name: roundName, courseName, roundDate, teeTime, teeBox, gameModes: modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
-      teamAName, teamBName, piekfynPairs, spectatorCode, ownerUid: currentUser ? currentUser.uid : null, creatorIsPlaying,
+      teamAName, teamBName, teamColorStyle, piekfynPairs, spectatorCode, ownerUid: currentUser ? currentUser.uid : null, creatorIsPlaying,
       status: "active", deleted: false, startedAt: null, finishedAt: null, createdAt: serverTimestamp()
     });
 
@@ -1641,12 +1679,13 @@ function defaultPairsFor(players){
 async function createCompetition(cfg){
   const {
     roundName, courseName, roundDate, teeBox, modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
-    teamAName, teamBName, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount, creatorIsPlaying, ratingSlope
+    teamAName, teamBName, teamColorStyle, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount, creatorIsPlaying, ratingSlope
   } = cfg;
   const isPiekfyn = modes.includes("piekfyn");
 
   const compRef = await addDoc(collection(db, "golf_competitions"), {
     name: roundName, teamAName: isPiekfyn ? teamAName : null, teamBName: isPiekfyn ? teamBName : null,
+    teamColorStyle: isPiekfyn ? teamColorStyle : null,
     courseName, roundDate, teeTime: teeTimesByFourball[0] || "", teeBox,
     fourballCount, gameModes: modes, createdAt: serverTimestamp()
   });
@@ -1658,6 +1697,7 @@ async function createCompetition(cfg){
       name: `${roundName} — Fourball ${fb}`, courseName, roundDate, teeTime: teeTimesByFourball[fb - 1] || "", teeBox,
       gameModes: modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
       teamAName: isPiekfyn ? teamAName : null, teamBName: isPiekfyn ? teamBName : null,
+      teamColorStyle: isPiekfyn ? teamColorStyle : null,
       piekfynPairs: isPiekfyn ? (isFirst ? piekfynPairs : defaultPairsFor(playersByFourball[fb - 1])) : null,
       spectatorCode, competitionId: compRef.id, fourballIndex: fb, ownerUid: currentUser ? currentUser.uid : null, creatorIsPlaying,
       status: "active", deleted: false, startedAt: null, finishedAt: null, createdAt: serverTimestamp()
@@ -2101,6 +2141,11 @@ function buildPiekfynEditSection(bundle){
         <div><label>Team A name</label><input type="text" id="editTeamAName" value="${round.teamAName || "Team A"}"></div>
         <div><label>Team B name</label><input type="text" id="editTeamBName" value="${round.teamBName || "Team B"}"></div>
       </div>
+      <label>Team colors</label>
+      <div class="row" style="gap:18px;">
+        <label class="row" style="gap:6px;"><input type="radio" name="editTeamColorStyle" value="gradient" ${round.teamColorStyle !== "flat" ? "checked" : ""}> Jersey fade</label>
+        <label class="row" style="gap:6px;"><input type="radio" name="editTeamColorStyle" value="flat" ${round.teamColorStyle === "flat" ? "checked" : ""}> Plain red &amp; white</label>
+      </div>
       <label>Individual match pairings</label>
       <div id="editPairingBox">${buildEditPairingRadios(positions, round.piekfynPairs)}</div>
       <p class="muted" style="font-size:.75rem;margin-top:6px;">Pairings update automatically if you change player teams below.</p>
@@ -2274,6 +2319,8 @@ async function saveSchedule(spectatorUrl){
       updates.teamAName = teamAEl.value.trim() || "Team A";
       updates.teamBName = teamBEl.value.trim() || "Team B";
     }
+    const colorStyleEl = document.querySelector('input[name="editTeamColorStyle"]:checked');
+    if (colorStyleEl) updates.teamColorStyle = colorStyleEl.value;
     const pairingEl = document.querySelector('input[name="editPairingChoice"]:checked');
     if (pairingEl) updates.piekfynPairs = JSON.parse(pairingEl.value);
   }
@@ -2786,6 +2833,11 @@ function buildCompetitionEditHtml(comp, mode){
       <div class="grid-2">
         <div><label>Team A name</label><input type="text" id="editCompTeamAName" value="${comp.teamAName || "Team A"}"></div>
         <div><label>Team B name</label><input type="text" id="editCompTeamBName" value="${comp.teamBName || "Team B"}"></div>
+      </div>
+      <label>Team colors</label>
+      <div class="row" style="gap:18px;">
+        <label class="row" style="gap:6px;"><input type="radio" name="editCompTeamColorStyle" value="gradient" ${comp.teamColorStyle !== "flat" ? "checked" : ""}> Jersey fade</label>
+        <label class="row" style="gap:6px;"><input type="radio" name="editCompTeamColorStyle" value="flat" ${comp.teamColorStyle === "flat" ? "checked" : ""}> Plain red &amp; white</label>
       </div>` : ""}
       <p class="muted" style="font-size:.75rem;margin-top:6px;">Applies to every fourball. Each fourball's own tee time, players and holes can still be changed individually from that fourball's own Schedule tab.</p>
       <div class="row" style="margin-top:12px;">
@@ -2806,6 +2858,8 @@ async function saveCompetitionEdit(comp, mode, bundles){
   if (mode === "piekfyn"){
     updates.teamAName = document.getElementById("editCompTeamAName").value.trim() || "Team A";
     updates.teamBName = document.getElementById("editCompTeamBName").value.trim() || "Team B";
+    const colorStyleEl = document.querySelector('input[name="editCompTeamColorStyle"]:checked');
+    if (colorStyleEl) updates.teamColorStyle = colorStyleEl.value;
   }
 
   if (msg) msg.textContent = "Saving…";
@@ -2814,7 +2868,7 @@ async function saveCompetitionEdit(comp, mode, bundles){
     batch.update(doc(db, "golf_competitions", comp.id), updates);
     bundles.forEach(b => {
       const roundUpdates = { courseName, roundDate, teeBox, name: `${name} — Fourball ${b.round.fourballIndex}` };
-      if (mode === "piekfyn"){ roundUpdates.teamAName = updates.teamAName; roundUpdates.teamBName = updates.teamBName; }
+      if (mode === "piekfyn"){ roundUpdates.teamAName = updates.teamAName; roundUpdates.teamBName = updates.teamBName; roundUpdates.teamColorStyle = updates.teamColorStyle; }
       batch.update(doc(db, "golf_rounds", b.round.id), roundUpdates);
     });
     await batch.commit();
@@ -3692,6 +3746,7 @@ function wirePiekfynTabs(){
 function buildPiekfynCompetitionBoard(comp, bundles){
   const teamAName = comp.teamAName || "Team A";
   const teamBName = comp.teamBName || "Team B";
+  const colorStyle = comp.teamColorStyle === "flat" ? "pf-flat" : "pf-gradient";
   const isMulti = bundles.length > 1; // single standalone round: the Fourball column has nothing to say
 
   let teamATotal = 0, teamBTotal = 0, decidedCount = 0;
@@ -3783,19 +3838,23 @@ function buildPiekfynCompetitionBoard(comp, bundles){
   return `
   <div class="card" style="padding:14px 16px 16px;">
     ${liveBadge}
-    <div class="pf-score-row">
-      <div class="pf-score-team pf-score-team-a">${teamAName}</div>
-      <div class="pf-score-nums">
-        <span style="color:var(--brand-dark);">${teamATotal}</span>
-        <span class="pf-score-dash">&ndash;</span>
-        <span style="color:var(--team-b);">${teamBTotal}</span>
+    <div class="pf-hero-chips">
+      <div class="pf-chip pf-chip-a ${colorStyle}">
+        <div class="pf-chip-kicker">Team A</div>
+        <div class="pf-chip-name">${teamAName}</div>
+        <div class="pf-chip-num">${teamATotal}</div>
       </div>
-      <div class="pf-score-team pf-score-team-b">${teamBName}</div>
+      <div class="pf-vs">&ndash;</div>
+      <div class="pf-chip pf-chip-b ${colorStyle}">
+        <div class="pf-chip-kicker">Team B</div>
+        <div class="pf-chip-name">${teamBName}</div>
+        <div class="pf-chip-num">${teamBTotal}</div>
+      </div>
     </div>
     <div class="pf-bar-track">
-      <div class="pf-bar-seg" style="width:${barA}%;background:var(--brand-dark);"></div>
+      <div class="pf-bar-seg-a ${colorStyle}" style="width:${barA}%;"></div>
       <div style="width:${barUndecided}%;"></div>
-      <div class="pf-bar-seg" style="width:${barB}%;background:var(--team-b);"></div>
+      <div class="pf-bar-seg-b ${colorStyle}" style="width:${barB}%;"></div>
     </div>
     <div class="row" style="font-size:.72rem;margin-top:6px;">
       <span class="muted">${decidedCount} of ${totalMatches} matches decided</span>
