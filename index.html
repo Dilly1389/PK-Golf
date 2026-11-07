@@ -117,6 +117,30 @@
   .account-chip{display:inline-flex;align-items:center;gap:5px;font-size:.92rem;font-weight:700;color:var(--gold-dim);opacity:.95;text-decoration:none;padding:6px 2px;}
   .account-chip:hover{opacity:1;text-decoration:underline;}
 
+  /* Home screen's big centered hero (phone layout only - desktop keeps the plain sidebar
+     header). Red-to-gold gradient standing in for a course photo, branding centered in the
+     middle, three stacked action pills below. */
+  .home-hero{
+    background:linear-gradient(165deg, var(--brand-dark) 0%, var(--brand) 45%, var(--brand-light) 68%, var(--gold) 120%);
+    padding:14px 20px 36px;
+    color:#fff;
+    border-bottom:3px solid var(--gold);
+  }
+  .home-hero-topbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;}
+  .home-hero-topbar .header-status-row{justify-content:flex-end;}
+  .home-hero-brand{text-align:center;padding:30px 0 34px;}
+  .home-hero-logo{width:68px;height:68px;border-radius:16px;box-shadow:0 6px 20px rgba(0,0,0,.25);}
+  .home-hero-brand h1{margin:14px 0 0;font-size:1.9rem;font-weight:800;letter-spacing:-0.01em;color:#fff;}
+  .home-hero-tagline{margin:4px 0 0;font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--gold-dim);opacity:.85;}
+  .home-hero-actions{display:flex;flex-direction:column;gap:12px;max-width:420px;margin:0 auto;}
+  .home-hero-pill{
+    display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
+    padding:15px 16px;border-radius:999px;font-size:1rem;font-weight:700;font-family:inherit;
+    cursor:pointer;border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.14);color:#fff;
+    backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  }
+  .home-hero-pill-primary{background:#fff;color:var(--brand-dark);border-color:#fff;box-shadow:0 6px 18px rgba(0,0,0,.2);}
+
   /* Slide-in nav drawer, opened from the hamburger button in the header - sized for a thumb
      to reach and tap on a phone (78vw wide, 44px+ tall link rows). */
   .menu-btn{background:transparent;border:1px solid rgba(255,255,255,.4);color:#fff;font-size:1.3rem;line-height:1;padding:7px 11px;border-radius:8px;cursor:pointer;flex-shrink:0;}
@@ -663,8 +687,22 @@ function svgIcon(name){
 }
 
 /* ---------- shared header ---------- */
-function renderAppHeader(title, subtitle, badge){
-  // badge: "live" | "final" | undefined
+// Factored out of renderAppHeader so renderHome's custom hero (which doesn't use the plain
+// header bar) can still include the same slide-in nav drawer.
+function renderAppDrawer(){
+  return `
+    <div id="appDrawerOverlay" class="app-drawer-overlay"></div>
+    <nav id="appDrawer" class="app-drawer">
+      <div class="app-drawer-head"><img src="/golf/icon-header.png" alt="" style="height:26px;width:26px;vertical-align:-6px;margin-right:8px;">PK Golf</div>
+      <a href="#/" class="drawer-link">${svgIcon("home")} My rounds</a>
+      <a href="#/new-round" class="drawer-link">${svgIcon("plus")} New round</a>
+      <a href="#/history" class="drawer-link">${svgIcon("clock")} History</a>
+      <a href="#/competitions" class="drawer-link">${svgIcon("trophy")} Competitions</a>
+      <a href="#/account" class="drawer-link">${svgIcon("user")} ${currentUser ? "Account" : "Sign in"}</a>
+    </nav>`;
+}
+// badge/connection/account status row - shared by the plain header and Home's custom hero.
+function renderHeaderStatus(badge){
   const badgeHtml = badge === "live"
     ? `<span class="badge-live"><span class="dot"></span>live</span>`
     : badge === "final"
@@ -676,6 +714,10 @@ function renderAppHeader(title, subtitle, badge){
   </span>`;
   const accountLabel = currentUser ? (currentGolferProfile && currentGolferProfile.name) || currentUser.email || "Account" : "Sign in";
   const accountHtml = `<a href="#/account" class="account-chip">${svgIcon("user")} ${accountLabel}</a>`;
+  return badgeHtml + connHtml + accountHtml;
+}
+function renderAppHeader(title, subtitle, badge){
+  // badge: "live" | "final" | undefined
   return `
     <div class="app-header">
       <div class="top-bar">
@@ -686,20 +728,10 @@ function renderAppHeader(title, subtitle, badge){
         </div>
       </div>
       <div class="header-status-row">
-        ${badgeHtml}
-        ${connHtml}
-        ${accountHtml}
+        ${renderHeaderStatus(badge)}
       </div>
     </div>
-    <div id="appDrawerOverlay" class="app-drawer-overlay"></div>
-    <nav id="appDrawer" class="app-drawer">
-      <div class="app-drawer-head"><img src="/golf/icon-header.png" alt="" style="height:26px;width:26px;vertical-align:-6px;margin-right:8px;">PK Golf</div>
-      <a href="#/" class="drawer-link">${svgIcon("home")} My rounds</a>
-      <a href="#/new-round" class="drawer-link">${svgIcon("plus")} New round</a>
-      <a href="#/history" class="drawer-link">${svgIcon("clock")} History</a>
-      <a href="#/competitions" class="drawer-link">${svgIcon("trophy")} Competitions</a>
-      <a href="#/account" class="drawer-link">${svgIcon("user")} ${currentUser ? "Account" : "Sign in"}</a>
-    </nav>`;
+    ${renderAppDrawer()}`;
 }
 
 /* ---------- desktop sidebar dashboard shell ----------
@@ -764,12 +796,15 @@ function renderDesktopShell({ title, subtitle, badge, route, bodyHtml }){
 // Shared entry point for the 5 "review" screens (home, history, new-round, account,
 // competition/standings) - picks the phone header or the desktop sidebar shell based on
 // current width. bodyHtml is exactly what used to go inside <div class="content">...</div>.
-function mountPage({ title, subtitle, badge, route, bodyHtml }){
+// mobileHeroHtml: an optional full replacement for the plain header+content on the phone
+// layout only (used by Home's big centered hero) - desktop always uses the normal sidebar
+// shell with title/bodyHtml regardless, so it's not plumbed through to renderDesktopShell.
+function mountPage({ title, subtitle, badge, route, bodyHtml, mobileHeroHtml }){
   const app = document.getElementById("app");
   app.classList.toggle("app-desktop", isDesktopWidth());
   app.innerHTML = isDesktopWidth()
     ? renderDesktopShell({ title, subtitle, badge, route, bodyHtml })
-    : `${renderAppHeader(title, subtitle, badge)}<div class="content">${bodyHtml}</div>`;
+    : (mobileHeroHtml || `${renderAppHeader(title, subtitle, badge)}<div class="content">${bodyHtml}</div>`);
 }
 
 /* ---------- tiny router ---------- */
@@ -1168,20 +1203,43 @@ async function loadCurrentRounds(){
 }
 
 function renderHome(){
+  // Desktop keeps the plain sidebar header + stacked buttons (bodyHtml); the phone layout gets
+  // a big centered hero instead (mobileHeroHtml) - same three actions, same element ids, so all
+  // the wiring below works unchanged regardless of which one actually rendered.
+  const actionsHtml = `
+    <button id="newRoundBtn" class="cta-new-round" type="button">+ New round</button>
+    <button class="btn-pill-secondary" id="historyBtn" type="button">${svgIcon("clock")} Playing history</button>
+    <button class="btn-pill-secondary" id="competitionsBtn" type="button">${svgIcon("trophy")} Competitions</button>`;
+  const currentRoundsHtml = `
+    <div id="currentRoundsBlock" style="display:none;">
+      <h2>Current round</h2>
+      <div class="card" id="currentRoundsCard"></div>
+    </div>`;
+
   mountPage({
     title: "PK Golf",
     subtitle: "Score live, share with spectators.",
     route: "home",
-    bodyHtml: `
-    <button id="newRoundBtn" class="cta-new-round" type="button">+ New round</button>
-
-    <button class="btn-pill-secondary" id="historyBtn" type="button">${svgIcon("clock")} Playing history</button>
-    <button class="btn-pill-secondary" id="competitionsBtn" type="button">${svgIcon("trophy")} Competitions</button>
-
-    <div id="currentRoundsBlock" style="display:none;">
-      <h2>Current round</h2>
-      <div class="card" id="currentRoundsCard"></div>
-    </div>
+    bodyHtml: `${actionsHtml}${currentRoundsHtml}`,
+    mobileHeroHtml: `
+      <div class="home-hero">
+        <div class="home-hero-topbar">
+          <button id="menuBtn" class="menu-btn" type="button" aria-label="Menu">${svgIcon("menu")}</button>
+          <div class="header-status-row">${renderHeaderStatus()}</div>
+        </div>
+        <div class="home-hero-brand">
+          <img src="/golf/icon-header.png" alt="" class="home-hero-logo">
+          <h1>PK Golf</h1>
+          <p class="home-hero-tagline">Score it live</p>
+        </div>
+        <div class="home-hero-actions">
+          <button id="newRoundBtn" class="home-hero-pill home-hero-pill-primary" type="button">${svgIcon("plus")} New round</button>
+          <button id="historyBtn" class="home-hero-pill" type="button">${svgIcon("clock")} Playing history</button>
+          <button id="competitionsBtn" class="home-hero-pill" type="button">${svgIcon("trophy")} Competitions</button>
+        </div>
+      </div>
+      ${renderAppDrawer()}
+      <div class="content">${currentRoundsHtml}</div>
     `,
   });
 
