@@ -53,9 +53,17 @@
   label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:4px;margin-top:12px;}
   input[type=text], input[type=number], select{
     width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;
-    background:#fff;font-size:.95rem;color:var(--ink);
+    background:#fff;font-size:1rem;color:var(--ink);
   }
   input:focus, select:focus{outline:2px solid var(--brand-light);outline-offset:1px;}
+  /* Buttons/links default to the browser's native focus ring, which can be low-contrast against
+     the dark-red header/sidebar or a colored team swatch - give every interactive element
+     (real or role="button"-marked custom row) a consistent, on-brand focus style instead. */
+  a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [tabindex]:focus-visible{
+    outline:2px solid var(--gold);
+    outline-offset:2px;
+    border-radius:4px;
+  }
   button{
     font-family:inherit;font-size:.9rem;font-weight:600;
     border:1px solid var(--brand-dark);background:var(--brand-dark);color:var(--gold-dim);
@@ -161,7 +169,7 @@
   .password-checklist li.met .pw-check-icon{background:#1f9254;border-color:#1f9254;color:#fff;}
   input[type=email], input[type=password]{
     width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;
-    background:#fff;font-size:.95rem;color:var(--ink);
+    background:#fff;font-size:1rem;color:var(--ink);
   }
   .auth-switch-link{background:none;border:none;color:var(--brand-light);font-weight:700;cursor:pointer;font-family:inherit;font-size:inherit;padding:0;text-decoration:underline;}
   @keyframes pulse{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
@@ -219,15 +227,18 @@
   .pf-live.pf-final{color:var(--muted);background:var(--gold-dim);border-color:var(--line);}
   .pf-live-dot{width:7px;height:7px;border-radius:50%;background:#e53935;animation:pfPulse 1.4s ease-in-out infinite;}
   @keyframes pfPulse{0%,100%{opacity:1;}50%{opacity:.25;}}
-  @media (prefers-reduced-motion: reduce){.pf-live-dot{animation:none;}}
+  @media (prefers-reduced-motion: reduce){
+    .pf-live-dot{animation:none;}
+    .app-drawer, .app-drawer-overlay{transition:none;}
+  }
   .pf-pill{font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;flex-shrink:0;}
   .pf-pill.status-all-sq{background:var(--gold-dim);color:var(--ink);border:1px solid var(--gold);}
   .pf-team-tag{display:inline-block;font-size:.65rem;font-weight:700;padding:2px 7px;border-radius:999px;}
   .pf-color-picker-row{display:flex;gap:18px;flex-wrap:wrap;margin-top:6px;}
   .pf-color-group{display:flex;align-items:center;gap:8px;}
   .pf-color-group-label{font-size:.72rem;font-weight:700;color:var(--muted);width:14px;flex-shrink:0;}
-  .pf-swatches{display:flex;gap:6px;flex-wrap:wrap;}
-  .pf-swatch{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);padding:0;cursor:pointer;}
+  .pf-swatches{display:flex;gap:8px;flex-wrap:wrap;}
+  .pf-swatch{width:36px;height:36px;border-radius:50%;border:2px solid var(--line);padding:0;cursor:pointer;}
   .pf-swatch.selected{border-color:var(--ink);box-shadow:0 0 0 2px #fff inset;}
 
   /* clickable player names */
@@ -434,7 +445,7 @@ async function searchGolfCore(){
     resultsEl.innerHTML = courses.length === 0
       ? `<p class="muted" style="font-size:.78rem;">No matches.</p>`
       : courses.map(c => `
-        <div class="golfcore-result" data-slug="${c.slug}" data-url="${c.url}" style="cursor:pointer;padding:8px 10px;border:1px solid var(--line);border-radius:6px;margin-top:6px;">
+        <div class="golfcore-result" data-slug="${c.slug}" data-url="${c.url}" role="button" tabindex="0" style="cursor:pointer;padding:8px 10px;border:1px solid var(--line);border-radius:6px;margin-top:6px;">
           <strong>${c.name}</strong>
           <div class="muted" style="font-size:.78rem;">${c.city || ""}${c.region ? ", " + c.region : ""}${c.country ? " · " + c.country.toUpperCase() : ""} · Par ${c.par_total || "?"}</div>
         </div>`).join("");
@@ -635,6 +646,20 @@ if (auth){
   authResolved = true; // not configured — don't block the home screen forever
 }
 
+// Small inline-SVG line icons (Lucide-style: 24x24, stroke-based) - used instead of emoji so
+// nav/account icons render consistently across platforms and can take currentColor/stroke-width
+// like real icons. aria-hidden since every usage sits next to its own visible text label.
+function svgIcon(name){
+  const paths = {
+    home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>',
+    menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
+  };
+  return `<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em;flex-shrink:0;" aria-hidden="true">${paths[name] || ""}</svg>`;
+}
+
 /* ---------- shared header ---------- */
 function renderAppHeader(title, subtitle, badge){
   // badge: "live" | "final" | undefined
@@ -648,12 +673,12 @@ function renderAppHeader(title, subtitle, badge){
     <span class="conn-dot"></span>${online ? "Connected" : "Offline"}
   </span>`;
   const accountLabel = currentUser ? (currentGolferProfile && currentGolferProfile.name) || currentUser.email || "Account" : "Sign in";
-  const accountHtml = `<a href="#/account" class="account-chip">👤 ${accountLabel}</a>`;
+  const accountHtml = `<a href="#/account" class="account-chip">${svgIcon("user")} ${accountLabel}</a>`;
   return `
     <div class="app-header">
       <div class="top-bar">
         <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-          <button id="menuBtn" class="menu-btn" type="button" aria-label="Menu">&#9776;</button>
+          <button id="menuBtn" class="menu-btn" type="button" aria-label="Menu">${svgIcon("menu")}</button>
           <div style="min-width:0;">
             <h1><img src="/golf/icon-header.png" alt="" style="height:30px;width:30px;vertical-align:-7px;margin-right:6px;">${title}</h1>
             <p class="subtitle">${subtitle || ""}</p>
@@ -669,10 +694,10 @@ function renderAppHeader(title, subtitle, badge){
     <div id="appDrawerOverlay" class="app-drawer-overlay"></div>
     <nav id="appDrawer" class="app-drawer">
       <div class="app-drawer-head"><img src="/golf/icon-header.png" alt="" style="height:26px;width:26px;vertical-align:-6px;margin-right:8px;">PK Golf</div>
-      <a href="#/" class="drawer-link">&#127968; My rounds</a>
-      <a href="#/new-round" class="drawer-link">&#10133; New round</a>
-      <a href="#/history" class="drawer-link">&#128337; History</a>
-      <a href="#/account" class="drawer-link">&#128100; ${currentUser ? "Account" : "Sign in"}</a>
+      <a href="#/" class="drawer-link">${svgIcon("home")} My rounds</a>
+      <a href="#/new-round" class="drawer-link">${svgIcon("plus")} New round</a>
+      <a href="#/history" class="drawer-link">${svgIcon("clock")} History</a>
+      <a href="#/account" class="drawer-link">${svgIcon("user")} ${currentUser ? "Account" : "Sign in"}</a>
     </nav>`;
 }
 
@@ -686,9 +711,9 @@ const DESKTOP_BREAKPOINT = 1100;
 function isDesktopWidth(){ return window.innerWidth >= DESKTOP_BREAKPOINT; }
 
 const DESKTOP_NAV_ITEMS = [
-  { route: "home", href: "#/", icon: "&#127968;", label: "My rounds" },
-  { route: "new-round", href: "#/new-round", icon: "&#10133;", label: "New round" },
-  { route: "history", href: "#/history", icon: "&#128337;", label: "History" },
+  { route: "home", href: "#/", icon: svgIcon("home"), label: "My rounds" },
+  { route: "new-round", href: "#/new-round", icon: svgIcon("plus"), label: "New round" },
+  { route: "history", href: "#/history", icon: svgIcon("clock"), label: "History" },
 ];
 
 // route: which sidebar nav item (if any) to highlight as active - "home" | "new-round" |
@@ -716,7 +741,7 @@ function renderDesktopShell({ title, subtitle, badge, route, bodyHtml }){
           <span class="conn-indicator ${online ? "conn-online" : "conn-offline"}" id="connIndicator">
             <span class="conn-dot"></span>${online ? "Connected" : "Offline"}
           </span>
-          <a href="#/account" class="desktop-account-link">&#128100; ${accountLabel}</a>
+          <a href="#/account" class="desktop-account-link">${svgIcon("user")} ${accountLabel}</a>
         </div>
       </aside>
       <main class="desktop-main">
@@ -1147,7 +1172,7 @@ function renderHome(){
     bodyHtml: `
     <button id="newRoundBtn" class="cta-new-round" type="button">+ New round</button>
 
-    <button class="btn-pill-secondary" id="historyBtn" type="button">🕒 Playing history</button>
+    <button class="btn-pill-secondary" id="historyBtn" type="button">${svgIcon("clock")} Playing history</button>
 
     <div id="currentRoundsBlock" style="display:none;">
       <h2>Current round</h2>
@@ -1165,7 +1190,7 @@ function renderHome(){
     if (!block || !card || !list.length) return;
     card.innerHTML = list.map(({r, route}) => `
       <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);">
-        <div class="current-round-item" data-round="${r.id}" data-route="${route}" style="cursor:pointer;flex:1;">
+        <div class="current-round-item" data-round="${r.id}" data-route="${route}" role="button" tabindex="0" style="cursor:pointer;flex:1;">
           <strong>${r.name}</strong>
           <div class="muted" style="font-size:.78rem;">${r.courseName || ""}${r.roundDate ? " · " + r.roundDate : ""}</div>
         </div>
@@ -1192,7 +1217,7 @@ function renderHome(){
         const subtitle = mode === "piekfyn" ? `${c.teamAName || "Team A"} vs ${c.teamBName || "Team B"}` : competitionModeLabel(mode);
         return `
         <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);${isDeleted ? "opacity:.6;" : ""}">
-          <div class="comp-item" data-comp="${c.id}" style="cursor:${isDeleted ? "default" : "pointer"};flex:1;">
+          <div class="comp-item" data-comp="${c.id}" role="button" tabindex="0" style="cursor:${isDeleted ? "default" : "pointer"};flex:1;">
             <strong>${c.name}</strong>
             <div class="muted" style="font-size:.78rem;">${subtitle} · ${c.fourballCount} fourball${c.fourballCount>1?"s":""}${c.courseName ? " · " + c.courseName : ""}</div>
           </div>
@@ -1262,7 +1287,7 @@ function renderHistory(){
         ? `<p class="muted">No rounds yet under this account — rounds you create while signed in will show up here.</p>`
         : active.map(r => `
           <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);">
-            <div class="round-item" data-round="${r.id}" style="cursor:pointer;flex:1;">
+            <div class="round-item" data-round="${r.id}" role="button" tabindex="0" style="cursor:pointer;flex:1;">
               <strong>${r.name}</strong>${r.creatorIsPlaying === false ? ` <span class="pill mode" style="background:var(--gold-dim);">Marking</span>` : ""}
               <div class="muted" style="font-size:.78rem;">${r.courseName || ""}${r.roundDate ? " · " + r.roundDate : ""}${r.teeBox ? " · " + r.teeBox + " tees" : ""}</div>
             </div>
@@ -1281,7 +1306,7 @@ function renderHistory(){
 
     const itemHtml = (r, isDeleted) => `
       <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);${isDeleted ? "opacity:.6;" : ""}">
-        <div class="round-item" data-round="${r.id}" style="cursor:${isDeleted ? "default" : "pointer"};flex:1;">
+        <div class="round-item" data-round="${r.id}" role="button" tabindex="0" style="cursor:${isDeleted ? "default" : "pointer"};flex:1;">
           <strong>${r.name}</strong>
           <div class="muted" style="font-size:.78rem;">${r.courseName || ""}${r.roundDate ? " · " + r.roundDate : ""}${r.teeBox ? " · " + r.teeBox + " tees" : ""}${r.competitionId ? ` · Fourball ${r.fourballIndex || ""}` : ""}</div>
         </div>
@@ -3185,7 +3210,7 @@ function buildBoardsHtml(bundle, opts){
   if (round.gameModes.includes("bbb")) html += buildBBBBoard(bundle, detail);
   if (isPiekfynMode) html += buildPiekfynRoundBoard(bundle);
   if (round.competitionId && !round.gameModes.includes("piekfyn") && opts.includeStandingsLink !== false){
-    html += `<div class="team-scorecard-link" data-standings-link="${round.competitionId}">Part of a multi-fourball competition — view overall leaderboard</div>`;
+    html += `<div class="team-scorecard-link" data-standings-link="${round.competitionId}" role="button" tabindex="0">Part of a multi-fourball competition — view overall leaderboard</div>`;
   }
   return html;
 }
@@ -3204,7 +3229,7 @@ function totalsFor(players, holes, detail, field){
 }
 
 function playerLink(p, roundId){
-  return `<span class="player-name-link" data-player="${p.id}"${roundId ? ` data-round="${roundId}"` : ""}>${p.name}</span><span class="muted" style="font-size:.72rem;font-weight:400;"> (${p.playingHandicap})</span>`;
+  return `<span class="player-name-link" data-player="${p.id}"${roundId ? ` data-round="${roundId}"` : ""} role="button" tabindex="0">${p.name}</span><span class="muted" style="font-size:.72rem;font-weight:400;"> (${p.playingHandicap})</span>`;
 }
 
 function buildStrokeBoard(players, holes, detail){
@@ -3396,7 +3421,7 @@ function buildBetterballBoard(bundle, detail){
       <tr><td class="name-col team-a">Team A</td><td>${thruA}</td><td>${thruA ? totalA : "-"}</td><td>${shotsA || "-"}</td></tr>
       <tr><td class="name-col team-b">Team B</td><td>${thruB}</td><td>${thruB ? totalB : "-"}</td><td>${shotsB || "-"}</td></tr>
     </table>
-    <div class="team-scorecard-link" data-betterball-link="1">View full scorecard</div>
+    <div class="team-scorecard-link" data-betterball-link="1" role="button" tabindex="0">View full scorecard</div>
   </div>`;
 }
 
@@ -3493,7 +3518,7 @@ function buildAllianceBoard(bundle, detail){
   <div class="card">
     <strong>Alliance</strong> <span class="muted">— best ${n} of ${players.length} net-stableford scores per hole</span>
     <p style="font-size:1.1rem;margin:10px 0 4px;">${thru ? total + " points" : "Not started"} <span class="muted" style="font-size:.85rem;">(thru ${thru})</span></p>
-    <div class="team-scorecard-link">Fourball: ${players.map(p=>p.name).join(", ")} — view full scorecard</div>
+    <div class="team-scorecard-link" role="button" tabindex="0">Fourball: ${players.map(p=>p.name).join(", ")} — view full scorecard</div>
   </div>`;
 }
 
@@ -3838,7 +3863,7 @@ function teamColorHex(key){
 // color like white would be invisible as text color there, so fall back to the dark-red accent.
 function teamColorTextColor(key){
   const c = teamColorSwatch(key);
-  return c.light ? "#7a0f0f" : c.hex;
+  return c.light ? "var(--brand-dark)" : c.hex;
 }
 // One combined row of color swatches for Team A and Team B, plus a live preview of each
 // team's chip underneath — shows the actual colors (not names) and sets a hidden input per
@@ -3893,10 +3918,10 @@ function wireTeamColorPreview(aInputId, bInputId){
 // Jersey-fade: the chosen color at top fading to white, with the chevron texture. Flat: solid fill.
 function teamChipStyle(colorKey, flat){
   const c = teamColorSwatch(colorKey);
-  const textColor = c.light ? "#7a0f0f" : "#fff";
-  const border = c.light ? "border:2px solid #7a0f0f;" : "";
+  const textColor = c.light ? "var(--brand-dark)" : "#fff";
+  const border = c.light ? "border:2px solid var(--brand-dark);" : "";
   const chevron = c.light ? "rgba(122,15,15,.08)" : "rgba(255,255,255,.08)";
-  const fadeTo = c.light ? "#7a0f0f" : "#fff";
+  const fadeTo = c.light ? "var(--brand-dark)" : "#fff";
   return (flat
     ? `background:${c.hex};`
     : `background:repeating-linear-gradient(135deg, ${chevron} 0 2px, transparent 2px 9px), linear-gradient(180deg, ${c.hex} 0%, ${c.hex} 45%, ${fadeTo} 115%);`
@@ -3904,7 +3929,7 @@ function teamChipStyle(colorKey, flat){
 }
 function teamBarSegStyle(colorKey, flat){
   const c = teamColorSwatch(colorKey);
-  const border = c.light ? "border:1px solid #7a0f0f;box-sizing:border-box;" : "";
+  const border = c.light ? "border:1px solid var(--brand-dark);box-sizing:border-box;" : "";
   const chevron = c.light ? "rgba(122,15,15,.15)" : "rgba(255,255,255,.2)";
   return (flat
     ? `background:${c.hex};`
@@ -3915,8 +3940,8 @@ function teamBarSegStyle(colorKey, flat){
 // status stays the neutral gold from its own CSS class, not team-colored.
 function teamSolidStyle(colorKey){
   const c = teamColorSwatch(colorKey);
-  const textColor = c.light ? "#7a0f0f" : "#fff";
-  const border = c.light ? "border:1.5px solid #7a0f0f;" : "";
+  const textColor = c.light ? "var(--brand-dark)" : "#fff";
+  const border = c.light ? "border:1.5px solid var(--brand-dark);" : "";
   return `background:${c.hex};color:${textColor};${border}`;
 }
 
@@ -3932,7 +3957,7 @@ function piekfynStatusClass(m){
 // the comp argument directly.
 function buildPiekfynRoundBoard(bundle){
   const linkHtml = bundle.round.competitionId
-    ? `<div class="team-scorecard-link" data-standings-link="${bundle.round.competitionId}">Part of a multi-fourball competition — view overall standings</div>`
+    ? `<div class="team-scorecard-link" data-standings-link="${bundle.round.competitionId}" role="button" tabindex="0">Part of a multi-fourball competition — view overall standings</div>`
     : "";
   return linkHtml + buildPiekfynCompetitionBoard(bundle.round, [bundle]);
 }
@@ -4111,7 +4136,7 @@ function buildPiekfynCompetitionBoard(comp, bundles){
       <table>
         <tr><th class="name-col">Pairing</th>${isMulti ? "<th>Fourball</th>" : ""}<th>Thru</th><th>Best ball</th></tr>
         ${pairRows.map((r,i) => `
-          <tr class="pf-team-row ${i===0 && r.count ? 'leader-row' : ''}" data-bestteam="${r.team}" data-round="${r.roundId}" style="cursor:pointer;">
+          <tr class="pf-team-row ${i===0 && r.count ? 'leader-row' : ''}" data-bestteam="${r.team}" data-round="${r.roundId}" role="button" tabindex="0" style="cursor:pointer;">
             <td class="name-col">${r.label} <span class="pf-team-tag" style="${r.team === "A" ? teamSolidStyle(teamAColor) : teamSolidStyle(teamBColor)}">${r.team}</span> <span class="pf-chev">&rsaquo;</span></td>
             ${isMulti ? `<td class="muted">Fourball ${r.fourballIndex || "?"}</td>` : ""}
             <td>${r.count}</td>
@@ -4818,6 +4843,18 @@ document.addEventListener("click", (e) => {
   if (betterballLink){ openBetterballScorecard(); return; }
   const teamLink = e.target.closest(".team-scorecard-link");
   if (teamLink){ openTeamScorecard(); }
+});
+
+// Makes every element marked role="button" tabindex="0" (the many custom clickable rows
+// throughout the app - competition/history list items, scorecard links, etc.) keyboard-operable
+// without writing a bespoke handler at each call site: Enter/Space re-dispatches as a real click,
+// which the existing click handlers above (delegated or per-element) already know how to handle.
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const el = e.target.closest('[role="button"][tabindex]');
+  if (!el) return;
+  e.preventDefault();
+  el.click();
 });
 
 function updateConnIndicator(){
