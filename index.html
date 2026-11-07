@@ -3764,9 +3764,10 @@ function teamChipStyle(colorKey, flat){
   const textColor = c.light ? "#7a0f0f" : "#fff";
   const border = c.light ? "border:2px solid #7a0f0f;" : "";
   const chevron = c.light ? "rgba(122,15,15,.08)" : "rgba(255,255,255,.08)";
+  const fadeTo = c.light ? "#7a0f0f" : "#fff";
   return (flat
     ? `background:${c.hex};`
-    : `background:repeating-linear-gradient(135deg, ${chevron} 0 2px, transparent 2px 9px), linear-gradient(180deg, ${c.hex} 0%, ${c.hex} 45%, #fff 115%);`
+    : `background:repeating-linear-gradient(135deg, ${chevron} 0 2px, transparent 2px 9px), linear-gradient(180deg, ${c.hex} 0%, ${c.hex} 45%, ${fadeTo} 115%);`
   ) + `color:${textColor};${border}`;
 }
 function teamBarSegStyle(colorKey, flat){
