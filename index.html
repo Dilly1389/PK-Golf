@@ -186,6 +186,12 @@
   .pf-pill{font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;flex-shrink:0;}
   .pf-pill.status-all-sq{background:var(--gold-dim);color:var(--ink);border:1px solid var(--gold);}
   .pf-team-tag{display:inline-block;font-size:.65rem;font-weight:700;padding:2px 7px;border-radius:999px;}
+  .pf-color-picker-row{display:flex;gap:18px;flex-wrap:wrap;margin-top:6px;}
+  .pf-color-group{display:flex;align-items:center;gap:8px;}
+  .pf-color-group-label{font-size:.72rem;font-weight:700;color:var(--muted);width:14px;flex-shrink:0;}
+  .pf-swatches{display:flex;gap:6px;flex-wrap:wrap;}
+  .pf-swatch{width:26px;height:26px;border-radius:50%;border:2px solid transparent;padding:0;cursor:pointer;}
+  .pf-swatch.selected{border-color:var(--ink);box-shadow:0 0 0 2px #fff inset;}
 
   /* clickable player names */
   .player-name-link{color:var(--brand-light);cursor:pointer;font-weight:700;text-decoration:underline;text-decoration-style:dotted;}
@@ -1369,17 +1375,7 @@ function renderNewRound(){
           <input type="text" id="teamBName" placeholder="e.g. The Birdies">
         </div>
       </div>
-      <label>Team colors</label>
-      <div class="grid-2">
-        <div>
-          <label style="margin-top:0;font-size:.72rem;">Team A color</label>
-          <select id="teamAColor">${teamColorSwatchOptions("red")}</select>
-        </div>
-        <div>
-          <label style="margin-top:0;font-size:.72rem;">Team B color</label>
-          <select id="teamBColor">${teamColorSwatchOptions("navy")}</select>
-        </div>
-      </div>
+      ${buildTeamColorSwatchPicker("teamAColor", "teamBColor", "red", "navy")}
       <div class="row" style="gap:18px;margin-top:8px;">
         <label class="row" style="gap:6px;"><input type="radio" name="teamColorStyle" value="gradient" checked> Jersey fade</label>
         <label class="row" style="gap:6px;"><input type="radio" name="teamColorStyle" value="flat"> Plain (solid color)</label>
@@ -2119,17 +2115,7 @@ function buildPiekfynEditSection(bundle){
         <div><label>Team A name</label><input type="text" id="editTeamAName" value="${round.teamAName || "Team A"}"></div>
         <div><label>Team B name</label><input type="text" id="editTeamBName" value="${round.teamBName || "Team B"}"></div>
       </div>
-      <label>Team colors</label>
-      <div class="grid-2">
-        <div>
-          <label style="margin-top:0;font-size:.72rem;">Team A color</label>
-          <select id="editTeamAColor">${teamColorSwatchOptions(round.teamAColor || "red")}</select>
-        </div>
-        <div>
-          <label style="margin-top:0;font-size:.72rem;">Team B color</label>
-          <select id="editTeamBColor">${teamColorSwatchOptions(round.teamBColor || "navy")}</select>
-        </div>
-      </div>
+      ${buildTeamColorSwatchPicker("editTeamAColor", "editTeamBColor", round.teamAColor || "red", round.teamBColor || "navy")}
       <div class="row" style="gap:18px;margin-top:8px;">
         <label class="row" style="gap:6px;"><input type="radio" name="editTeamColorStyle" value="gradient" ${round.teamColorStyle !== "flat" ? "checked" : ""}> Jersey fade</label>
         <label class="row" style="gap:6px;"><input type="radio" name="editTeamColorStyle" value="flat" ${round.teamColorStyle === "flat" ? "checked" : ""}> Plain (solid color)</label>
@@ -2826,17 +2812,7 @@ function buildCompetitionEditHtml(comp, mode){
         <div><label>Team A name</label><input type="text" id="editCompTeamAName" value="${comp.teamAName || "Team A"}"></div>
         <div><label>Team B name</label><input type="text" id="editCompTeamBName" value="${comp.teamBName || "Team B"}"></div>
       </div>
-      <label>Team colors</label>
-      <div class="grid-2">
-        <div>
-          <label style="margin-top:0;font-size:.72rem;">Team A color</label>
-          <select id="editCompTeamAColor">${teamColorSwatchOptions(comp.teamAColor || "red")}</select>
-        </div>
-        <div>
-          <label style="margin-top:0;font-size:.72rem;">Team B color</label>
-          <select id="editCompTeamBColor">${teamColorSwatchOptions(comp.teamBColor || "navy")}</select>
-        </div>
-      </div>
+      ${buildTeamColorSwatchPicker("editCompTeamAColor", "editCompTeamBColor", comp.teamAColor || "red", comp.teamBColor || "navy")}
       <div class="row" style="gap:18px;margin-top:8px;">
         <label class="row" style="gap:6px;"><input type="radio" name="editCompTeamColorStyle" value="gradient" ${comp.teamColorStyle !== "flat" ? "checked" : ""}> Jersey fade</label>
         <label class="row" style="gap:6px;"><input type="radio" name="editCompTeamColorStyle" value="flat" ${comp.teamColorStyle === "flat" ? "checked" : ""}> Plain (solid color)</label>
@@ -3724,8 +3700,24 @@ const TEAM_COLOR_SWATCHES = [
 function teamColorHex(key){
   return (TEAM_COLOR_SWATCHES.find(c => c.key === key) || TEAM_COLOR_SWATCHES[0]).hex;
 }
-function teamColorSwatchOptions(selectedKey){
-  return TEAM_COLOR_SWATCHES.map(c => `<option value="${c.key}" ${c.key === selectedKey ? "selected" : ""}>${c.label}</option>`).join("");
+// One combined row of color swatches for Team A and Team B — shows the actual colors (not
+// names) and sets a hidden input per team, wired by the global .pf-swatch click handler below.
+function buildTeamColorSwatchPicker(aInputId, bInputId, selectedA, selectedB){
+  const swatchBtn = (c, inputId, selected) => `<button type="button" class="pf-swatch${c.key===selected?" selected":""}" data-color="${c.key}" data-for="${inputId}" style="background:${c.hex};" title="${c.label}" aria-label="${c.label}"></button>`;
+  return `
+    <label>Team colors</label>
+    <div class="pf-color-picker-row">
+      <div class="pf-color-group">
+        <span class="pf-color-group-label">A</span>
+        <div class="pf-swatches">${TEAM_COLOR_SWATCHES.map(c => swatchBtn(c, aInputId, selectedA)).join("")}</div>
+      </div>
+      <div class="pf-color-group">
+        <span class="pf-color-group-label">B</span>
+        <div class="pf-swatches">${TEAM_COLOR_SWATCHES.map(c => swatchBtn(c, bInputId, selectedB)).join("")}</div>
+      </div>
+    </div>
+    <input type="hidden" id="${aInputId}" value="${selectedA}">
+    <input type="hidden" id="${bInputId}" value="${selectedB}">`;
 }
 // Jersey-fade: the chosen color at top fading to white, with the chevron texture. Flat: solid fill.
 function teamChipStyle(colorKey, flat){
@@ -4581,6 +4573,14 @@ function openBestTeamScorecard(bundle, team){
 let competitionBundlesForLinks = [];   // set by renderCompetition/renderStandings so player links on a
                                         // combined leaderboard open the right fourball's scorecard
 document.addEventListener("click", (e) => {
+  const swatch = e.target.closest(".pf-swatch[data-for]");
+  if (swatch){
+    swatch.closest(".pf-swatches").querySelectorAll(".pf-swatch").forEach(b => b.classList.remove("selected"));
+    swatch.classList.add("selected");
+    const input = document.getElementById(swatch.dataset.for);
+    if (input) input.value = swatch.dataset.color;
+    return;
+  }
   const matchRow = e.target.closest(".pf-match-row[data-match]");
   const teamRow = e.target.closest("tr[data-bestteam]");
   if (matchRow || teamRow){
