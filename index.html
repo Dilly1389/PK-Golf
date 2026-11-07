@@ -4727,6 +4727,12 @@ function updateConnIndicator(){
 window.addEventListener("online", updateConnIndicator);
 window.addEventListener("offline", updateConnIndicator);
 
+if ("serviceWorker" in navigator){
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/golf/sw.js", { scope: "/golf" }).catch(() => {});
+  });
+}
+
 render();
 </script>
 </body>
