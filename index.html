@@ -1278,7 +1278,6 @@ function renderNewRound(){
   `;
 
   document.getElementById("backToHomeBtn").onclick = () => { location.hash = ""; };
-  wireTeamColorPreview("teamAColor", "teamBColor");
 
   golfcoreSourceSelected = null;
   document.getElementById("golfcoreSearchBtn").onclick = () => searchGolfCore();
@@ -1384,6 +1383,7 @@ function renderNewRound(){
       <label>Fourball 1 — individual match pairings</label>
       <div id="pairingOptions"></div>
     </div>`;
+  wireTeamColorPreview("teamAColor", "teamBColor");
 
   function updateModeVisibility(){
     const selected = document.querySelector('input[name="gameMode"]:checked').value;
@@ -3725,8 +3725,8 @@ function buildTeamColorSwatchPicker(aInputId, bInputId, selectedA, selectedB, aN
         <div class="pf-swatches">${TEAM_COLOR_SWATCHES.map(c => swatchBtn(c, bInputId, selectedB)).join("")}</div>
       </div>
     </div>
-    <input type="hidden" id="${aInputId}" value="${selectedA}" data-preview-name="${aNameId}" data-preview-style-radio="${styleRadioName}" data-pair-with="${bInputId}">
-    <input type="hidden" id="${bInputId}" value="${selectedB}" data-preview-name="${bNameId}" data-preview-style-radio="${styleRadioName}" data-pair-with="${aInputId}">
+    <input type="hidden" id="${aInputId}" value="${selectedA}" data-preview-name="${aNameId}" data-preview-style-radio="${styleRadioName}" data-pair-with="${bInputId}" data-role="a">
+    <input type="hidden" id="${bInputId}" value="${selectedB}" data-preview-name="${bNameId}" data-preview-style-radio="${styleRadioName}" data-pair-with="${aInputId}" data-role="b">
     <div class="pf-hero-chips" style="margin-top:10px;max-width:360px;">
       <div class="pf-chip" id="${aInputId}_preview" style="${teamChipStyle(selectedA, false)}"><div class="pf-chip-name">${aNameVal || "Team A"}</div></div>
       <div class="pf-vs">&ndash;</div>
@@ -4629,7 +4629,11 @@ document.addEventListener("click", (e) => {
     const input = document.getElementById(swatch.dataset.for);
     if (input){
       input.value = swatch.dataset.color;
-      if (input.dataset.pairWith) syncTeamColorPreview(input.id, input.dataset.pairWith);
+      if (input.dataset.pairWith){
+        const aId = input.dataset.role === "a" ? input.id : input.dataset.pairWith;
+        const bId = input.dataset.role === "a" ? input.dataset.pairWith : input.id;
+        syncTeamColorPreview(aId, bId);
+      }
     }
     return;
   }
