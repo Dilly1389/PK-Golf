@@ -3708,6 +3708,12 @@ function teamColorSwatch(key){
 function teamColorHex(key){
   return teamColorSwatch(key).hex;
 }
+// For text drawn directly on the card background (not inside a colored chip/pill) - a light
+// color like white would be invisible as text color there, so fall back to the dark-red accent.
+function teamColorTextColor(key){
+  const c = teamColorSwatch(key);
+  return c.light ? "#7a0f0f" : c.hex;
+}
 // One combined row of color swatches for Team A and Team B, plus a live preview of each
 // team's chip underneath — shows the actual colors (not names) and sets a hidden input per
 // team, wired by the global .pf-swatch click handler below.
@@ -3866,9 +3872,9 @@ function buildPiekfynCompetitionBoard(comp, bundles){
             <span class="row" style="gap:2px;flex-wrap:nowrap;"><span class="pf-pill ${r.cls}" style="${r.cls === "status-up" ? teamSolidStyle(teamAColor) : r.cls === "status-down" ? teamSolidStyle(teamBColor) : ""}">${r.text}</span><span class="pf-chev">&rsaquo;</span></span>
           </div>`).join("")}
         <div class="row" style="justify-content:center;align-items:baseline;gap:7px;margin-top:9px;padding-top:9px;border-top:1px solid var(--line);">
-          <strong style="color:${teamColorHex(teamAColor)};font-size:.92rem;">${pts.liveA}</strong>
+          <strong style="color:${teamColorTextColor(teamAColor)};font-size:.92rem;">${pts.liveA}</strong>
           <span class="muted" style="font-size:.7rem;">points</span>
-          <strong style="color:${teamColorHex(teamBColor)};font-size:.92rem;">${pts.liveB}</strong>
+          <strong style="color:${teamColorTextColor(teamBColor)};font-size:.92rem;">${pts.liveB}</strong>
         </div>
       </div>`;
   }).join("");
