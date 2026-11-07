@@ -190,7 +190,7 @@
   .pf-color-group{display:flex;align-items:center;gap:8px;}
   .pf-color-group-label{font-size:.72rem;font-weight:700;color:var(--muted);width:14px;flex-shrink:0;}
   .pf-swatches{display:flex;gap:6px;flex-wrap:wrap;}
-  .pf-swatch{width:26px;height:26px;border-radius:50%;border:2px solid transparent;padding:0;cursor:pointer;}
+  .pf-swatch{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);padding:0;cursor:pointer;}
   .pf-swatch.selected{border-color:var(--ink);box-shadow:0 0 0 2px #fff inset;}
 
   /* clickable player names */
@@ -1278,6 +1278,7 @@ function renderNewRound(){
   `;
 
   document.getElementById("backToHomeBtn").onclick = () => { location.hash = ""; };
+  wireTeamColorPreview("teamAColor", "teamBColor");
 
   golfcoreSourceSelected = null;
   document.getElementById("golfcoreSearchBtn").onclick = () => searchGolfCore();
@@ -1375,7 +1376,7 @@ function renderNewRound(){
           <input type="text" id="teamBName" placeholder="e.g. The Birdies">
         </div>
       </div>
-      ${buildTeamColorSwatchPicker("teamAColor", "teamBColor", "red", "navy")}
+      ${buildTeamColorSwatchPicker("teamAColor", "teamBColor", "red", "navy", "teamAName", "teamBName", "teamColorStyle", "", "")}
       <div class="row" style="gap:18px;margin-top:8px;">
         <label class="row" style="gap:6px;"><input type="radio" name="teamColorStyle" value="gradient" checked> Jersey fade</label>
         <label class="row" style="gap:6px;"><input type="radio" name="teamColorStyle" value="flat"> Plain (solid color)</label>
@@ -1915,6 +1916,7 @@ function renderScheduleTab(spectatorUrl){
       document.querySelectorAll(".edit-p-name, .edit-p-team").forEach(el => {
         el.addEventListener(el.tagName === "SELECT" ? "change" : "input", refreshEditPairingOptions);
       });
+      wireTeamColorPreview("editTeamAColor", "editTeamBColor");
     }
   }
 }
@@ -2115,7 +2117,7 @@ function buildPiekfynEditSection(bundle){
         <div><label>Team A name</label><input type="text" id="editTeamAName" value="${round.teamAName || "Team A"}"></div>
         <div><label>Team B name</label><input type="text" id="editTeamBName" value="${round.teamBName || "Team B"}"></div>
       </div>
-      ${buildTeamColorSwatchPicker("editTeamAColor", "editTeamBColor", round.teamAColor || "red", round.teamBColor || "navy")}
+      ${buildTeamColorSwatchPicker("editTeamAColor", "editTeamBColor", round.teamAColor || "red", round.teamBColor || "navy", "editTeamAName", "editTeamBName", "editTeamColorStyle", round.teamAName, round.teamBName)}
       <div class="row" style="gap:18px;margin-top:8px;">
         <label class="row" style="gap:6px;"><input type="radio" name="editTeamColorStyle" value="gradient" ${round.teamColorStyle !== "flat" ? "checked" : ""}> Jersey fade</label>
         <label class="row" style="gap:6px;"><input type="radio" name="editTeamColorStyle" value="flat" ${round.teamColorStyle === "flat" ? "checked" : ""}> Plain (solid color)</label>
@@ -2812,7 +2814,7 @@ function buildCompetitionEditHtml(comp, mode){
         <div><label>Team A name</label><input type="text" id="editCompTeamAName" value="${comp.teamAName || "Team A"}"></div>
         <div><label>Team B name</label><input type="text" id="editCompTeamBName" value="${comp.teamBName || "Team B"}"></div>
       </div>
-      ${buildTeamColorSwatchPicker("editCompTeamAColor", "editCompTeamBColor", comp.teamAColor || "red", comp.teamBColor || "navy")}
+      ${buildTeamColorSwatchPicker("editCompTeamAColor", "editCompTeamBColor", comp.teamAColor || "red", comp.teamBColor || "navy", "editCompTeamAName", "editCompTeamBName", "editCompTeamColorStyle", comp.teamAName, comp.teamBName)}
       <div class="row" style="gap:18px;margin-top:8px;">
         <label class="row" style="gap:6px;"><input type="radio" name="editCompTeamColorStyle" value="gradient" ${comp.teamColorStyle !== "flat" ? "checked" : ""}> Jersey fade</label>
         <label class="row" style="gap:6px;"><input type="radio" name="editCompTeamColorStyle" value="flat" ${comp.teamColorStyle === "flat" ? "checked" : ""}> Plain (solid color)</label>
@@ -2889,6 +2891,7 @@ async function renderCompetition(competitionId){
     if (competitionEditMode){
       document.getElementById("saveCompetitionBtn").onclick = () => saveCompetitionEdit(comp, mode, bundles);
       document.getElementById("cancelCompetitionEditBtn").onclick = () => { competitionEditMode = false; renderControls(); };
+      if (mode === "piekfyn") wireTeamColorPreview("editCompTeamAColor", "editCompTeamBColor");
     } else if (comp.deleted){
       document.getElementById("restoreCompetitionBtn").onclick = async () => {
         await restoreCompetition(comp.id);
@@ -3685,10 +3688,12 @@ function computePiekfynPoints(bundle, detail){
   return { matches, teamMatch, teamAPts, teamBPts, decidedCount, liveA, liveB, inProgress };
 }
 
-// Curated so every swatch stays dark/saturated enough for white chip text to read on it —
-// not an open color picker, which is how you end up with pale yellow on a white card.
+// Curated so every swatch stays legible — dark/saturated ones get white text, "White" (the
+// original jersey pairing's other half) is flagged light so it gets dark red text + a border
+// instead, both here and on its own swatch button (invisible otherwise on a white card).
 const TEAM_COLOR_SWATCHES = [
   { key: "red", label: "Red", hex: "#7a0f0f" },
+  { key: "white", label: "White", hex: "#ffffff", light: true },
   { key: "navy", label: "Navy", hex: "#1c3f66" },
   { key: "gold", label: "Gold", hex: "#a9841c" },
   { key: "green", label: "Green", hex: "#1f6b3a" },
@@ -3697,12 +3702,16 @@ const TEAM_COLOR_SWATCHES = [
   { key: "orange", label: "Orange", hex: "#b05a12" },
   { key: "teal", label: "Teal", hex: "#146b6b" },
 ];
-function teamColorHex(key){
-  return (TEAM_COLOR_SWATCHES.find(c => c.key === key) || TEAM_COLOR_SWATCHES[0]).hex;
+function teamColorSwatch(key){
+  return TEAM_COLOR_SWATCHES.find(c => c.key === key) || TEAM_COLOR_SWATCHES[0];
 }
-// One combined row of color swatches for Team A and Team B — shows the actual colors (not
-// names) and sets a hidden input per team, wired by the global .pf-swatch click handler below.
-function buildTeamColorSwatchPicker(aInputId, bInputId, selectedA, selectedB){
+function teamColorHex(key){
+  return teamColorSwatch(key).hex;
+}
+// One combined row of color swatches for Team A and Team B, plus a live preview of each
+// team's chip underneath — shows the actual colors (not names) and sets a hidden input per
+// team, wired by the global .pf-swatch click handler below.
+function buildTeamColorSwatchPicker(aInputId, bInputId, selectedA, selectedB, aNameId, bNameId, styleRadioName, aNameVal, bNameVal){
   const swatchBtn = (c, inputId, selected) => `<button type="button" class="pf-swatch${c.key===selected?" selected":""}" data-color="${c.key}" data-for="${inputId}" style="background:${c.hex};" title="${c.label}" aria-label="${c.label}"></button>`;
   return `
     <label>Team colors</label>
@@ -3716,26 +3725,66 @@ function buildTeamColorSwatchPicker(aInputId, bInputId, selectedA, selectedB){
         <div class="pf-swatches">${TEAM_COLOR_SWATCHES.map(c => swatchBtn(c, bInputId, selectedB)).join("")}</div>
       </div>
     </div>
-    <input type="hidden" id="${aInputId}" value="${selectedA}">
-    <input type="hidden" id="${bInputId}" value="${selectedB}">`;
+    <input type="hidden" id="${aInputId}" value="${selectedA}" data-preview-name="${aNameId}" data-preview-style-radio="${styleRadioName}" data-pair-with="${bInputId}">
+    <input type="hidden" id="${bInputId}" value="${selectedB}" data-preview-name="${bNameId}" data-preview-style-radio="${styleRadioName}" data-pair-with="${aInputId}">
+    <div class="pf-hero-chips" style="margin-top:10px;max-width:360px;">
+      <div class="pf-chip" id="${aInputId}_preview" style="${teamChipStyle(selectedA, false)}"><div class="pf-chip-name">${aNameVal || "Team A"}</div></div>
+      <div class="pf-vs">&ndash;</div>
+      <div class="pf-chip" id="${bInputId}_preview" style="${teamChipStyle(selectedB, false)}"><div class="pf-chip-name">${bNameVal || "Team B"}</div></div>
+    </div>`;
+}
+// Keeps a swatch picker's two preview chips in sync with the name fields, the chosen colors
+// and the Jersey fade/Plain radio — called on load and whenever any of those change.
+function syncTeamColorPreview(aInputId, bInputId){
+  const aColorEl = document.getElementById(aInputId), bColorEl = document.getElementById(bInputId);
+  const aPreview = document.getElementById(`${aInputId}_preview`), bPreview = document.getElementById(`${bInputId}_preview`);
+  if (!aColorEl || !bColorEl || !aPreview || !bPreview) return;
+  const aNameEl = document.getElementById(aColorEl.dataset.previewName);
+  const bNameEl = document.getElementById(bColorEl.dataset.previewName);
+  const flat = (document.querySelector(`input[name="${aColorEl.dataset.previewStyleRadio}"]:checked`) || {}).value === "flat";
+  aPreview.setAttribute("style", teamChipStyle(aColorEl.value, flat));
+  aPreview.querySelector(".pf-chip-name").textContent = (aNameEl && aNameEl.value.trim()) || "Team A";
+  bPreview.setAttribute("style", teamChipStyle(bColorEl.value, flat));
+  bPreview.querySelector(".pf-chip-name").textContent = (bNameEl && bNameEl.value.trim()) || "Team B";
+}
+function wireTeamColorPreview(aInputId, bInputId){
+  const sync = () => syncTeamColorPreview(aInputId, bInputId);
+  const aColorEl = document.getElementById(aInputId);
+  if (!aColorEl) return;
+  [aColorEl.dataset.previewName, document.getElementById(bInputId).dataset.previewName].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("input", sync);
+  });
+  document.querySelectorAll(`input[name="${aColorEl.dataset.previewStyleRadio}"]`).forEach(r => r.addEventListener("change", sync));
+  sync();
 }
 // Jersey-fade: the chosen color at top fading to white, with the chevron texture. Flat: solid fill.
 function teamChipStyle(colorKey, flat){
-  const hex = teamColorHex(colorKey);
-  return flat
-    ? `background:${hex};`
-    : `background:repeating-linear-gradient(135deg, rgba(255,255,255,.08) 0 2px, transparent 2px 9px), linear-gradient(180deg, ${hex} 0%, ${hex} 45%, #fff 115%);`;
+  const c = teamColorSwatch(colorKey);
+  const textColor = c.light ? "#7a0f0f" : "#fff";
+  const border = c.light ? "border:2px solid #7a0f0f;" : "";
+  const chevron = c.light ? "rgba(122,15,15,.08)" : "rgba(255,255,255,.08)";
+  return (flat
+    ? `background:${c.hex};`
+    : `background:repeating-linear-gradient(135deg, ${chevron} 0 2px, transparent 2px 9px), linear-gradient(180deg, ${c.hex} 0%, ${c.hex} 45%, #fff 115%);`
+  ) + `color:${textColor};${border}`;
 }
 function teamBarSegStyle(colorKey, flat){
-  const hex = teamColorHex(colorKey);
-  return flat
-    ? `background:${hex};`
-    : `background:repeating-linear-gradient(135deg, rgba(255,255,255,.2) 0 1.5px, transparent 1.5px 6px), linear-gradient(90deg, ${hex}, ${hex});`;
+  const c = teamColorSwatch(colorKey);
+  const border = c.light ? "border:1px solid #7a0f0f;box-sizing:border-box;" : "";
+  const chevron = c.light ? "rgba(122,15,15,.15)" : "rgba(255,255,255,.2)";
+  return (flat
+    ? `background:${c.hex};`
+    : `background:repeating-linear-gradient(135deg, ${chevron} 0 1.5px, transparent 1.5px 6px), linear-gradient(90deg, ${c.hex}, ${c.hex});`
+  ) + border;
 }
 // Solid fill in the chosen team color, for pills/tags/point numbers — "all square"/"halved"
 // status stays the neutral gold from its own CSS class, not team-colored.
 function teamSolidStyle(colorKey){
-  return `background:${teamColorHex(colorKey)};color:#fff;`;
+  const c = teamColorSwatch(colorKey);
+  const textColor = c.light ? "#7a0f0f" : "#fff";
+  const border = c.light ? "border:1.5px solid #7a0f0f;" : "";
+  return `background:${c.hex};color:${textColor};${border}`;
 }
 
 function piekfynStatusClass(m){
@@ -4578,7 +4627,10 @@ document.addEventListener("click", (e) => {
     swatch.closest(".pf-swatches").querySelectorAll(".pf-swatch").forEach(b => b.classList.remove("selected"));
     swatch.classList.add("selected");
     const input = document.getElementById(swatch.dataset.for);
-    if (input) input.value = swatch.dataset.color;
+    if (input){
+      input.value = swatch.dataset.color;
+      if (input.dataset.pairWith) syncTeamColorPreview(input.id, input.dataset.pairWith);
+    }
     return;
   }
   const matchRow = e.target.closest(".pf-match-row[data-match]");
