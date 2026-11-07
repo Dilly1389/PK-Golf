@@ -119,6 +119,31 @@
   .app-drawer-head{display:flex;align-items:center;padding:10px 18px 16px;border-bottom:1px solid var(--line);margin-bottom:8px;font-size:1.05rem;font-weight:800;color:var(--brand-dark);}
   .drawer-link{display:flex;align-items:center;gap:12px;padding:14px 18px;color:var(--ink);text-decoration:none;font-size:1rem;font-weight:600;}
   .drawer-link:active{background:var(--gold-dim);color:var(--brand-dark);}
+
+  /* Desktop sidebar dashboard (>=1100px wide) - same URLs, same page content, different shell.
+     #app.app-desktop cancels .wrap's phone-width max-width/margin (ID beats class specificity
+     regardless of source order) so the sidebar+main layout can use the full viewport. */
+  #app.app-desktop{max-width:none;margin:0;padding:0;}
+  .desktop-shell{display:flex;min-height:100vh;}
+  .desktop-sidebar{
+    width:240px;flex-shrink:0;position:sticky;top:0;height:100vh;overflow-y:auto;
+    background:linear-gradient(180deg, var(--brand-dark), var(--brand));
+    display:flex;flex-direction:column;
+  }
+  .desktop-sidebar-head{display:flex;align-items:center;gap:10px;padding:20px 18px;border-bottom:1px solid rgba(255,255,255,.15);color:#fff;}
+  .desktop-sidebar-head strong{font-size:1.1rem;letter-spacing:-0.01em;}
+  .desktop-nav{flex:1;padding:14px 0;}
+  .desktop-nav-link{display:flex;align-items:center;gap:12px;padding:12px 18px;color:var(--gold-dim);text-decoration:none;font-weight:600;font-size:.95rem;opacity:.8;border-right:3px solid transparent;}
+  .desktop-nav-link:hover{opacity:1;background:rgba(255,255,255,.08);}
+  .desktop-nav-link.active{opacity:1;background:rgba(255,255,255,.14);border-right-color:var(--gold);color:#fff;}
+  .desktop-sidebar-foot{padding:14px 18px 18px;border-top:1px solid rgba(255,255,255,.15);}
+  .desktop-account-link{display:flex;align-items:center;gap:8px;color:var(--gold-dim);text-decoration:none;font-weight:700;font-size:.9rem;margin-top:8px;}
+  .desktop-account-link:hover{color:#fff;text-decoration:underline;}
+  .desktop-main{flex:1;min-width:0;padding:30px 40px 60px;}
+  .desktop-main-inner{max-width:1000px;}
+  .desktop-topstrip{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:20px;}
+  .desktop-topstrip h1{margin:0 0 4px;font-size:1.5rem;color:var(--brand-dark);letter-spacing:-0.01em;}
+  .desktop-topstrip .subtitle{margin:0;font-size:.88rem;color:var(--muted);}
   .auth-gate{
     min-height:100vh;background:linear-gradient(135deg, var(--brand-dark), var(--brand));
     display:flex;align-items:center;justify-content:center;padding:24px 16px;
@@ -651,6 +676,75 @@ function renderAppHeader(title, subtitle, badge){
     </nav>`;
 }
 
+/* ---------- desktop sidebar dashboard shell ----------
+   Same URLs and page content as the phone layout, just a different wrapper above
+   DESKTOP_BREAKPOINT. Live scoring entry (renderScorer/renderScoringOnly/renderSpectator)
+   never uses this - those stay the single-column phone layout at any width, since Fishing's
+   desktop precedent keeps data entry phone-only and only the "review" screens get a desktop
+   shell. mountPage() is how every other screen picks a shell; see its call sites. */
+const DESKTOP_BREAKPOINT = 1100;
+function isDesktopWidth(){ return window.innerWidth >= DESKTOP_BREAKPOINT; }
+
+const DESKTOP_NAV_ITEMS = [
+  { route: "home", href: "#/", icon: "&#127968;", label: "My rounds" },
+  { route: "new-round", href: "#/new-round", icon: "&#10133;", label: "New round" },
+  { route: "history", href: "#/history", icon: "&#128337;", label: "History" },
+];
+
+// route: which sidebar nav item (if any) to highlight as active - "home" | "new-round" |
+// "history" | "account" | null. Competition/standings pages pass null since they're reached
+// by clicking into a specific competition, not via a persistent sidebar destination.
+function renderDesktopShell({ title, subtitle, badge, route, bodyHtml }){
+  const online = navigator.onLine;
+  const accountLabel = currentUser ? (currentGolferProfile && currentGolferProfile.name) || currentUser.email || "Account" : "Sign in";
+  const navLinksHtml = DESKTOP_NAV_ITEMS.map(item => `
+    <a href="${item.href}" class="desktop-nav-link${route === item.route ? " active" : ""}">${item.icon} ${item.label}</a>`).join("");
+  const badgeHtml = badge === "live"
+    ? `<span class="badge-live" style="color:var(--brand-dark);"><span class="dot" style="background:var(--brand-dark);"></span>live</span>`
+    : badge === "final"
+      ? `<span class="badge-live" style="color:var(--muted);"><span class="dot" style="animation:none;background:var(--muted);"></span>final</span>`
+      : "";
+  return `
+    <div class="desktop-shell">
+      <aside class="desktop-sidebar">
+        <div class="desktop-sidebar-head">
+          <img src="/golf/icon-header.png" alt="" style="height:30px;width:30px;">
+          <strong>PK Golf</strong>
+        </div>
+        <nav class="desktop-nav">${navLinksHtml}</nav>
+        <div class="desktop-sidebar-foot">
+          <span class="conn-indicator ${online ? "conn-online" : "conn-offline"}" id="connIndicator">
+            <span class="conn-dot"></span>${online ? "Connected" : "Offline"}
+          </span>
+          <a href="#/account" class="desktop-account-link">&#128100; ${accountLabel}</a>
+        </div>
+      </aside>
+      <main class="desktop-main">
+        <div class="desktop-main-inner">
+          <div class="desktop-topstrip">
+            <div>
+              <h1>${title}</h1>
+              ${subtitle ? `<p class="subtitle">${subtitle}</p>` : ""}
+            </div>
+            ${badgeHtml}
+          </div>
+          ${bodyHtml}
+        </div>
+      </main>
+    </div>`;
+}
+
+// Shared entry point for the 5 "review" screens (home, history, new-round, account,
+// competition/standings) - picks the phone header or the desktop sidebar shell based on
+// current width. bodyHtml is exactly what used to go inside <div class="content">...</div>.
+function mountPage({ title, subtitle, badge, route, bodyHtml }){
+  const app = document.getElementById("app");
+  app.classList.toggle("app-desktop", isDesktopWidth());
+  app.innerHTML = isDesktopWidth()
+    ? renderDesktopShell({ title, subtitle, badge, route, bodyHtml })
+    : `${renderAppHeader(title, subtitle, badge)}<div class="content">${bodyHtml}</div>`;
+}
+
 /* ---------- tiny router ---------- */
 function parseHash(){
   const h = location.hash.replace(/^#\/?/, "");
@@ -673,6 +767,10 @@ async function render(){
   stopLiveListeners();
   const parts = parseHash();
   const app = document.getElementById("app");
+  // Only mountPage() (the 5 "review" screens) ever wants the desktop shell - clear it here so
+  // it can't leak onto scorer/spectator/sign-in-gate/etc, which stay phone-width at any size.
+  // mountPage() re-adds it right after, for the routes that do want it.
+  app.classList.remove("app-desktop");
 
   if (!configured){
     app.innerHTML = `
@@ -711,13 +809,12 @@ async function render(){
 let accountMode = "signin"; // "signin" | "signup" — which form shows when signed out
 
 function renderAccount(){
-  const app = document.getElementById("app");
-  app.innerHTML = `
-    ${renderAppHeader("PK Golf", "Your account")}
-    <div class="content">
-    <div class="card" id="accountCard"></div>
-    </div>
-  `;
+  mountPage({
+    title: "PK Golf",
+    subtitle: "Your account",
+    route: "account",
+    bodyHtml: `<div class="card" id="accountCard"></div>`,
+  });
   renderAccountCard();
 }
 
@@ -1043,11 +1140,11 @@ async function loadCurrentRounds(){
 }
 
 function renderHome(){
-  const app = document.getElementById("app");
-  app.innerHTML = `
-    ${renderAppHeader("PK Golf", "Set up a round, score it live, share a spectator link.")}
-    <div class="content">
-
+  mountPage({
+    title: "PK Golf",
+    subtitle: "Set up a round, score it live, share a spectator link.",
+    route: "home",
+    bodyHtml: `
     <button id="newRoundBtn" class="cta-new-round" type="button">+ New round</button>
 
     <button class="btn-pill-secondary" id="historyBtn" type="button">🕒 Playing history</button>
@@ -1059,8 +1156,8 @@ function renderHome(){
 
     <h2>Competitions</h2>
     <div class="card" id="competitionsListCard"><p class="muted">Loading…</p></div>
-    </div>
-  `;
+    `,
+  });
 
   loadCurrentRounds().then(list => {
     const block = document.getElementById("currentRoundsBlock");
@@ -1140,10 +1237,11 @@ function renderHome(){
 }
 
 function renderHistory(){
-  const app = document.getElementById("app");
-  app.innerHTML = `
-    ${renderAppHeader("Playing history", "Your rounds, and every round on PK Golf.")}
-    <div class="content">
+  mountPage({
+    title: "Playing history",
+    subtitle: "Your rounds, and every round on PK Golf.",
+    route: "history",
+    bodyHtml: `
     <button id="backToHomeBtn" class="secondary" type="button" style="margin-bottom:14px;">← Back to rounds</button>
 
     <h2>My rounds</h2>
@@ -1151,8 +1249,8 @@ function renderHistory(){
 
     <h2>All rounds</h2>
     <div class="card" id="roundsListCard"><p class="muted">Loading…</p></div>
-    </div>
-  `;
+    `,
+  });
 
   document.getElementById("backToHomeBtn").onclick = () => { location.hash = ""; };
 
@@ -1227,10 +1325,11 @@ function renderHistory(){
 }
 
 function renderNewRound(){
-  const app = document.getElementById("app");
-  app.innerHTML = `
-    ${renderAppHeader("New round", "Set up players, scoring and holes.")}
-    <div class="content">
+  mountPage({
+    title: "New round",
+    subtitle: "Set up players, scoring and holes.",
+    route: "new-round",
+    bodyHtml: `
     <button id="backToHomeBtn" class="secondary" type="button" style="margin-bottom:14px;">← Back to rounds</button>
 
     <div class="card">
@@ -1297,8 +1396,8 @@ function renderNewRound(){
         <span id="createMsg" class="muted"></span>
       </div>
     </div>
-    </div>
-  `;
+    `,
+  });
 
   document.getElementById("backToHomeBtn").onclick = () => { location.hash = ""; };
 
@@ -2948,9 +3047,12 @@ async function renderCompetition(competitionId){
   // combined leaderboard with none of those controls, so sharing it can't touch anyone's scores.
   const standingsUrl = location.origin + location.pathname + `#/standings/${comp.id}`;
 
-  app.innerHTML = `
-    ${renderAppHeader(comp.name, subtitle, "live")}
-    <div class="content">
+  mountPage({
+    title: comp.name,
+    subtitle,
+    badge: "live",
+    route: null,
+    bodyHtml: `
     <div class="link-box">
       <span class="muted">Spectator link:</span>
       <input type="text" readonly value="${standingsUrl}" onclick="this.select()">
@@ -2958,8 +3060,8 @@ async function renderCompetition(competitionId){
     </div>
     <div id="competitionControls"></div>
     <div id="competitionBody"><p class="muted">Loading…</p></div>
-    </div>
-  `;
+    `,
+  });
   renderControls();
   renderBody();
 
@@ -3009,12 +3111,13 @@ async function renderStandings(competitionId){
     ? `${comp.teamAName || "Team A"} vs ${comp.teamBName || "Team B"}`
     : `${competitionModeLabel(mode)}${comp.courseName ? " · " + comp.courseName : ""}`;
 
-  app.innerHTML = `
-    ${renderAppHeader(comp.name, subtitle, "live")}
-    <div class="content">
-    <div id="standingsBody"><p class="muted">Loading…</p></div>
-    </div>
-  `;
+  mountPage({
+    title: comp.name,
+    subtitle,
+    badge: "live",
+    route: null,
+    bodyHtml: `<div id="standingsBody"><p class="muted">Loading…</p></div>`,
+  });
   renderBody();
 
   if (competitionUnsubs.length) competitionUnsubs.forEach(u => u());
@@ -4726,6 +4829,22 @@ function updateConnIndicator(){
 }
 window.addEventListener("online", updateConnIndicator);
 window.addEventListener("offline", updateConnIndicator);
+
+// Cross the phone/desktop breakpoint live (resizing a window, rotating a tablet) without a
+// manual reload - debounced, and only re-renders when the boolean actually flips, since the
+// 5 mountPage() screens re-fetch Firestore data on every render.
+let lastIsDesktopWidth = isDesktopWidth();
+let resizeDebounceTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeDebounceTimer);
+  resizeDebounceTimer = setTimeout(() => {
+    const nowDesktop = isDesktopWidth();
+    if (nowDesktop !== lastIsDesktopWidth){
+      lastIsDesktopWidth = nowDesktop;
+      render();
+    }
+  }, 200);
+});
 
 if ("serviceWorker" in navigator){
   window.addEventListener("load", () => {
