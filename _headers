@@ -1,0 +1,8 @@
+# sw.js lives at this project's root and is normally only allowed to control scope "/golf/"
+# (its own directory) - but the live app's canonical URL always normalizes to "/golf" with no
+# trailing slash (confirmed live: navigating to "/golf/" redirects back to "/golf"), which falls
+# outside that default scope. This header explicitly widens the allowed scope to "/golf" so the
+# page actually ends up controlled by the service worker, which Chrome's install-prompt
+# heuristics check for.
+/sw.js
+  Service-Worker-Allowed: /golf
