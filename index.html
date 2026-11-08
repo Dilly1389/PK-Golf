@@ -153,6 +153,34 @@
   .drawer-link{display:flex;align-items:center;gap:12px;padding:14px 18px;color:var(--ink);text-decoration:none;font-size:1rem;font-weight:600;}
   .drawer-link:active{background:var(--gold-dim);color:var(--brand-dark);}
 
+  /* Account screen's profile header, GolfPad-style - initials avatar in place of a photo
+     (no photo-upload feature exists), name, and handicap index front and center. */
+  .profile-header{text-align:center;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--line);}
+  .profile-avatar{
+    width:84px;height:84px;border-radius:50%;margin:0 auto 12px;
+    display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:800;color:#fff;
+    background:linear-gradient(135deg, var(--brand-dark), var(--brand));box-shadow:0 6px 18px rgba(122,15,15,.25);
+  }
+  .profile-name{margin:0;font-size:1.3rem;font-weight:800;color:var(--ink);border:none;padding:0;}
+  .profile-handicap{margin:4px 0 0;font-size:.85rem;color:var(--brand-dark);font-weight:700;}
+
+  /* GolfPad-style round card for Playing history: course/date on the left, up to 3 circular
+     stat badges on the right. */
+  .round-card{
+    border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;background:#fff;
+    box-shadow:0 1px 3px rgba(26,10,10,.06), 0 1px 2px rgba(26,10,10,.04);
+    display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+  }
+  .round-card-info{flex:1;min-width:140px;}
+  .round-card-stats{display:flex;gap:10px;flex-shrink:0;}
+  .stat-ring{position:relative;width:50px;display:flex;flex-direction:column;align-items:center;}
+  .stat-ring-svg{width:50px;height:50px;transform:rotate(-90deg);}
+  .stat-ring-track{fill:none;stroke:var(--line);stroke-width:3;}
+  .stat-ring-progress{fill:none;stroke:var(--gold);stroke-width:3;stroke-linecap:round;}
+  .stat-ring-progress.complete{stroke:#3fa34d;}
+  .stat-ring-value{position:absolute;top:15px;left:0;right:0;text-align:center;font-weight:800;font-size:.86rem;color:var(--ink);}
+  .stat-ring-label{font-size:.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-top:2px;}
+
   /* Desktop sidebar dashboard (>=1100px wide) - same URLs, same page content, different shell.
      #app.app-desktop cancels .wrap's phone-width max-width/margin (ID beats class specificity
      regardless of source order) so the sidebar+main layout can use the full viewport. */
@@ -605,6 +633,42 @@ async function loadMyRoundsList(uid){
   }
 }
 
+// For "My rounds" cards on Playing history: this round's primary player's gross/net score so
+// far, and holes completed. Deliberately NOT loadRoundBundle (which reads every player's every
+// hole score) - History can list up to 25 rounds, so each row uses targeted, filtered queries
+// instead: one player doc (lowest sortOrder = the round's creator, by convention) and only
+// THAT player's score docs, plus the full holes subcollection (needed for stroke index, to
+// compute net). Returns null when there's no "my score" to show (creator was marking-only, or
+// the round has no players/holes yet).
+async function loadRoundScoreSummary(round){
+  if (round.creatorIsPlaying === false) return null;
+  try{
+    const playerSnap = await getDocs(query(collection(db, "golf_rounds", round.id, "players"), orderBy("sortOrder"), limit(1)));
+    if (playerSnap.empty) return null;
+    const player = { id: playerSnap.docs[0].id, ...playerSnap.docs[0].data() };
+
+    const holesSnap = await getDocs(collection(db, "golf_rounds", round.id, "holes"));
+    const holes = holesSnap.docs.map(d => d.data());
+    if (!holes.length) return null;
+
+    const scoresSnap = await getDocs(query(collection(db, "golf_rounds", round.id, "scores"), where("playerId", "==", player.id)));
+    const grossByHole = {};
+    scoresSnap.docs.forEach(d => { const s = d.data(); grossByHole[s.holeNumber] = s.grossStrokes; });
+
+    let gross = 0, net = 0, thru = 0;
+    holes.forEach(h => {
+      const g = grossByHole[h.holeNumber];
+      if (g == null) return;
+      thru++;
+      gross += g;
+      net += g - strokesReceived(player.playingHandicap, h.strokeIndex);
+    });
+    return { gross, net, thru, totalHoles: holes.length };
+  } catch(err){
+    return null;
+  }
+}
+
 function setKeepSignedIn(keep){
   return setPersistence(auth, keep ? browserLocalPersistence : browserSessionPersistence);
 }
@@ -910,10 +974,14 @@ function renderAccountCard(){
   if (!card) return;
 
   if (currentUser){
+    const name = (currentGolferProfile && currentGolferProfile.name) || "";
+    const handicap = currentGolferProfile && currentGolferProfile.handicap;
+    const initials = (name || currentUser.email || "?").trim().charAt(0).toUpperCase();
     card.innerHTML = `
-      <div style="text-align:center;margin-bottom:16px;">
-        <img src="/golf/icon-header.png" alt="" style="height:46px;width:46px;">
-        <h2 style="border:none;margin:8px 0 0;padding:0;">My account</h2>
+      <div class="profile-header">
+        <div class="profile-avatar">${initials}</div>
+        <h2 class="profile-name">${name || "My account"}</h2>
+        <p class="profile-handicap">Handicap index: ${handicap != null ? handicap : "–"}</p>
         <p class="muted" style="margin:2px 0 0;">${currentUser.email || ""}</p>
       </div>
       <label>Display name</label>
@@ -1336,6 +1404,36 @@ function renderCompetitionsList(){
   populateCompetitionsList();
 }
 
+// One circular stat badge for a round card (GolfPad-style). ringPct (0-100), when given, draws
+// a colored progress ring (used for "thru" holes completed); omitted it's just a plain outline.
+function statRingHtml(value, label, ringPct, complete){
+  const circumference = 125.6; // 2 * pi * r(20)
+  const ring = ringPct != null
+    ? `<circle class="stat-ring-progress${complete ? " complete" : ""}" cx="24" cy="24" r="20" style="stroke-dasharray:${(ringPct / 100 * circumference).toFixed(1)} ${circumference};"></circle>`
+    : "";
+  return `
+    <div class="stat-ring">
+      <svg class="stat-ring-svg" viewBox="0 0 48 48"><circle class="stat-ring-track" cx="24" cy="24" r="20"></circle>${ring}</svg>
+      <span class="stat-ring-value">${value}</span>
+      <span class="stat-ring-label">${label}</span>
+    </div>`;
+}
+
+// Stat badges for one "My rounds" card: real gross/net score + holes-completed progress ring,
+// fetched via loadRoundScoreSummary. Falls back to the plain Final/Active pill when there's no
+// "my score" to show (creator was marking-only, or nothing's been scored yet).
+function roundCardStatsHtml(r, summary){
+  if (!summary || summary.thru === 0){
+    return `<span class="pill mode" style="background:${r.status==='finished' ? 'var(--brand-dim)' : 'var(--gold-dim)'};">${r.status === "finished" ? "Final" : "Active"}</span>`;
+  }
+  const pct = Math.round(summary.thru / summary.totalHoles * 100);
+  return `<div class="round-card-stats">
+    ${statRingHtml(summary.gross, "Score")}
+    ${statRingHtml(summary.net, "Net")}
+    ${statRingHtml(`${summary.thru}/${summary.totalHoles}`, "Thru", pct, summary.thru === summary.totalHoles)}
+  </div>`;
+}
+
 function renderHistory(){
   mountPage({
     title: "Playing history",
@@ -1345,29 +1443,34 @@ function renderHistory(){
     <button id="backToHomeBtn" class="secondary" type="button" style="margin-bottom:14px;">← Back to rounds</button>
 
     <h2>My rounds</h2>
-    <div class="card" id="myRoundsListCard"><p class="muted">Loading…</p></div>
+    <div id="myRoundsListCard"><p class="muted">Loading…</p></div>
 
     <h2>All rounds</h2>
-    <div class="card" id="roundsListCard"><p class="muted">Loading…</p></div>
+    <div id="roundsListCard"><p class="muted">Loading…</p></div>
     `,
   });
 
   document.getElementById("backToHomeBtn").onclick = () => { location.hash = ""; };
 
   if (currentUser){
-    loadMyRoundsList(currentUser.uid).then(rounds => {
+    loadMyRoundsList(currentUser.uid).then(async (rounds) => {
       const card = document.getElementById("myRoundsListCard");
       const active = rounds.filter(r => !r.deleted);
-      card.innerHTML = active.length === 0
-        ? `<p class="muted">No rounds yet under this account — rounds you create while signed in will show up here.</p>`
-        : active.map(r => `
-          <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);">
-            <div class="round-item" data-round="${r.id}" role="button" tabindex="0" style="cursor:pointer;flex:1;">
-              <strong>${r.name}</strong>${r.creatorIsPlaying === false ? ` <span class="pill mode" style="background:var(--gold-dim);">Marking</span>` : ""}
-              <div class="muted" style="font-size:.78rem;">${r.courseName || ""}${r.roundDate ? " · " + r.roundDate : ""}${r.teeBox ? " · " + r.teeBox + " tees" : ""}</div>
-            </div>
-            <span class="pill mode" style="background:${r.status==='finished' ? 'var(--brand-dim)' : 'var(--gold-dim)'};">${r.status === "finished" ? "Final" : "Active"}</span>
-          </div>`).join("");
+      if (active.length === 0){
+        card.innerHTML = `<p class="muted">No rounds yet under this account — rounds you create while signed in will show up here.</p>`;
+        return;
+      }
+      // Each row's score badges need their own targeted Firestore reads (see
+      // loadRoundScoreSummary) - fetch them all in parallel rather than one at a time.
+      const summaries = await Promise.all(active.map(r => loadRoundScoreSummary(r)));
+      card.innerHTML = active.map((r, i) => `
+        <div class="round-card">
+          <div class="round-card-info round-item" data-round="${r.id}" role="button" tabindex="0" style="cursor:pointer;">
+            <strong>${r.name}</strong>${r.creatorIsPlaying === false ? ` <span class="pill mode" style="background:var(--gold-dim);">Marking</span>` : ""}
+            <div class="muted" style="font-size:.78rem;">${r.courseName || ""}${r.roundDate ? " · " + r.roundDate : ""}${r.teeBox ? " · " + r.teeBox + " tees" : ""}</div>
+          </div>
+          ${roundCardStatsHtml(r, summaries[i])}
+        </div>`).join("");
       card.querySelectorAll(".round-item").forEach(el => {
         el.addEventListener("click", () => { location.hash = `#/score/${el.dataset.round}`; });
       });
@@ -1380,8 +1483,8 @@ function renderHistory(){
     const deleted = rounds.filter(r => r.deleted);
 
     const itemHtml = (r, isDeleted) => `
-      <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);${isDeleted ? "opacity:.6;" : ""}">
-        <div class="round-item" data-round="${r.id}" role="button" tabindex="0" style="cursor:${isDeleted ? "default" : "pointer"};flex:1;">
+      <div class="round-card"${isDeleted ? ` style="opacity:.6;"` : ""}>
+        <div class="round-card-info round-item" data-round="${r.id}" role="button" tabindex="0" style="cursor:${isDeleted ? "default" : "pointer"};">
           <strong>${r.name}</strong>
           <div class="muted" style="font-size:.78rem;">${r.courseName || ""}${r.roundDate ? " · " + r.roundDate : ""}${r.teeBox ? " · " + r.teeBox + " tees" : ""}${r.competitionId ? ` · Fourball ${r.fourballIndex || ""}` : ""}</div>
         </div>
