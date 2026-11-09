@@ -138,10 +138,11 @@
   }
   .home-hero-topbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;}
   .home-hero-topbar .header-status-row{justify-content:flex-end;}
-  /* Takes up whatever space is left under the top bar and centers the branding+actions group
-     within it, so the top bar stays pinned to the very top regardless of hero height. */
-  .home-hero-body{flex:1;display:flex;flex-direction:column;justify-content:center;}
-  .home-hero-brand{text-align:center;padding:30px 0 34px;}
+  /* Takes up whatever space is left under the top bar and keeps the branding+actions group near
+     the top of it (not centered in the full remaining height, which left a big empty gap above
+     the logo) - the gradient itself still fills the rest of the screen below via min-height. */
+  .home-hero-body{flex:1;display:flex;flex-direction:column;justify-content:flex-start;}
+  .home-hero-brand{text-align:center;padding:8px 0 34px;}
   .home-hero-logo{width:140px;height:140px;border-radius:30px;box-shadow:0 6px 20px rgba(0,0,0,.25);}
   .home-hero-brand h1{margin:14px 0 0;font-size:1.9rem;font-weight:800;letter-spacing:-0.01em;color:#fff;}
   .home-hero-tagline{margin:4px 0 0;font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--gold-dim);opacity:.85;}
@@ -802,11 +803,11 @@ function renderHeaderStatus(badge){
       ? `<span class="badge-live" style="color:#fff;opacity:.85;"><span class="dot" style="animation:none;background:#fff;"></span>final</span>`
       : "";
   const online = navigator.onLine;
-  const connHtml = `<span class="conn-indicator ${online ? "conn-online" : "conn-offline"}" id="connIndicator">
-    <span class="conn-dot"></span>${online ? "Connected" : "Offline"}
+  const connHtml = `<span class="conn-indicator ${online ? "conn-online" : "conn-offline"}" id="connIndicator" title="${online ? "Connected" : "Offline"}" aria-label="${online ? "Connected" : "Offline"}">
+    <span class="conn-dot"></span>
   </span>`;
   const accountLabel = escapeHtml(currentUser ? (currentGolferProfile && currentGolferProfile.name) || currentUser.email || "Account" : "Sign in");
-  const accountHtml = `<a href="#/account" class="account-chip">${svgIcon("user")} ${accountLabel}</a>`;
+  const accountHtml = `<a href="#/account" class="account-chip" title="${accountLabel}" aria-label="${accountLabel}">${svgIcon("user")}</a>`;
   return badgeHtml + connHtml + accountHtml;
 }
 // title/subtitle are escaped here (not by each of mountPage's ~10 callers) since most of them
@@ -873,10 +874,10 @@ function renderDesktopShell({ title, subtitle, badge, route, bodyHtml }){
         </div>
         <nav class="desktop-nav">${navLinksHtml}</nav>
         <div class="desktop-sidebar-foot">
-          <span class="conn-indicator ${online ? "conn-online" : "conn-offline"}" id="connIndicator">
-            <span class="conn-dot"></span>${online ? "Connected" : "Offline"}
+          <span class="conn-indicator ${online ? "conn-online" : "conn-offline"}" id="connIndicator" title="${online ? "Connected" : "Offline"}" aria-label="${online ? "Connected" : "Offline"}">
+            <span class="conn-dot"></span>
           </span>
-          <a href="#/account" class="desktop-account-link">${svgIcon("user")} ${accountLabel}</a>
+          <a href="#/account" class="desktop-account-link" title="${accountLabel}" aria-label="${accountLabel}">${svgIcon("user")}</a>
         </div>
       </aside>
       <main class="desktop-main">
@@ -5105,7 +5106,9 @@ function updateConnIndicator(){
   if (!el) return;
   const online = navigator.onLine;
   el.className = "conn-indicator " + (online ? "conn-online" : "conn-offline");
-  el.innerHTML = `<span class="conn-dot"></span>${online ? "Connected" : "Offline"}`;
+  el.title = online ? "Connected" : "Offline";
+  el.setAttribute("aria-label", online ? "Connected" : "Offline");
+  el.innerHTML = `<span class="conn-dot"></span>`;
 }
 window.addEventListener("online", updateConnIndicator);
 window.addEventListener("offline", updateConnIndicator);
