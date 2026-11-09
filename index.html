@@ -39,6 +39,7 @@
     color:var(--ink);
   }
   .wrap{max-width:960px;margin:0 auto;padding:0 0 80px;}
+  .wrap.app-hero{padding-bottom:0;}
   .content{padding:20px 16px 0;}
   .app-header{
     background:linear-gradient(135deg, var(--brand-dark), var(--brand));
@@ -980,7 +981,12 @@ function renderDesktopShell({ title, subtitle, badge, route, bodyHtml }){
 // shell with title/bodyHtml regardless, so it's not plumbed through to renderDesktopShell.
 function mountPage({ title, subtitle, badge, route, bodyHtml, mobileHeroHtml }){
   const app = document.getElementById("app");
+  const usingHero = !isDesktopWidth() && !!mobileHeroHtml;
   app.classList.toggle("app-desktop", isDesktopWidth());
+  // .wrap's normal padding-bottom (breathing room below ordinary scrolling content) would add
+  // height after a hero that's deliberately sized to exactly fill the screen, forcing a scroll
+  // that shouldn't exist - zeroed out only while a mobile hero is actually mounted.
+  app.classList.toggle("app-hero", usingHero);
   app.innerHTML = isDesktopWidth()
     ? renderDesktopShell({ title, subtitle, badge, route, bodyHtml })
     : (mobileHeroHtml || `${renderAppHeader(title, subtitle, badge)}<div class="content">${bodyHtml}</div>`);
@@ -1012,6 +1018,7 @@ async function render(){
   // it can't leak onto scorer/spectator/sign-in-gate/etc, which stay phone-width at any size.
   // mountPage() re-adds it right after, for the routes that do want it.
   app.classList.remove("app-desktop");
+  app.classList.remove("app-hero");
 
   if (!configured){
     app.innerHTML = `
