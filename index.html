@@ -125,9 +125,22 @@
     padding:14px 20px 36px;
     color:#fff;
     border-bottom:3px solid var(--gold);
+    /* Fills the whole screen on first load (matching the full-bleed reference look) instead of
+       stopping dead at its own content height and leaving plain white page background below it
+       whenever there's no "current round" card to fill the rest - min-height, not height, so it
+       still grows normally if that card does appear. 100dvh accounts for mobile browser chrome
+       (address bar etc.) better than 100vh; vh is the fallback for browsers without dvh support. */
+    min-height:100vh;
+    min-height:100dvh;
+    box-sizing:border-box;
+    display:flex;
+    flex-direction:column;
   }
   .home-hero-topbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;}
   .home-hero-topbar .header-status-row{justify-content:flex-end;}
+  /* Takes up whatever space is left under the top bar and centers the branding+actions group
+     within it, so the top bar stays pinned to the very top regardless of hero height. */
+  .home-hero-body{flex:1;display:flex;flex-direction:column;justify-content:center;}
   .home-hero-brand{text-align:center;padding:30px 0 34px;}
   .home-hero-logo{width:68px;height:68px;border-radius:16px;box-shadow:0 6px 20px rgba(0,0,0,.25);}
   .home-hero-brand h1{margin:14px 0 0;font-size:1.9rem;font-weight:800;letter-spacing:-0.01em;color:#fff;}
@@ -417,6 +430,22 @@ function teeBoxOptions(selected){
   return TEE_BOXES.map(t => `<option value="${t}" ${t === selected ? "selected" : ""}>${t}</option>`).join("");
 }
 
+// Every screen in this app builds its markup as an HTML string and assigns it via innerHTML -
+// so any user-controlled text (round/player/team/competition/course names, free-text date/tee
+// time fields) MUST go through this before being interpolated into one of those templates.
+// Several of those screens (the "All rounds" history list, spectator/standings links) are
+// visible to other users or to anyone with a link, with no further sanitization layer, so this
+// is the only thing standing between a crafted name and a stored XSS.
+function escapeHtml(str){
+  if (str == null) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /* ---------- scoring helpers ---------- */
 function strokesReceived(hcp, si){
   hcp = Math.max(0, hcp|0);
@@ -499,8 +528,8 @@ async function searchGolfCore(){
       ? `<p class="muted" style="font-size:.78rem;">No matches.</p>`
       : courses.map(c => `
         <div class="golfcore-result" data-slug="${c.slug}" data-url="${c.url}" role="button" tabindex="0" style="cursor:pointer;padding:8px 10px;border:1px solid var(--line);border-radius:6px;margin-top:6px;">
-          <strong>${c.name}</strong>
-          <div class="muted" style="font-size:.78rem;">${c.city || ""}${c.region ? ", " + c.region : ""}${c.country ? " · " + c.country.toUpperCase() : ""} · Par ${c.par_total || "?"}</div>
+          <strong>${escapeHtml(c.name)}</strong>
+          <div class="muted" style="font-size:.78rem;">${escapeHtml(c.city) || ""}${c.region ? ", " + escapeHtml(c.region) : ""}${c.country ? " · " + escapeHtml(c.country).toUpperCase() : ""} · Par ${c.par_total || "?"}</div>
         </div>`).join("");
     resultsEl.querySelectorAll(".golfcore-result").forEach(el => {
       el.onclick = () => selectGolfCoreCourse(el.dataset.slug, el.dataset.url);
@@ -533,7 +562,7 @@ async function selectGolfCoreCourse(slug, url){
     golfcoreSourceSelected = { name: "GolfCore", url, parTotal: data.par_total || layout.par, tees, holesYards };
     fillRatingSlope(tees, null);
     const teeInfo = tees.length ? ` (${tees.length} tee${tees.length>1?"s":""} — rating/slope saved)` : "";
-    resultsEl.innerHTML = `<p class="muted" style="font-size:.78rem;">Loaded ${data.name} — par, stroke index &amp; yardage filled in below${teeInfo}.</p>`;
+    resultsEl.innerHTML = `<p class="muted" style="font-size:.78rem;">Loaded ${escapeHtml(data.name)} — par, stroke index &amp; yardage filled in below${teeInfo}.</p>`;
     const credit = document.getElementById("golfcoreCredit");
     credit.style.display = "";
     credit.innerHTML = `Course data via <a href="${url}" target="_blank" rel="noopener">GolfCore</a>`;
@@ -776,12 +805,18 @@ function renderHeaderStatus(badge){
   const connHtml = `<span class="conn-indicator ${online ? "conn-online" : "conn-offline"}" id="connIndicator">
     <span class="conn-dot"></span>${online ? "Connected" : "Offline"}
   </span>`;
-  const accountLabel = currentUser ? (currentGolferProfile && currentGolferProfile.name) || currentUser.email || "Account" : "Sign in";
+  const accountLabel = escapeHtml(currentUser ? (currentGolferProfile && currentGolferProfile.name) || currentUser.email || "Account" : "Sign in");
   const accountHtml = `<a href="#/account" class="account-chip">${svgIcon("user")} ${accountLabel}</a>`;
   return badgeHtml + connHtml + accountHtml;
 }
+// title/subtitle are escaped here (not by each of mountPage's ~10 callers) since most of them
+// pass straight-through user-controlled text (a round's name as the title, its course name as
+// the subtitle, etc.) - one choke point here and in renderDesktopShell below covers every
+// current and future caller instead of relying on each one to remember.
 function renderAppHeader(title, subtitle, badge){
   // badge: "live" | "final" | undefined
+  title = escapeHtml(title);
+  subtitle = escapeHtml(subtitle);
   return `
     <div class="app-header">
       <div class="top-bar">
@@ -818,8 +853,10 @@ const DESKTOP_NAV_ITEMS = [
 // "history" | "account" | null. Competition/standings pages pass null since they're reached
 // by clicking into a specific competition, not via a persistent sidebar destination.
 function renderDesktopShell({ title, subtitle, badge, route, bodyHtml }){
+  title = escapeHtml(title);
+  subtitle = escapeHtml(subtitle);
   const online = navigator.onLine;
-  const accountLabel = currentUser ? (currentGolferProfile && currentGolferProfile.name) || currentUser.email || "Account" : "Sign in";
+  const accountLabel = escapeHtml(currentUser ? (currentGolferProfile && currentGolferProfile.name) || currentUser.email || "Account" : "Sign in");
   const navLinksHtml = DESKTOP_NAV_ITEMS.map(item => `
     <a href="${item.href}" class="desktop-nav-link${route === item.route ? " active" : ""}">${item.icon} ${item.label}</a>`).join("");
   const badgeHtml = badge === "live"
@@ -976,13 +1013,13 @@ function renderAccountCard(){
   if (currentUser){
     const name = (currentGolferProfile && currentGolferProfile.name) || "";
     const handicap = currentGolferProfile && currentGolferProfile.handicap;
-    const initials = (name || currentUser.email || "?").trim().charAt(0).toUpperCase();
+    const initials = escapeHtml((name || currentUser.email || "?").trim().charAt(0).toUpperCase());
     card.innerHTML = `
       <div class="profile-header">
         <div class="profile-avatar">${initials}</div>
-        <h2 class="profile-name">${name || "My account"}</h2>
+        <h2 class="profile-name">${escapeHtml(name) || "My account"}</h2>
         <p class="profile-handicap">Handicap index: ${handicap != null ? handicap : "–"}</p>
-        <p class="muted" style="margin:2px 0 0;">${currentUser.email || ""}</p>
+        <p class="muted" style="margin:2px 0 0;">${escapeHtml(currentUser.email) || ""}</p>
       </div>
       <label>Display name</label>
       <input type="text" id="profileName">
@@ -1179,11 +1216,11 @@ function refreshPairingOptions(){
   box.innerHTML = `
     <div class="checkbox-row">
       <input type="radio" name="pairingChoice" id="pairing1" value='${JSON.stringify(opt1)}' checked>
-      <label style="margin:0" for="pairing1">${a1.name} vs ${b1.name} &nbsp;·&nbsp; ${a2.name} vs ${b2.name}</label>
+      <label style="margin:0" for="pairing1">${escapeHtml(a1.name)} vs ${escapeHtml(b1.name)} &nbsp;·&nbsp; ${escapeHtml(a2.name)} vs ${escapeHtml(b2.name)}</label>
     </div>
     <div class="checkbox-row">
       <input type="radio" name="pairingChoice" id="pairing2" value='${JSON.stringify(opt2)}'>
-      <label style="margin:0" for="pairing2">${a1.name} vs ${b2.name} &nbsp;·&nbsp; ${a2.name} vs ${b1.name}</label>
+      <label style="margin:0" for="pairing2">${escapeHtml(a1.name)} vs ${escapeHtml(b2.name)} &nbsp;·&nbsp; ${escapeHtml(a2.name)} vs ${escapeHtml(b1.name)}</label>
     </div>`;
 }
 
@@ -1295,15 +1332,17 @@ function renderHome(){
           <button id="menuBtn" class="menu-btn" type="button" aria-label="Menu">${svgIcon("menu")}</button>
           <div class="header-status-row">${renderHeaderStatus()}</div>
         </div>
-        <div class="home-hero-brand">
-          <img src="/golf/icon-header.png" alt="" class="home-hero-logo">
-          <h1>PK Golf</h1>
-          <p class="home-hero-tagline">Score it live</p>
-        </div>
-        <div class="home-hero-actions">
-          <button id="newRoundBtn" class="home-hero-pill home-hero-pill-primary" type="button">${svgIcon("plus")} New round</button>
-          <button id="historyBtn" class="home-hero-pill" type="button">${svgIcon("clock")} Playing history</button>
-          <button id="competitionsBtn" class="home-hero-pill" type="button">${svgIcon("trophy")} Competitions</button>
+        <div class="home-hero-body">
+          <div class="home-hero-brand">
+            <img src="/golf/icon-header.png" alt="" class="home-hero-logo">
+            <h1>PK Golf</h1>
+            <p class="home-hero-tagline">Score it live</p>
+          </div>
+          <div class="home-hero-actions">
+            <button id="newRoundBtn" class="home-hero-pill home-hero-pill-primary" type="button">${svgIcon("plus")} New round</button>
+            <button id="historyBtn" class="home-hero-pill" type="button">${svgIcon("clock")} Playing history</button>
+            <button id="competitionsBtn" class="home-hero-pill" type="button">${svgIcon("trophy")} Competitions</button>
+          </div>
         </div>
       </div>
       ${renderAppDrawer()}
@@ -1318,8 +1357,8 @@ function renderHome(){
     card.innerHTML = list.map(({r, route}) => `
       <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);">
         <div class="current-round-item" data-round="${r.id}" data-route="${route}" role="button" tabindex="0" style="cursor:pointer;flex:1;">
-          <strong>${r.name}</strong>
-          <div class="muted" style="font-size:.78rem;">${r.courseName || ""}${r.roundDate ? " · " + r.roundDate : ""}</div>
+          <strong>${escapeHtml(r.name)}</strong>
+          <div class="muted" style="font-size:.78rem;">${escapeHtml(r.courseName) || ""}${r.roundDate ? " · " + escapeHtml(r.roundDate) : ""}</div>
         </div>
         <span class="pill mode" style="background:var(--gold-dim);">Resume</span>
       </div>`).join("");
@@ -1357,12 +1396,12 @@ function renderCompetitionsList(){
 
       const itemHtml = (c, isDeleted) => {
         const mode = (c.gameModes && c.gameModes[0]) || "stroke";
-        const subtitle = mode === "piekfyn" ? `${c.teamAName || "Team A"} vs ${c.teamBName || "Team B"}` : competitionModeLabel(mode);
+        const subtitle = mode === "piekfyn" ? `${escapeHtml(c.teamAName) || "Team A"} vs ${escapeHtml(c.teamBName) || "Team B"}` : competitionModeLabel(mode);
         return `
         <div class="row" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);${isDeleted ? "opacity:.6;" : ""}">
           <div class="comp-item" data-comp="${c.id}" role="button" tabindex="0" style="cursor:${isDeleted ? "default" : "pointer"};flex:1;">
-            <strong>${c.name}</strong>
-            <div class="muted" style="font-size:.78rem;">${subtitle} · ${c.fourballCount} fourball${c.fourballCount>1?"s":""}${c.courseName ? " · " + c.courseName : ""}</div>
+            <strong>${escapeHtml(c.name)}</strong>
+            <div class="muted" style="font-size:.78rem;">${subtitle} · ${c.fourballCount} fourball${c.fourballCount>1?"s":""}${c.courseName ? " · " + escapeHtml(c.courseName) : ""}</div>
           </div>
           ${isDeleted
             ? `<button class="ghost restore-comp-item" data-comp="${c.id}" style="font-size:.75rem;padding:4px 10px;">Restore</button>`
@@ -1466,8 +1505,8 @@ function renderHistory(){
       card.innerHTML = active.map((r, i) => `
         <div class="round-card">
           <div class="round-card-info round-item" data-round="${r.id}" role="button" tabindex="0" style="cursor:pointer;">
-            <strong>${r.name}</strong>${r.creatorIsPlaying === false ? ` <span class="pill mode" style="background:var(--gold-dim);">Marking</span>` : ""}
-            <div class="muted" style="font-size:.78rem;">${r.courseName || ""}${r.roundDate ? " · " + r.roundDate : ""}${r.teeBox ? " · " + r.teeBox + " tees" : ""}</div>
+            <strong>${escapeHtml(r.name)}</strong>${r.creatorIsPlaying === false ? ` <span class="pill mode" style="background:var(--gold-dim);">Marking</span>` : ""}
+            <div class="muted" style="font-size:.78rem;">${escapeHtml(r.courseName) || ""}${r.roundDate ? " · " + escapeHtml(r.roundDate) : ""}${r.teeBox ? " · " + r.teeBox + " tees" : ""}</div>
           </div>
           ${roundCardStatsHtml(r, summaries[i])}
         </div>`).join("");
@@ -1485,8 +1524,8 @@ function renderHistory(){
     const itemHtml = (r, isDeleted) => `
       <div class="round-card"${isDeleted ? ` style="opacity:.6;"` : ""}>
         <div class="round-card-info round-item" data-round="${r.id}" role="button" tabindex="0" style="cursor:${isDeleted ? "default" : "pointer"};">
-          <strong>${r.name}</strong>
-          <div class="muted" style="font-size:.78rem;">${r.courseName || ""}${r.roundDate ? " · " + r.roundDate : ""}${r.teeBox ? " · " + r.teeBox + " tees" : ""}${r.competitionId ? ` · Fourball ${r.fourballIndex || ""}` : ""}</div>
+          <strong>${escapeHtml(r.name)}</strong>
+          <div class="muted" style="font-size:.78rem;">${escapeHtml(r.courseName) || ""}${r.roundDate ? " · " + escapeHtml(r.roundDate) : ""}${r.teeBox ? " · " + r.teeBox + " tees" : ""}${r.competitionId ? ` · Fourball ${r.fourballIndex || ""}` : ""}</div>
         </div>
         ${isDeleted
           ? `<button class="ghost restore-item" data-round="${r.id}" style="font-size:.75rem;padding:4px 10px;">Restore</button>`
@@ -2088,7 +2127,7 @@ function buildStartGateHtml(players){
       <p class="muted" style="font-size:.85rem;margin:6px 0 10px;">Tap a handicap to fix it. Once everything looks right, tap Start to begin scoring and start the round timer.</p>
       <table style="margin-bottom:12px;">
         <tr><th class="name-col">Player</th><th>Handicap</th></tr>
-        ${players.map(p => `<tr><td class="name-col">${p.name}</td><td><input type="number" class="hole-input hcp-edit-input" data-player="${p.id}" value="${p.playingHandicap}" style="width:60px;" onfocus="this.select()"></td></tr>`).join("")}
+        ${players.map(p => `<tr><td class="name-col">${escapeHtml(p.name)}</td><td><input type="number" class="hole-input hcp-edit-input" data-player="${p.id}" value="${p.playingHandicap}" style="width:60px;" onfocus="this.select()"></td></tr>`).join("")}
       </table>
       <button id="startRoundBtn" style="width:100%;">Start round</button>
     </div>`;
@@ -2117,7 +2156,24 @@ async function startRound(roundId){
   scorerData.round.startedAt = new Date();   // optimistic, so the gate closes immediately without waiting on a reload
 }
 
+// Live scoring entry is phone-only, same split as Fishing's desktop (data entry stays on the
+// phone; desktop is for setup and reviewing stats) - shown instead of the real scorer/
+// scoring-only screens whenever they're opened at desktop width, so nobody tries to run a
+// round from a laptop and gets a cramped narrow column instead of an actual desktop layout.
+function renderDesktopScoringBlockBody(){
+  return `
+    <div class="card" style="text-align:center;padding:36px 20px;">
+      <h2 style="border:none;margin:0 0 8px;">Scoring is phone-only</h2>
+      <p class="muted" style="margin:0 0 20px;">Open this round on your phone to enter scores hole by hole. Desktop is for setting up rounds, and checking history and competition standings.</p>
+      <a href="#/" class="btn-pill-secondary" style="display:inline-block;width:auto;padding:12px 28px;">Back to My rounds</a>
+    </div>`;
+}
+
 async function renderScorer(roundId){
+  if (isDesktopWidth()){
+    mountPage({ title: "Scoring", subtitle: "Live scoring is phone-only", route: null, bodyHtml: renderDesktopScoringBlockBody() });
+    return;
+  }
   const app = document.getElementById("app");
   app.innerHTML = `<p class="muted">Loading…</p>`;
   scorerData = await loadRoundBundle(roundId);
@@ -2247,6 +2303,10 @@ function renderScheduleTab(spectatorUrl){
 }
 
 async function renderScoringOnly(roundId){
+  if (isDesktopWidth()){
+    mountPage({ title: "Scoring", subtitle: "Live scoring is phone-only", route: null, bodyHtml: renderDesktopScoringBlockBody() });
+    return;
+  }
   const app = document.getElementById("app");
   app.innerHTML = `<p class="muted">Loading…</p>`;
   scorerData = await loadRoundBundle(roundId);
@@ -2364,12 +2424,12 @@ function buildScheduleViewHtml(bundle, spectatorUrl){
     <h2>Round details</h2>
     <div class="card">
       <div class="grid-3">
-        <div><span class="muted">Course</span><br><strong>${round.courseName}</strong></div>
-        <div><span class="muted">Date</span><br><strong>${round.roundDate || "-"}${round.teeTime ? " · " + round.teeTime : ""}</strong></div>
+        <div><span class="muted">Course</span><br><strong>${escapeHtml(round.courseName)}</strong></div>
+        <div><span class="muted">Date</span><br><strong>${escapeHtml(round.roundDate) || "-"}${round.teeTime ? " · " + escapeHtml(round.teeTime) : ""}</strong></div>
         <div><span class="muted">Tee box</span><br><strong>${round.teeBox || "-"}</strong></div>
       </div>
       <div style="margin-top:10px;">${round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
-      ${round.gameModes.includes("piekfyn") ? `<div class="muted" style="margin-top:8px;font-size:.85rem;">Piekfyn teams: <strong style="color:var(--ink);">${round.teamAName || "Team A"}</strong> vs <strong style="color:var(--ink);">${round.teamBName || "Team B"}</strong></div>` : ""}
+      ${round.gameModes.includes("piekfyn") ? `<div class="muted" style="margin-top:8px;font-size:.85rem;">Piekfyn teams: <strong style="color:var(--ink);">${escapeHtml(round.teamAName) || "Team A"}</strong> vs <strong style="color:var(--ink);">${escapeHtml(round.teamBName) || "Team B"}</strong></div>` : ""}
     </div>
 
     <div class="link-box">
@@ -2412,11 +2472,11 @@ function buildEditPairingRadios(positions, currentPairs){
   return `
     <div class="checkbox-row">
       <input type="radio" name="editPairingChoice" id="editPairing1" value='${JSON.stringify(opt1)}' ${opt1Checked ? "checked" : ""}>
-      <label style="margin:0" for="editPairing1">${a1.name} vs ${b1.name} &nbsp;·&nbsp; ${a2.name} vs ${b2.name}</label>
+      <label style="margin:0" for="editPairing1">${escapeHtml(a1.name)} vs ${escapeHtml(b1.name)} &nbsp;·&nbsp; ${escapeHtml(a2.name)} vs ${escapeHtml(b2.name)}</label>
     </div>
     <div class="checkbox-row">
       <input type="radio" name="editPairingChoice" id="editPairing2" value='${JSON.stringify(opt2)}' ${!opt1Checked ? "checked" : ""}>
-      <label style="margin:0" for="editPairing2">${a1.name} vs ${b2.name} &nbsp;·&nbsp; ${a2.name} vs ${b1.name}</label>
+      <label style="margin:0" for="editPairing2">${escapeHtml(a1.name)} vs ${escapeHtml(b2.name)} &nbsp;·&nbsp; ${escapeHtml(a2.name)} vs ${escapeHtml(b1.name)}</label>
     </div>`;
 }
 
@@ -2439,8 +2499,8 @@ function buildPiekfynEditSection(bundle){
     <h2>Piekfyn Kompetisie</h2>
     <div class="card">
       <div class="grid-2">
-        <div><label>Team A name</label><input type="text" id="editTeamAName" value="${round.teamAName || "Team A"}"></div>
-        <div><label>Team B name</label><input type="text" id="editTeamBName" value="${round.teamBName || "Team B"}"></div>
+        <div><label>Team A name</label><input type="text" id="editTeamAName" value="${escapeHtml(round.teamAName) || "Team A"}"></div>
+        <div><label>Team B name</label><input type="text" id="editTeamBName" value="${escapeHtml(round.teamBName) || "Team B"}"></div>
       </div>
       ${buildTeamColorSwatchPicker("editTeamAColor", "editTeamBColor", round.teamAColor || "red", round.teamBColor || "navy", "editTeamAName", "editTeamBName", "editTeamColorStyle", round.teamAName, round.teamBName)}
       <div class="row" style="gap:18px;margin-top:8px;">
@@ -2463,7 +2523,7 @@ function buildPlayersEditSection(bundle){
         <div class="grid-2" style="margin-bottom:8px;">
           <div>
             <label>Name</label>
-            <input type="text" class="edit-p-name" data-id="${p.id}" value="${p.name}">
+            <input type="text" class="edit-p-name" data-id="${p.id}" value="${escapeHtml(p.name)}">
           </div>
           <div class="row" style="gap:8px;">
             <div style="flex:1">
@@ -2533,15 +2593,15 @@ function buildScheduleEditHtml(bundle){
     <h2>Edit round details</h2>
     <div class="card">
       <label>Course name</label>
-      <input type="text" id="editCourseName" value="${round.courseName}">
+      <input type="text" id="editCourseName" value="${escapeHtml(round.courseName)}">
       <div class="grid-3">
         <div>
           <label>Date</label>
-          <input type="text" id="editRoundDate" value="${round.roundDate || ""}">
+          <input type="text" id="editRoundDate" value="${escapeHtml(round.roundDate) || ""}">
         </div>
         <div>
           <label>Tee time</label>
-          <input type="text" id="editTeeTime" value="${round.teeTime || ""}">
+          <input type="text" id="editTeeTime" value="${escapeHtml(round.teeTime) || ""}">
         </div>
         <div>
           <label>Tee box</label>
@@ -2747,7 +2807,7 @@ function renderEntry(){
     return `
       <div class="card" style="padding:12px;">
         <div class="row" style="justify-content:space-between;margin-bottom:8px;">
-          <strong>${p.name}</strong>
+          <strong>${escapeHtml(p.name)}</strong>
           <span class="muted">hcp ${p.playingHandicap}${p.team ? " · team "+p.team : ""} · thru ${thru}: ${thru ? total : "-"}</span>
         </div>
         <div class="row" style="gap:6px;flex-wrap:nowrap;">${chips}</div>
@@ -2817,7 +2877,7 @@ function buildScrambleDriveHtml(finished){
             color:${isActive ? "var(--brand-dark)" : "var(--ink)"};
             border:1px solid ${isActive ? "var(--gold)" : "var(--line)"};
             border-radius:8px;font-weight:${isActive ? "800" : "500"};" ${finished ? "disabled" : ""}>
-            ${p.name}
+            ${escapeHtml(p.name)}
           </button>`;
         }).join("")}
       </div>
@@ -2844,7 +2904,7 @@ function buildScrambleDriveTeamHtml(finished, teamKey, colorClass){
             color:${isActive ? "var(--brand-dark)" : "var(--ink)"};
             border:1px solid ${isActive ? "var(--gold)" : "var(--line)"};
             border-radius:8px;font-weight:${isActive ? "800" : "500"};" ${finished ? "disabled" : ""}>
-            ${p.name}
+            ${escapeHtml(p.name)}
           </button>`;
         }).join("")}
       </div>
@@ -2904,7 +2964,7 @@ function renderBBBPicker(finished){
                 color:${isActive ? "var(--brand-dark)" : "var(--ink)"};
                 border:1px solid ${isActive ? "var(--gold)" : "var(--line)"};
                 border-radius:8px;font-weight:${isActive ? "800" : "500"};" ${finished ? "disabled" : ""}>
-                ${p.name}
+                ${escapeHtml(p.name)}
               </button>`;
             }).join("")}
           </div>
@@ -3018,7 +3078,7 @@ function renderFourballSwitcher(roundId, routePrefix){
   el.innerHTML = `
     <label style="margin-top:0;">Switch fourball</label>
     <select id="fourballSwitchSelect">
-      ${all.map(b => `<option value="${b.round.id}" ${b.round.id===roundId?"selected":""}>Fourball ${b.round.fourballIndex||"?"} — ${b.players.map(p=>p.name).join(", ")}</option>`).join("")}
+      ${all.map(b => `<option value="${b.round.id}" ${b.round.id===roundId?"selected":""}>Fourball ${b.round.fourballIndex||"?"} — ${b.players.map(p=>escapeHtml(p.name)).join(", ")}</option>`).join("")}
     </select>`;
   document.getElementById("fourballSwitchSelect").onchange = (e) => { location.hash = `#/${routePrefix}/${e.target.value}`; };
 }
@@ -3121,13 +3181,13 @@ function buildCompetitionEditHtml(comp, mode){
   return `
     <div class="card">
       <label>Name</label>
-      <input type="text" id="editCompName" value="${comp.name}">
+      <input type="text" id="editCompName" value="${escapeHtml(comp.name)}">
       <label>Course name</label>
-      <input type="text" id="editCompCourseName" value="${comp.courseName || ""}">
+      <input type="text" id="editCompCourseName" value="${escapeHtml(comp.courseName) || ""}">
       <div class="grid-2">
         <div>
           <label>Date</label>
-          <input type="text" id="editCompDate" value="${comp.roundDate || ""}">
+          <input type="text" id="editCompDate" value="${escapeHtml(comp.roundDate) || ""}">
         </div>
         <div>
           <label>Tee box</label>
@@ -3136,8 +3196,8 @@ function buildCompetitionEditHtml(comp, mode){
       </div>
       ${mode === "piekfyn" ? `
       <div class="grid-2">
-        <div><label>Team A name</label><input type="text" id="editCompTeamAName" value="${comp.teamAName || "Team A"}"></div>
-        <div><label>Team B name</label><input type="text" id="editCompTeamBName" value="${comp.teamBName || "Team B"}"></div>
+        <div><label>Team A name</label><input type="text" id="editCompTeamAName" value="${escapeHtml(comp.teamAName) || "Team A"}"></div>
+        <div><label>Team B name</label><input type="text" id="editCompTeamBName" value="${escapeHtml(comp.teamBName) || "Team B"}"></div>
       </div>
       ${buildTeamColorSwatchPicker("editCompTeamAColor", "editCompTeamBColor", comp.teamAColor || "red", comp.teamBColor || "navy", "editCompTeamAName", "editCompTeamBName", "editCompTeamColorStyle", comp.teamAName, comp.teamBName)}
       <div class="row" style="gap:18px;margin-top:8px;">
@@ -3407,7 +3467,7 @@ function totalsFor(players, holes, detail, field){
 }
 
 function playerLink(p, roundId){
-  return `<span class="player-name-link" data-player="${p.id}"${roundId ? ` data-round="${roundId}"` : ""} role="button" tabindex="0">${p.name}</span><span class="muted" style="font-size:.72rem;font-weight:400;"> (${p.playingHandicap})</span>`;
+  return `<span class="player-name-link" data-player="${p.id}"${roundId ? ` data-round="${roundId}"` : ""} role="button" tabindex="0">${escapeHtml(p.name)}</span><span class="muted" style="font-size:.72rem;font-weight:400;"> (${p.playingHandicap})</span>`;
 }
 
 function buildStrokeBoard(players, holes, detail){
@@ -3696,7 +3756,7 @@ function buildAllianceBoard(bundle, detail){
   <div class="card">
     <strong>Alliance</strong> <span class="muted">— best ${n} of ${players.length} net-stableford scores per hole</span>
     <p style="font-size:1.1rem;margin:10px 0 4px;">${thru ? total + " points" : "Not started"} <span class="muted" style="font-size:.85rem;">(thru ${thru})</span></p>
-    <div class="team-scorecard-link" role="button" tabindex="0">Fourball: ${players.map(p=>p.name).join(", ")} — view full scorecard</div>
+    <div class="team-scorecard-link" role="button" tabindex="0">Fourball: ${players.map(p=>escapeHtml(p.name)).join(", ")} — view full scorecard</div>
   </div>`;
 }
 
@@ -3868,7 +3928,7 @@ function buildCombinedAllianceBoard(bundles){
       ${rows.map((r,i) => `
         <tr class="${i===0 && r.total>0 ? 'leader-row' : ''}">
           <td class="name-col">Fourball ${r.bundle.round.fourballIndex || "?"}</td>
-          <td class="muted" style="text-align:left;">${r.bundle.players.map(p=>p.name).join(", ")}</td>
+          <td class="muted" style="text-align:left;">${r.bundle.players.map(p=>escapeHtml(p.name)).join(", ")}</td>
           <td>${r.thru}</td>
           <td>${r.thru ? r.total : "-"}</td>
         </tr>`).join("")}
@@ -3881,7 +3941,7 @@ function buildCombinedAllianceBoard(bundles){
 // each fourball just gets its own board, one after another.
 function buildPerFourballBoards(bundles, builderFn){
   return bundles.map(bundle => `
-    <p class="muted" style="margin:14px 0 4px;font-weight:700;color:var(--ink);">Fourball ${bundle.round.fourballIndex || "?"} <span style="font-weight:400;color:var(--muted);">— ${bundle.players.map(p=>p.name).join(", ")}</span></p>
+    <p class="muted" style="margin:14px 0 4px;font-weight:700;color:var(--ink);">Fourball ${bundle.round.fourballIndex || "?"} <span style="font-weight:400;color:var(--muted);">— ${bundle.players.map(p=>escapeHtml(p.name)).join(", ")}</span></p>
     ${builderFn(bundle)}`).join("");
 }
 
@@ -3893,7 +3953,7 @@ function buildFourballLinksHtml(bundles){
     return `
     <div class="card">
       <strong>Fourball ${bundle.round.fourballIndex || "?"}</strong>
-      <p class="muted" style="margin:4px 0 8px;">${bundle.players.map(p=>p.name).join(", ")}</p>
+      <p class="muted" style="margin:4px 0 8px;">${bundle.players.map(p=>escapeHtml(p.name)).join(", ")}</p>
       <div class="link-box">
         <span class="muted">Scoring link:</span>
         <input type="text" readonly value="${scoreUrl}" onclick="this.select()">
@@ -3961,6 +4021,11 @@ function computeMatch(holes, detail, sideAPlayers, sideBPlayers, order){
 }
 
 function formatMatchStatus(m, nameA, nameB){
+  // Every call site renders this return value straight into innerHTML (including on
+  // unauthenticated spectator pages), so escape the names here once rather than relying on
+  // every caller to remember.
+  nameA = escapeHtml(nameA);
+  nameB = escapeHtml(nameB);
   if (m.holesPlayed === 0) return "Not started";
   if (m.decided){
     if (m.winner === null) return "Halved";
@@ -4063,9 +4128,9 @@ function buildTeamColorSwatchPicker(aInputId, bInputId, selectedA, selectedB, aN
     <input type="hidden" id="${aInputId}" value="${selectedA}" data-preview-name="${aNameId}" data-preview-style-radio="${styleRadioName}" data-pair-with="${bInputId}" data-role="a">
     <input type="hidden" id="${bInputId}" value="${selectedB}" data-preview-name="${bNameId}" data-preview-style-radio="${styleRadioName}" data-pair-with="${aInputId}" data-role="b">
     <div class="pf-hero-chips" style="margin-top:10px;max-width:360px;">
-      <div class="pf-chip" id="${aInputId}_preview" style="${teamChipStyle(selectedA, false)}"><div class="pf-chip-name">${aNameVal || "Team A"}</div></div>
+      <div class="pf-chip" id="${aInputId}_preview" style="${teamChipStyle(selectedA, false)}"><div class="pf-chip-name">${escapeHtml(aNameVal) || "Team A"}</div></div>
       <div class="pf-vs">&ndash;</div>
-      <div class="pf-chip" id="${bInputId}_preview" style="${teamChipStyle(selectedB, false)}"><div class="pf-chip-name">${bNameVal || "Team B"}</div></div>
+      <div class="pf-chip" id="${bInputId}_preview" style="${teamChipStyle(selectedB, false)}"><div class="pf-chip-name">${escapeHtml(bNameVal) || "Team B"}</div></div>
     </div>`;
 }
 // Keeps a swatch picker's two preview chips in sync with the name fields, the chosen colors
@@ -4184,8 +4249,8 @@ function buildPiekfynCompetitionBoard(comp, bundles){
     decidedCount += pts.decidedCount;
 
     const matchRows = [
-      ...pts.matches.map(({pA,pB,m}, i) => ({ key: String(i), label: `${pA.name} vs ${pB.name}`, text: formatMatchStatus(m, pA.name, pB.name), cls: piekfynStatusClass(m) })),
-      { key: "team", label: `${teamAName} vs ${teamBName} (fourball)`, text: formatMatchStatus(pts.teamMatch, teamAName, teamBName), cls: piekfynStatusClass(pts.teamMatch) },
+      ...pts.matches.map(({pA,pB,m}, i) => ({ key: String(i), label: `${escapeHtml(pA.name)} vs ${escapeHtml(pB.name)}`, text: formatMatchStatus(m, pA.name, pB.name), cls: piekfynStatusClass(m) })),
+      { key: "team", label: `${escapeHtml(teamAName)} vs ${escapeHtml(teamBName)} (fourball)`, text: formatMatchStatus(pts.teamMatch, teamAName, teamBName), cls: piekfynStatusClass(pts.teamMatch) },
     ];
 
     return `
@@ -4194,7 +4259,7 @@ function buildPiekfynCompetitionBoard(comp, bundles){
           <strong style="font-size:.92rem;">Fourball ${bundle.round.fourballIndex || idx+1}</strong>
           <span class="muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;">${pts.decidedCount === 3 ? "Final" : (pts.teamMatch.holesPlayed === 0 && !pts.inProgress ? "Not started" : "In progress")}</span>
         </div>
-        <div class="muted" style="font-size:.78rem;margin:2px 0 6px;">${bundle.players.filter(p=>p.team==="A").map(p=>p.name).join(" & ")} &nbsp;vs&nbsp; ${bundle.players.filter(p=>p.team==="B").map(p=>p.name).join(" & ")}</div>
+        <div class="muted" style="font-size:.78rem;margin:2px 0 6px;">${bundle.players.filter(p=>p.team==="A").map(p=>escapeHtml(p.name)).join(" & ")} &nbsp;vs&nbsp; ${bundle.players.filter(p=>p.team==="B").map(p=>escapeHtml(p.name)).join(" & ")}</div>
         ${matchRows.map(r => `
           <div class="pf-match-row" data-match="${r.key}" data-round="${bundle.round.id}" role="button" tabindex="0">
             <span style="font-size:.84rem;">${r.label}</span>
@@ -4242,7 +4307,7 @@ function buildPiekfynCompetitionBoard(comp, bundles){
         fourballIndex: bundle.round.fourballIndex,
         roundId: bundle.round.id,
         team,
-        label: teamPlayers.map(p=>p.name).join(" & "),
+        label: teamPlayers.map(p=>escapeHtml(p.name)).join(" & "),
         count,
         sum,
       });
@@ -4264,12 +4329,12 @@ function buildPiekfynCompetitionBoard(comp, bundles){
     ${liveBadge}
     <div class="pf-hero-chips">
       <div class="pf-chip" style="${teamChipStyle(teamAColor, isFlat)}">
-        <div class="pf-chip-name">${teamAName}</div>
+        <div class="pf-chip-name">${escapeHtml(teamAName)}</div>
         <div class="pf-chip-num">${teamATotal}</div>
       </div>
       <div class="pf-vs">&ndash;</div>
       <div class="pf-chip" style="${teamChipStyle(teamBColor, isFlat)}">
-        <div class="pf-chip-name">${teamBName}</div>
+        <div class="pf-chip-name">${escapeHtml(teamBName)}</div>
         <div class="pf-chip-num">${teamBTotal}</div>
       </div>
     </div>
@@ -4392,10 +4457,10 @@ function openScorecard(playerId){
       <div class="scorecard-panel">
         <button class="scorecard-close" id="scorecardCloseBtn">&times;</button>
         <div class="scorecard-heading">
-          <div class="course">${round.courseName}</div>
-          <div class="meta">${round.roundDate || ""}${round.teeTime ? " · " + round.teeTime : ""}${round.teeBox ? " · " + round.teeBox + " tees" : ""}</div>
+          <div class="course">${escapeHtml(round.courseName)}</div>
+          <div class="meta">${escapeHtml(round.roundDate) || ""}${round.teeTime ? " · " + escapeHtml(round.teeTime) : ""}${round.teeBox ? " · " + round.teeBox + " tees" : ""}</div>
         </div>
-        <div class="scorecard-player-name">${player.name} <span class="muted" style="font-size:.85rem;font-weight:600;">(hcp ${player.playingHandicap}${player.team ? " · team " + player.team : ""})</span></div>
+        <div class="scorecard-player-name">${escapeHtml(player.name)} <span class="muted" style="font-size:.85rem;font-weight:600;">(hcp ${player.playingHandicap}${player.team ? " · team " + player.team : ""})</span></div>
 
         <div class="scorecard-table-wrap">
         <table class="scorecard-table">
@@ -4558,8 +4623,8 @@ function openTeamScorecard(){
       <div class="scorecard-panel">
         <button class="scorecard-close" id="scorecardCloseBtn">&times;</button>
         <div class="scorecard-heading">
-          <div class="course">${round.courseName}</div>
-          <div class="meta">${round.roundDate || ""}${round.teeTime ? " · " + round.teeTime : ""}${round.teeBox ? " · " + round.teeBox + " tees" : ""}</div>
+          <div class="course">${escapeHtml(round.courseName)}</div>
+          <div class="meta">${escapeHtml(round.roundDate) || ""}${round.teeTime ? " · " + escapeHtml(round.teeTime) : ""}${round.teeBox ? " · " + round.teeBox + " tees" : ""}</div>
         </div>
         <div class="scorecard-player-name">Alliance — Fourball <span class="muted" style="font-size:.85rem;font-weight:600;">(best ${n} of ${players.length} count · small number = shots, circled = points counted)</span></div>
 
@@ -4594,7 +4659,7 @@ function openTeamScorecard(){
             </tr>
             ${players.map(p => `
             <tr>
-              <td class="label-col">${p.name}<div class="muted" style="font-size:.62rem;font-weight:600;">hcp ${p.playingHandicap}</div></td>
+              <td class="label-col">${escapeHtml(p.name)}<div class="muted" style="font-size:.62rem;font-weight:600;">hcp ${p.playingHandicap}</div></td>
               ${front.map(h => ptsCell(p.id, h)).join("")}
               ${playerAggCell(p.id, front)}
               ${back.map(h => ptsCell(p.id, h)).join("")}
@@ -4671,7 +4736,7 @@ function openBetterballScorecard(){
     return `
       ${teamPlayers.map(p => `
       <tr>
-        <td class="label-col">${p.name}<div class="muted" style="font-size:.62rem;font-weight:600;">hcp ${p.playingHandicap}</div></td>
+        <td class="label-col">${escapeHtml(p.name)}<div class="muted" style="font-size:.62rem;font-weight:600;">hcp ${p.playingHandicap}</div></td>
         ${front.map(h => ptsCell(p.id, teamKey, h)).join("")}
         ${playerAggCell(p.id, front)}
         ${back.map(h => ptsCell(p.id, teamKey, h)).join("")}
@@ -4698,8 +4763,8 @@ function openBetterballScorecard(){
       <div class="scorecard-panel">
         <button class="scorecard-close" id="scorecardCloseBtn">&times;</button>
         <div class="scorecard-heading">
-          <div class="course">${round.courseName}</div>
-          <div class="meta">${round.roundDate || ""}${round.teeTime ? " · " + round.teeTime : ""}${round.teeBox ? " · " + round.teeBox + " tees" : ""}</div>
+          <div class="course">${escapeHtml(round.courseName)}</div>
+          <div class="meta">${escapeHtml(round.roundDate) || ""}${round.teeTime ? " · " + escapeHtml(round.teeTime) : ""}${round.teeBox ? " · " + round.teeBox + " tees" : ""}</div>
         </div>
         <div class="scorecard-player-name">Betterball Stableford <span class="muted" style="font-size:.85rem;font-weight:600;">(small number = shots, circled = the score that counted)</span></div>
 
@@ -4798,13 +4863,13 @@ function openMatchScorecard(bundle, matchKey){
   if (matchKey === "team"){
     sideA = players.filter(p => p.team === "A"); sideB = players.filter(p => p.team === "B");
     nameA = teamAName; nameB = teamBName;
-    title = `${teamAName} vs ${teamBName} (fourball)`;
+    title = `${escapeHtml(teamAName)} vs ${escapeHtml(teamBName)} (fourball)`;
   } else {
     const pair = (round.piekfynPairs || [])[parseInt(matchKey, 10)];
     const pA = pair && byOrder[pair.a], pB = pair && byOrder[pair.b];
     if (!pA || !pB) return;
     sideA = [pA]; sideB = [pB]; nameA = pA.name; nameB = pB.name;
-    title = `${pA.name} vs ${pB.name}`;
+    title = `${escapeHtml(pA.name)} vs ${escapeHtml(pB.name)}`;
   }
 
   // Hole-by-hole running count, in playing order. It stops at the hole where the match was decided.
@@ -4837,14 +4902,14 @@ function openMatchScorecard(bundle, matchKey){
   // The two-ball's own score per hole (the circled better-ball net, stated as its own row) —
   // singles matches skip this since there's only one player's score to show.
   const teamScoreRow = (side, sideName) => side.length > 1
-    ? `<tr class="mc-team-score-row"><td class="label-col">${sideName}</td>${cols.map(h => {
+    ? `<tr class="mc-team-score-row"><td class="label-col">${escapeHtml(sideName)}</td>${cols.map(h => {
         const v = best(side, h);
         return v == null ? `<td>-</td>` : `<td><strong>${v}</strong></td>`;
       }).join("")}</tr>`
     : "";
   const sideRows = (side, sideName, sign) => `
     ${side.map(p => `
-      <tr><td class="label-col">${p.name}${side.length > 1 ? "" : ""}</td>${nets(cols, side, p)}</tr>`).join("")}
+      <tr><td class="label-col">${escapeHtml(p.name)}${side.length > 1 ? "" : ""}</td>${nets(cols, side, p)}</tr>`).join("")}
     ${teamScoreRow(side, sideName)}
     <tr class="mc-side-row"><td class="label-col">Match</td>${statusCells(cols, sign)}</tr>`;
 
@@ -4853,8 +4918,8 @@ function openMatchScorecard(bundle, matchKey){
       <div class="scorecard-panel">
         <button class="scorecard-close" id="scorecardCloseBtn">&times;</button>
         <div class="scorecard-heading">
-          <div class="course">${round.courseName}</div>
-          <div class="meta">${round.roundDate || ""}${round.teeBox ? " · " + round.teeBox + " tees" : ""}</div>
+          <div class="course">${escapeHtml(round.courseName)}</div>
+          <div class="meta">${escapeHtml(round.roundDate) || ""}${round.teeBox ? " · " + round.teeBox + " tees" : ""}</div>
         </div>
         <div class="scorecard-player-name">${title}</div>
         <p style="margin:2px 0 10px;font-weight:700;">${formatMatchStatus(m, nameA, nameB)}</p>
@@ -4895,7 +4960,7 @@ function openBestTeamScorecard(bundle, team){
   const order = inferPlayOrder(holes, detail, players, startHoleFor(bundle));
   const holeByNum = {}; holes.forEach(h => holeByNum[h.holeNumber] = h);
   const cols = order.map(n => holeByNum[n]);
-  const teamName = team === "A" ? (round.teamAName || "Team A") : (round.teamBName || "Team B");
+  const teamName = escapeHtml(team === "A" ? (round.teamAName || "Team A") : (round.teamBName || "Team B"));
 
   const holePts = h => pair.map(p => detail[p.id][h.holeNumber].pts).filter(v => v != null);
   const bestAt = h => { const v = holePts(h); return v.length ? Math.max(...v) : null; };
@@ -4921,10 +4986,10 @@ function openBestTeamScorecard(bundle, team){
       <div class="scorecard-panel">
         <button class="scorecard-close" id="scorecardCloseBtn">&times;</button>
         <div class="scorecard-heading">
-          <div class="course">${round.courseName}</div>
-          <div class="meta">${round.roundDate || ""}${round.teeBox ? " · " + round.teeBox + " tees" : ""}</div>
+          <div class="course">${escapeHtml(round.courseName)}</div>
+          <div class="meta">${escapeHtml(round.roundDate) || ""}${round.teeBox ? " · " + round.teeBox + " tees" : ""}</div>
         </div>
-        <div class="scorecard-player-name">${pair.map(p => p.name).join(" &amp; ")} <span class="muted" style="font-size:.85rem;font-weight:600;">(${teamName})</span></div>
+        <div class="scorecard-player-name">${pair.map(p => escapeHtml(p.name)).join(" &amp; ")} <span class="muted" style="font-size:.85rem;font-weight:600;">(${teamName})</span></div>
         <p style="margin:2px 0 10px;font-weight:700;">Best ball Stableford: ${thru ? total : "-"} pts thru ${thru}</p>
         <div class="scorecard-table-wrap">
         <table class="scorecard-table">
@@ -4937,8 +5002,8 @@ function openBestTeamScorecard(bundle, team){
             <tr><td class="label-col">Par</td>${cols.map(h => `<td>${h.par}</td>`).join("")}<td class="agg-col">${cols.reduce((a,h)=>a+h.par,0)}</td></tr>
             <tr><td class="label-col">S.I.</td>${cols.map(h => `<td>${h.strokeIndex}</td>`).join("")}<td class="agg-col">-</td></tr>
             ${pair.map(p => `
-            <tr class="gross-row"><td class="label-col">${p.name}<br><span class="muted" style="font-size:.65rem;font-weight:600;">gross · hcp ${p.playingHandicap}</span></td>${grossRow(p)}<td class="agg-col">${sumOf(p, "gross")}</td></tr>
-            <tr><td class="label-col"><span class="muted" style="font-size:.7rem;">${p.name} pts</span></td>${ptsRow(p)}<td class="agg-col">${sumOf(p, "pts")}</td></tr>`).join("")}
+            <tr class="gross-row"><td class="label-col">${escapeHtml(p.name)}<br><span class="muted" style="font-size:.65rem;font-weight:600;">gross · hcp ${p.playingHandicap}</span></td>${grossRow(p)}<td class="agg-col">${sumOf(p, "gross")}</td></tr>
+            <tr><td class="label-col"><span class="muted" style="font-size:.7rem;">${escapeHtml(p.name)} pts</span></td>${ptsRow(p)}<td class="agg-col">${sumOf(p, "pts")}</td></tr>`).join("")}
             <tr class="mc-side-row"><td class="label-col">Best ball</td>${cols.map(h => { const v = bestAt(h); return `<td class="${v == null ? "" : "mc-up"}">${v == null ? "-" : v}</td>`; }).join("")}<td class="agg-col"><strong>${thru ? total : "-"}</strong></td></tr>
           </tbody>
         </table>
