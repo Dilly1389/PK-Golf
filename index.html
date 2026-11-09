@@ -153,21 +153,7 @@
     cursor:pointer;border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.14);color:#fff;
     backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
   }
-  /* "Play golf" card - a labeled container holding the Join/Start split button, matching the
-     GolfPad reference. Join has no real feature behind it yet (no "scan to join a round" flow
-     exists) so it's rendered disabled/dimmed rather than a dead-end tap. */
-  .home-hero-playcard{
-    background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.4);border-radius:28px;
-    padding:14px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
-  }
-  .home-hero-playcard-label{text-align:center;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff;opacity:.85;margin-bottom:10px;}
-  .home-hero-playcard-row{display:flex;gap:8px;}
-  .home-hero-join, .home-hero-start{
-    flex:1;display:flex;align-items:center;justify-content:center;gap:6px;
-    padding:14px 10px;border-radius:999px;font-size:.95rem;font-weight:700;font-family:inherit;
-  }
-  .home-hero-join{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.3);opacity:.55;cursor:not-allowed;}
-  .home-hero-start{flex:1.3;background:#fff;color:var(--brand-dark);border:1px solid #fff;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.2);}
+  .home-hero-pill-primary{background:#fff;color:var(--brand-dark);border-color:#fff;box-shadow:0 6px 18px rgba(0,0,0,.2);}
 
   /* Slide-in nav drawer, opened from the hamburger button in the header - sized for a thumb
      to reach and tap on a phone (78vw wide, 44px+ tall link rows). */
@@ -791,6 +777,7 @@ function svgIcon(name){
     menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
     trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0V4Z"/><path d="M8 5H5a3 3 0 0 0 3 3"/><path d="M16 5h3a3 3 0 0 1-3 3"/><path d="M12 13v3"/><path d="M9 20h6"/><path d="M10 20v-2.5a2 2 0 0 1 4 0V20"/>',
     scan: '<path d="M4 7V4h3M17 4h3v3M20 17v3h-3M7 20H4v-3"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
   };
   return `<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em;flex-shrink:0;" aria-hidden="true">${paths[name] || ""}</svg>`;
 }
@@ -1345,8 +1332,12 @@ function renderHome(){
     mobileHeroHtml: `
       <div class="home-hero">
         <div class="home-hero-topbar">
-          <button id="menuBtn" class="menu-btn" type="button" aria-label="Menu">${svgIcon("menu")}</button>
-          <div class="header-status-row">${renderHeaderStatus()}</div>
+          <div class="header-status-row">
+            <span class="conn-indicator ${navigator.onLine ? "conn-online" : "conn-offline"}" id="connIndicator" title="${navigator.onLine ? "Connected" : "Offline"}" aria-label="${navigator.onLine ? "Connected" : "Offline"}">
+              <span class="conn-dot"></span>
+            </span>
+            <a href="#/account" class="account-chip" title="Settings" aria-label="Settings">${svgIcon("gear")}</a>
+          </div>
         </div>
         <div class="home-hero-body">
           <div class="home-hero-brand">
@@ -1355,19 +1346,12 @@ function renderHome(){
             <p class="home-hero-tagline">Score it live</p>
           </div>
           <div class="home-hero-actions">
-            <div class="home-hero-playcard">
-              <div class="home-hero-playcard-label">Play golf</div>
-              <div class="home-hero-playcard-row">
-                <button class="home-hero-join" type="button" disabled title="Coming soon">${svgIcon("scan")} Join</button>
-                <button id="newRoundBtn" class="home-hero-start" type="button">${svgIcon("plus")} Start</button>
-              </div>
-            </div>
+            <button id="newRoundBtn" class="home-hero-pill home-hero-pill-primary" type="button">${svgIcon("plus")} New round</button>
             <button id="historyBtn" class="home-hero-pill" type="button">${svgIcon("clock")} Playing history</button>
             <button id="competitionsBtn" class="home-hero-pill" type="button">${svgIcon("trophy")} Competitions</button>
           </div>
         </div>
       </div>
-      ${renderAppDrawer()}
       <div class="content">${currentRoundsHtml}</div>
     `,
   });
