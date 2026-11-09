@@ -650,6 +650,53 @@ async function saveGolferProfile(uid, data){
   if (currentGolferProfile) Object.assign(currentGolferProfile, data);
 }
 
+/* ---------- Friends ---------- */
+// One doc per direction, deterministic id so a duplicate send just overwrites instead of
+// creating a second pending request. "Friendship" has no separate collection - two accepted
+// requests (A->B or B->A) ARE the friendship; loadFriendsList merges whichever one exists.
+function friendRequestId(fromUid, toUid){ return `${fromUid}_${toUid}`; }
+
+async function findGolferByEmail(email){
+  const typed = email.trim().toLowerCase();
+  if (!typed) return null;
+  const snap = await getDocs(query(collection(db, "golfers"), where("email", "==", typed)));
+  if (snap.empty) return null;
+  const d = snap.docs[0];
+  return { uid: d.id, ...d.data() };
+}
+
+async function sendFriendRequest(toUid, toName){
+  if (!currentUser || toUid === currentUser.uid) return;
+  const fromName = (currentGolferProfile && currentGolferProfile.name) || currentUser.email || "Golfer";
+  await setDoc(doc(db, "friend_requests", friendRequestId(currentUser.uid, toUid)), {
+    fromUid: currentUser.uid, toUid, fromName, toName, status: "pending", createdAt: serverTimestamp(),
+  });
+}
+
+async function respondToFriendRequest(requestId, accept){
+  await updateDoc(doc(db, "friend_requests", requestId), {
+    status: accept ? "accepted" : "declined", respondedAt: serverTimestamp(),
+  });
+}
+
+// Three Firestore reads (pending-in, pending-out, accepted-either-direction via two queries
+// merged client-side - Firestore can't OR across two different fields in one query).
+async function loadFriendData(uid){
+  const [incomingSnap, outgoingSnap, acceptedFromSnap, acceptedToSnap] = await Promise.all([
+    getDocs(query(collection(db, "friend_requests"), where("toUid", "==", uid), where("status", "==", "pending"))),
+    getDocs(query(collection(db, "friend_requests"), where("fromUid", "==", uid), where("status", "==", "pending"))),
+    getDocs(query(collection(db, "friend_requests"), where("fromUid", "==", uid), where("status", "==", "accepted"))),
+    getDocs(query(collection(db, "friend_requests"), where("toUid", "==", uid), where("status", "==", "accepted"))),
+  ]);
+  const incoming = incomingSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const outgoing = outgoingSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const friends = [
+    ...acceptedFromSnap.docs.map(d => ({ uid: d.data().toUid, name: d.data().toName })),
+    ...acceptedToSnap.docs.map(d => ({ uid: d.data().fromUid, name: d.data().fromName })),
+  ];
+  return { incoming, outgoing, friends };
+}
+
 async function loadMyRoundsList(uid){
   try{
     const snap = await getDocs(query(collection(db, "golf_rounds"), where("ownerUid", "==", uid), orderBy("createdAt", "desc"), limit(25)));
@@ -778,6 +825,7 @@ function svgIcon(name){
     trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0V4Z"/><path d="M8 5H5a3 3 0 0 0 3 3"/><path d="M16 5h3a3 3 0 0 1-3 3"/><path d="M12 13v3"/><path d="M9 20h6"/><path d="M10 20v-2.5a2 2 0 0 1 4 0V20"/>',
     scan: '<path d="M4 7V4h3M17 4h3v3M20 17v3h-3M7 20H4v-3"/>',
     gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
+    friends: '<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><circle cx="17" cy="8" r="2.5"/><path d="M15.5 14.3c2.6.4 4.5 2.6 4.5 5.7"/>',
   };
   return `<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.15em;flex-shrink:0;" aria-hidden="true">${paths[name] || ""}</svg>`;
 }
@@ -967,6 +1015,7 @@ async function render(){
   if (parts[0] === "new-round") return renderNewRound();
   if (parts[0] === "history") return renderHistory();
   if (parts[0] === "competitions") return renderCompetitionsList();
+  if (parts[0] === "friends") return renderFriends();
   return renderHome();
 }
 
@@ -1024,6 +1073,7 @@ function renderAccountCard(){
         <p class="profile-handicap">Handicap index: ${handicap != null ? handicap : "–"}</p>
         <p class="muted" style="margin:2px 0 0;">${escapeHtml(currentUser.email) || ""}</p>
       </div>
+      <button class="btn-pill-secondary" id="friendsBtn" type="button" style="margin-bottom:18px;">${svgIcon("friends")} Friends</button>
       <label>Display name</label>
       <input type="text" id="profileName">
       <label>Handicap</label>
@@ -1050,11 +1100,111 @@ function renderAccountCard(){
       }catch(err){ msg.textContent = "Error: " + err.message; }
     };
     document.getElementById("signOutBtn").onclick = () => doSignOut();
+    document.getElementById("friendsBtn").onclick = () => { location.hash = "#/friends"; };
     return;
   }
 
   card.innerHTML = accountMode === "signup" ? signUpFormHtml(false) : signInFormHtml(false);
   wireAccountForm();
+}
+
+function renderFriends(){
+  mountPage({
+    title: "Friends",
+    subtitle: "Find people by email and add them as friends.",
+    route: null,
+    bodyHtml: `
+    <button id="backToAccountBtn" class="secondary" type="button" style="margin-bottom:14px;">← Back to account</button>
+
+    <h2>Add a friend</h2>
+    <div class="card">
+      <label>Their email</label>
+      <div class="row" style="gap:8px;flex-wrap:nowrap;">
+        <input type="email" id="friendSearchEmail" placeholder="name@example.com" style="flex:1;">
+        <button id="friendSearchBtn" class="secondary" type="button" style="white-space:nowrap;">Search</button>
+      </div>
+      <div id="friendSearchResult" style="margin-top:10px;"></div>
+    </div>
+
+    <h2>Requests</h2>
+    <div class="card" id="friendRequestsCard"><p class="muted">Loading…</p></div>
+
+    <h2>Your friends</h2>
+    <div class="card" id="friendsListCard"><p class="muted">Loading…</p></div>
+    `,
+  });
+
+  document.getElementById("backToAccountBtn").onclick = () => { location.hash = "#/account"; };
+  document.getElementById("friendSearchBtn").onclick = () => searchForFriend();
+  document.getElementById("friendSearchEmail").addEventListener("keydown", (e) => {
+    if (e.key === "Enter"){ e.preventDefault(); searchForFriend(); }
+  });
+
+  async function searchForFriend(){
+    const input = document.getElementById("friendSearchEmail");
+    const resultEl = document.getElementById("friendSearchResult");
+    const email = input.value.trim();
+    if (!email){ resultEl.innerHTML = `<p class="muted">Enter an email to search.</p>`; return; }
+    resultEl.innerHTML = `<p class="muted">Searching…</p>`;
+    try{
+      const golfer = await findGolferByEmail(email);
+      if (!golfer){ resultEl.innerHTML = `<p class="muted">No PK Golf account found for that email.</p>`; return; }
+      if (golfer.uid === currentUser.uid){ resultEl.innerHTML = `<p class="muted">That's you.</p>`; return; }
+      resultEl.innerHTML = `
+        <div class="row" style="justify-content:space-between;align-items:center;">
+          <div><strong>${escapeHtml(golfer.name || golfer.email)}</strong><div class="muted" style="font-size:.78rem;">${escapeHtml(golfer.email)}</div></div>
+          <button id="sendFriendRequestBtn" type="button">Add friend</button>
+        </div>`;
+      document.getElementById("sendFriendRequestBtn").onclick = async () => {
+        const btn = document.getElementById("sendFriendRequestBtn");
+        btn.disabled = true; btn.textContent = "Sending…";
+        try{
+          await sendFriendRequest(golfer.uid, golfer.name || golfer.email);
+          resultEl.innerHTML = `<p class="muted">Friend request sent.</p>`;
+          populateFriendData();
+        }catch(err){ resultEl.innerHTML = `<p class="muted">Error: ${escapeHtml(err.message)}</p>`; }
+      };
+    }catch(err){ resultEl.innerHTML = `<p class="muted">Error: ${escapeHtml(err.message)}</p>`; }
+  }
+
+  function populateFriendData(){
+    const reqCard = document.getElementById("friendRequestsCard");
+    const listCard = document.getElementById("friendsListCard");
+    if (!reqCard || !listCard) return;
+    loadFriendData(currentUser.uid).then(({ incoming, outgoing, friends }) => {
+      let reqHtml = "";
+      if (incoming.length){
+        reqHtml += incoming.map(r => `
+          <div class="row" style="justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);">
+            <div><strong>${escapeHtml(r.fromName)}</strong><div class="muted" style="font-size:.78rem;">wants to be friends</div></div>
+            <div class="row" style="gap:6px;">
+              <button class="accept-request-btn" data-id="${r.id}" type="button" style="padding:6px 12px;">Accept</button>
+              <button class="decline-request-btn ghost" data-id="${r.id}" type="button" style="padding:6px 12px;">Decline</button>
+            </div>
+          </div>`).join("");
+      }
+      if (outgoing.length){
+        reqHtml += outgoing.map(r => `
+          <div class="row" style="justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);">
+            <div><strong>${escapeHtml(r.toName)}</strong></div>
+            <span class="pill mode" style="background:var(--gold-dim);">Pending</span>
+          </div>`).join("");
+      }
+      reqCard.innerHTML = reqHtml || `<p class="muted">No pending requests.</p>`;
+      reqCard.querySelectorAll(".accept-request-btn").forEach(btn => {
+        btn.onclick = async () => { await respondToFriendRequest(btn.dataset.id, true); populateFriendData(); };
+      });
+      reqCard.querySelectorAll(".decline-request-btn").forEach(btn => {
+        btn.onclick = async () => { await respondToFriendRequest(btn.dataset.id, false); populateFriendData(); };
+      });
+
+      listCard.innerHTML = friends.length
+        ? friends.map(f => `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line);"><strong>${escapeHtml(f.name)}</strong></div>`).join("")
+        : `<p class="muted">No friends yet — search for someone by email above.</p>`;
+    });
+  }
+
+  populateFriendData();
 }
 
 // Compact header (small icon, used on the in-app Account page) vs the big logo/app-name
