@@ -167,16 +167,19 @@
   .drawer-link{display:flex;align-items:center;gap:12px;padding:14px 18px;color:var(--ink);text-decoration:none;font-size:1rem;font-weight:600;}
   .drawer-link:active{background:var(--gold-dim);color:var(--brand-dark);}
 
-  /* Account screen's profile header, GolfPad-style - initials avatar in place of a photo
-     (no photo-upload feature exists), name, and handicap index front and center. */
+  /* Account screen's profile header, GolfPad-style - a real photo when one's been uploaded,
+     initials avatar as the fallback, name, and handicap index front and center. */
   .profile-header{text-align:center;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--line);}
   .profile-avatar{
     width:84px;height:84px;border-radius:50%;margin:0 auto 12px;
     display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:800;color:#fff;
     background:linear-gradient(135deg, var(--brand-dark), var(--brand));box-shadow:0 6px 18px rgba(122,15,15,.25);
+    overflow:hidden;
   }
+  .profile-avatar img{width:100%;height:100%;object-fit:cover;}
   .profile-name{margin:0;font-size:1.3rem;font-weight:800;color:var(--ink);border:none;padding:0;}
   .profile-handicap{margin:4px 0 0;font-size:.85rem;color:var(--brand-dark);font-weight:700;}
+  .profile-photo-btn{background:none;border:none;color:var(--brand-light);font-weight:700;font-size:.82rem;cursor:pointer;font-family:inherit;padding:0;text-decoration:underline;}
 
   /* GolfPad-style round card for Playing history: course/date on the left, up to 3 circular
      stat badges on the right. */
@@ -390,10 +393,14 @@ import {
   signOut, sendPasswordResetEmail, setPersistence, browserLocalPersistence, browserSessionPersistence,
   GoogleAuthProvider, signInWithPopup
 } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
+import {
+  getStorage, ref as storageRef, uploadBytes, getDownloadURL
+} from "https://www.gstatic.com/firebasejs/12.18.0/firebase-storage.js";
 
 const configured = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith("YOUR_");
 let db = null;
 let auth = null;
+let storage = null;
 if (configured){
   const app = initializeApp(firebaseConfig);
   // Persistent cache: scores captured with no signal on the course are kept on the device and
@@ -405,6 +412,7 @@ if (configured){
     db = getFirestore(app);
   }
   auth = getAuth(app);
+  storage = getStorage(app);
 }
 
 const GAME_MODES = [
@@ -635,10 +643,16 @@ async function getGolferProfile(uid){
 async function ensureGolferProfile(user){
   let profile = await getGolferProfile(user.uid);
   if (!profile){
+    // Only hit for Google sign-in (email/password always goes through doSignUp, which sets
+    // firstName/lastName from the form directly) - split Google's displayName as a best guess,
+    // the user can correct it on Account afterwards.
+    const name = user.displayName || (user.email ? user.email.split("@")[0] : "Golfer");
+    const [firstName, ...rest] = name.split(" ");
     profile = {
-      name: user.displayName || (user.email ? user.email.split("@")[0] : "Golfer"),
+      firstName: firstName || "", lastName: rest.join(" "), name,
       handicap: 0,
       email: user.email || "",
+      photoURL: user.photoURL || "",
       createdAt: serverTimestamp()
     };
     await setDoc(doc(db, "golfers", user.uid), profile);
@@ -648,6 +662,17 @@ async function ensureGolferProfile(user){
 async function saveGolferProfile(uid, data){
   await setDoc(doc(db, "golfers", uid), data, { merge: true });
   if (currentGolferProfile) Object.assign(currentGolferProfile, data);
+}
+
+const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
+async function uploadAvatarPhoto(uid, file){
+  if (!file.type.startsWith("image/")) throw new Error("Please choose an image file.");
+  if (file.size > AVATAR_MAX_BYTES) throw new Error("Image is too large (max 5MB).");
+  const fileRef = storageRef(storage, `avatars/${uid}`);
+  await uploadBytes(fileRef, file, { contentType: file.type });
+  const url = await getDownloadURL(fileRef);
+  await saveGolferProfile(uid, { photoURL: url });
+  return url;
 }
 
 /* ---------- Friends ---------- */
@@ -779,11 +804,13 @@ function wirePasswordChecklist(inputId, listId){
   input.addEventListener('input', update);
   update();
 }
-async function doSignUp(name, handicap, email, password, keepSignedIn){
+async function doSignUp(firstName, lastName, handicap, email, password, keepSignedIn){
   await setKeepSignedIn(keepSignedIn);
   const cred = await createUserWithEmailAndPassword(auth, email, password);
+  const name = `${firstName} ${lastName}`.trim() || email.split("@")[0];
   await setDoc(doc(db, "golfers", cred.user.uid), {
-    name: name || email.split("@")[0], handicap: handicap || 0, email, createdAt: serverTimestamp()
+    firstName: firstName || "", lastName: lastName || "", name,
+    handicap: handicap || 0, email, photoURL: "", createdAt: serverTimestamp()
   });
 }
 async function doSignIn(email, password, keepSignedIn){
@@ -1063,19 +1090,36 @@ function renderAccountCard(){
   if (!card) return;
 
   if (currentUser){
-    const name = (currentGolferProfile && currentGolferProfile.name) || "";
-    const handicap = currentGolferProfile && currentGolferProfile.handicap;
+    const profile = currentGolferProfile || {};
+    const name = profile.name || "";
+    // Existing accounts from before first/last name existed only have .name - split it as a
+    // starting point they can correct, rather than showing blank fields.
+    const [nameFirstGuess, ...nameRestGuess] = name.split(" ");
+    const firstName = profile.firstName != null ? profile.firstName : (nameFirstGuess || "");
+    const lastName = profile.lastName != null ? profile.lastName : nameRestGuess.join(" ");
+    const handicap = profile.handicap;
+    const photoURL = profile.photoURL;
     const initials = escapeHtml((name || currentUser.email || "?").trim().charAt(0).toUpperCase());
     card.innerHTML = `
       <div class="profile-header">
-        <div class="profile-avatar">${initials}</div>
-        <h2 class="profile-name">${escapeHtml(name) || "My account"}</h2>
+        <div class="profile-avatar" id="profileAvatar">${photoURL ? `<img src="${escapeHtml(photoURL)}" alt="">` : initials}</div>
+        <input type="file" id="profilePhotoInput" accept="image/*" style="display:none;">
+        <button class="profile-photo-btn" id="profilePhotoBtn" type="button">${photoURL ? "Change photo" : "Add a photo"}</button>
+        <h2 class="profile-name" style="margin-top:10px;">${escapeHtml(name) || "My account"}</h2>
         <p class="profile-handicap">Handicap index: ${handicap != null ? handicap : "–"}</p>
         <p class="muted" style="margin:2px 0 0;">${escapeHtml(currentUser.email) || ""}</p>
       </div>
       <button class="btn-pill-secondary" id="friendsBtn" type="button" style="margin-bottom:18px;">${svgIcon("friends")} Friends</button>
-      <label>Display name</label>
-      <input type="text" id="profileName">
+      <div class="grid-2">
+        <div>
+          <label>First name</label>
+          <input type="text" id="profileFirstName">
+        </div>
+        <div>
+          <label>Last name</label>
+          <input type="text" id="profileLastName">
+        </div>
+      </div>
       <label>Handicap</label>
       <input type="number" id="profileHandicap">
       <div class="row" style="margin-top:14px;">
@@ -1086,21 +1130,43 @@ function renderAccountCard(){
         <button class="ghost" id="signOutBtn">Sign out</button>
       </div>
     `;
-    document.getElementById("profileName").value = (currentGolferProfile && currentGolferProfile.name) || "";
-    document.getElementById("profileHandicap").value = (currentGolferProfile && currentGolferProfile.handicap) ?? 0;
+    document.getElementById("profileFirstName").value = firstName;
+    document.getElementById("profileLastName").value = lastName;
+    document.getElementById("profileHandicap").value = handicap ?? 0;
     document.getElementById("saveProfileBtn").onclick = async () => {
       const msg = document.getElementById("profileMsg");
-      const name = document.getElementById("profileName").value.trim();
-      const handicap = parseInt(document.getElementById("profileHandicap").value || "0", 10);
-      if (!name){ msg.textContent = "Enter a name."; return; }
+      const newFirst = document.getElementById("profileFirstName").value.trim();
+      const newLast = document.getElementById("profileLastName").value.trim();
+      const newHandicap = parseInt(document.getElementById("profileHandicap").value || "0", 10);
+      if (!newFirst || !newLast){ msg.textContent = "Enter your first and last name."; return; }
       msg.textContent = "Saving…";
       try{
-        await saveGolferProfile(currentUser.uid, { name, handicap });
+        await saveGolferProfile(currentUser.uid, {
+          firstName: newFirst, lastName: newLast, name: `${newFirst} ${newLast}`.trim(), handicap: newHandicap,
+        });
         msg.textContent = "Saved.";
+        renderAccountCard();
       }catch(err){ msg.textContent = "Error: " + err.message; }
     };
     document.getElementById("signOutBtn").onclick = () => doSignOut();
     document.getElementById("friendsBtn").onclick = () => { location.hash = "#/friends"; };
+    document.getElementById("profilePhotoBtn").onclick = () => document.getElementById("profilePhotoInput").click();
+    document.getElementById("profilePhotoInput").addEventListener("change", async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const btn = document.getElementById("profilePhotoBtn");
+      const originalText = btn.textContent;
+      btn.textContent = "Uploading…";
+      btn.disabled = true;
+      try{
+        await uploadAvatarPhoto(currentUser.uid, file);
+        renderAccountCard();
+      }catch(err){
+        btn.textContent = originalText;
+        btn.disabled = false;
+        document.getElementById("profileMsg").textContent = "Error: " + err.message;
+      }
+    });
     return;
   }
 
@@ -1276,8 +1342,16 @@ function signInFormHtml(gate){
 function signUpFormHtml(gate){
   return `
     ${authHeaderHtml(gate, "Create your account", "")}
-    <label>Display name</label>
-    <input type="text" id="signupName" placeholder="e.g. your name">
+    <div class="grid-2">
+      <div>
+        <label>First name</label>
+        <input type="text" id="signupFirstName" placeholder="e.g. Ruan">
+      </div>
+      <div>
+        <label>Last name</label>
+        <input type="text" id="signupLastName" placeholder="e.g. Benadie">
+      </div>
+    </div>
     <label>Email</label>
     <input type="email" id="signupEmail" placeholder="you@example.com">
     <label>Password</label>
@@ -1339,15 +1413,16 @@ function wireAccountForm(renderCard){
   const signupBtn = document.getElementById("signupBtn");
   if (signupBtn) signupBtn.onclick = async () => {
     const msg = document.getElementById("accountMsg");
-    const name = document.getElementById("signupName").value.trim();
+    const firstName = document.getElementById("signupFirstName").value.trim();
+    const lastName = document.getElementById("signupLastName").value.trim();
     const email = document.getElementById("signupEmail").value.trim();
     const password = document.getElementById("signupPassword").value;
-    if (!name){ msg.textContent = "Enter your name."; return; }
+    if (!firstName || !lastName){ msg.textContent = "Enter your first and last name."; return; }
     if (!email || !password){ msg.textContent = "Enter an email and password."; return; }
     const pwProblem = passwordProblem(password);
     if (pwProblem){ msg.textContent = pwProblem; return; }
     msg.textContent = "Creating account…";
-    try{ await doSignUp(name, 0, email, password, true); }
+    try{ await doSignUp(firstName, lastName, 0, email, password, true); }
     catch(err){ msg.textContent = "Error: " + err.message; }
   };
 }
