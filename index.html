@@ -1318,9 +1318,12 @@ function renderHome(){
     <button id="newRoundBtn" class="cta-new-round" type="button">+ New round</button>
     <button class="btn-pill-secondary" id="historyBtn" type="button">${svgIcon("clock")} Playing history</button>
     <button class="btn-pill-secondary" id="competitionsBtn" type="button">${svgIcon("trophy")} Competitions</button>`;
+  // padding-top lives on the block itself (not a wrapping .content div) so it contributes zero
+  // height while hidden - a wrapper's own padding still renders even around a display:none
+  // child, which was adding a few extra px below Home's hero and forcing an unwanted scroll.
   const currentRoundsHtml = `
-    <div id="currentRoundsBlock" style="display:none;">
-      <h2>Current round</h2>
+    <div id="currentRoundsBlock" style="display:none;padding:20px 16px 0;">
+      <h2 style="margin-top:0;">Current round</h2>
       <div class="card" id="currentRoundsCard"></div>
     </div>`;
 
@@ -1352,7 +1355,7 @@ function renderHome(){
           </div>
         </div>
       </div>
-      <div class="content">${currentRoundsHtml}</div>
+      ${currentRoundsHtml}
     `,
   });
 
