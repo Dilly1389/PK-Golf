@@ -1201,6 +1201,12 @@ function renderFriends(){
       listCard.innerHTML = friends.length
         ? friends.map(f => `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line);"><strong>${escapeHtml(f.name)}</strong></div>`).join("")
         : `<p class="muted">No friends yet — search for someone by email above.</p>`;
+    }).catch(err => {
+      const msg = err && err.code === "permission-denied"
+        ? "Friend requests aren't enabled yet — ask the developer to add the Firestore rule for the friend_requests collection."
+        : `Error: ${escapeHtml(err.message)}`;
+      reqCard.innerHTML = `<p class="muted">${msg}</p>`;
+      listCard.innerHTML = `<p class="muted">${msg}</p>`;
     });
   }
 
