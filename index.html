@@ -482,6 +482,18 @@
   .nr-panel[open] summary{border-bottom:1px solid var(--line);}
   .nr-panel .nr-panel-body{padding:14px;}
   .nr-gps-status{font-size:.78rem;color:var(--muted);margin-top:6px;}
+  .nr-hero-top{position:relative;padding:48px 16px 18px;background:linear-gradient(135deg, var(--brand-dark), var(--brand));color:#fff;cursor:pointer;}
+  .nr-hero-top .nr-back{position:absolute;top:12px;left:12px;width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.92);display:flex;align-items:center;justify-content:center;color:var(--brand-dark);font-weight:700;cursor:pointer;z-index:2;}
+  .nr-hero-top .nr-hero-title{font-size:1.2rem;font-weight:800;margin:0 0 2px;}
+  .nr-hero-top .nr-hero-sub{font-size:.78rem;opacity:.85;}
+  .nr-content{padding:14px 16px 24px;}
+
+  .nr-picker-overlay{position:fixed;inset:0;background:#fff;display:none;flex-direction:column;z-index:500;}
+  .nr-picker-overlay.open{display:flex;}
+  .nr-picker-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);flex:0 0 auto;}
+  .nr-picker-head .back{font-size:1.2rem;color:var(--brand-dark);cursor:pointer;}
+  .nr-picker-head .t{font-weight:800;font-size:1.05rem;}
+  .nr-picker-body{padding:14px 16px;overflow-y:auto;flex:1;}
 </style>
 </head>
 <body>
@@ -683,6 +695,10 @@ async function selectGolfCoreCourse(slug, url){
       return;
     }
     document.getElementById("courseName").value = data.name;
+    const heroNameEl = document.getElementById("heroCourseName");
+    if (heroNameEl) heroNameEl.textContent = data.name;
+    const heroSubEl = document.querySelector("#nrHero .nr-hero-sub");
+    if (heroSubEl) heroSubEl.textContent = "Tap to choose a different course";
     const holesYards = {};
     layout.holes.forEach(h => {
       const parCell = document.querySelector(`.h-par[data-hole="${h.position}"]`);
@@ -1937,43 +1953,24 @@ function renderHistory(){
 }
 
 function renderNewRound(){
-  mountPage({
-    title: "New round",
-    subtitle: "Set up players, scoring and holes.",
-    route: "new-round",
-    bodyHtml: `
-    <button id="backToHomeBtn" class="secondary" type="button" style="margin-bottom:14px;">← Back to rounds</button>
-
-    <div class="nr-hero" id="nrHero" style="cursor:pointer;">
+  const pageHtml = `
+    <div class="nr-hero-top" id="nrHero">
+      <span class="nr-back" id="nrBackBtn">&larr;</span>
       <div class="nr-hero-title" id="heroCourseName">Select a course</div>
-      <div class="nr-hero-sub">Tap to search, or pick one found near you below</div>
+      <div class="nr-hero-sub">Tap to search, or pick one found near you</div>
     </div>
 
-    <div class="nr-nearby" id="nrNearby"></div>
-
+    <div class="nr-content">
     <div class="card">
       <details class="nr-panel" id="panelRoundDetails" open>
         <summary>
           <span class="ic">&#128197;</span>
-          <div class="txt"><div class="label">Round details</div><div class="val" id="summaryRoundDetails">Name, course, date &amp; tee box</div></div>
+          <div class="txt"><div class="label">Round details</div><div class="val">Name, date &amp; tee box</div></div>
           <span class="chev">&rsaquo;</span>
         </summary>
         <div class="nr-panel-body">
           <label>Round name</label>
           <input type="text" id="roundName" placeholder="e.g. Saturday Fourball">
-          <label>Course name</label>
-          <input type="text" id="courseName" placeholder="Start typing — saved courses appear as you type" list="courseNameDatalist" autocomplete="off">
-          <datalist id="courseNameDatalist"></datalist>
-          <p class="muted" style="font-size:.78rem;margin:4px 0 0;">Pick a match to fill in par, stroke index, rating &amp; slope — some saved courses come from OpenStreetMap contributors and may have mistakes, check against the club scorecard.</p>
-          <div class="nr-gps-status" id="nrGpsStatus"></div>
-
-          <label>Or search GolfCore for a course not saved yet (optional)</label>
-          <div class="row" style="gap:8px;flex-wrap:nowrap;">
-            <input type="text" id="golfcoreSearchInput" placeholder="e.g. Glenvista Country Club" style="flex:1;">
-            <button id="golfcoreSearchBtn" class="secondary" type="button" style="white-space:nowrap;">Search</button>
-          </div>
-          <div id="golfcoreResults"></div>
-          <p id="golfcoreCredit" class="muted" style="font-size:.78rem;margin:4px 0 0;display:none;"></p>
           <div class="grid-3">
             <div>
               <label>Date</label>
@@ -1988,17 +1985,6 @@ function renderNewRound(){
               <select id="teeBox">${teeBoxOptions("White")}</select>
             </div>
           </div>
-          <div class="grid-3" style="margin-top:8px;">
-            <div>
-              <label>Course rating</label>
-              <input type="number" id="courseRating" step="0.1" placeholder="e.g. 72.3">
-            </div>
-            <div>
-              <label>Slope rating</label>
-              <input type="number" id="slopeRating" placeholder="e.g. 133">
-            </div>
-          </div>
-          <p class="muted" style="font-size:.78rem;margin:4px 0 0;">For the tee box above — edit if the club has re-rated it since this was last saved.</p>
         </div>
       </details>
 
@@ -2042,8 +2028,19 @@ function renderNewRound(){
           <span class="chev">&rsaquo;</span>
         </summary>
         <div class="nr-panel-body">
-          <p class="muted">Quick default fills par 4 / sequential SI — edit any cell, or load a saved course above.</p>
+          <p class="muted">Quick default fills par 4 / sequential SI — edit any cell, or pick a course above.</p>
           <div id="holesTable"></div>
+          <div class="grid-3" style="margin-top:10px;">
+            <div>
+              <label>Course rating</label>
+              <input type="number" id="courseRating" step="0.1" placeholder="e.g. 72.3">
+            </div>
+            <div>
+              <label>Slope rating</label>
+              <input type="number" id="slopeRating" placeholder="e.g. 133">
+            </div>
+          </div>
+          <p class="muted" style="font-size:.78rem;margin:4px 0 0;">For the tee box above — edit if the club has re-rated it since this was last saved.</p>
         </div>
       </details>
 
@@ -2067,10 +2064,43 @@ function renderNewRound(){
         <span id="createMsg" class="muted"></span>
       </div>
     </div>
-    `,
+    </div>
+
+    <div class="nr-picker-overlay" id="nrPickerOverlay">
+      <div class="nr-picker-head"><span class="back" id="nrPickerClose">&larr;</span><span class="t">Select a course</span></div>
+      <div class="nr-picker-body">
+        <label>Search by name</label>
+        <input type="text" id="courseName" placeholder="Start typing — saved courses appear as you type" list="courseNameDatalist" autocomplete="off">
+        <datalist id="courseNameDatalist"></datalist>
+        <p class="muted" style="font-size:.78rem;margin:4px 0 0;">Pick a match to fill in par, stroke index, rating &amp; slope — some saved courses come from OpenStreetMap contributors and may have mistakes, check against the club scorecard.</p>
+        <div class="nr-gps-status" id="nrGpsStatus"></div>
+        <div class="nr-nearby" id="nrNearby" style="margin-top:14px;"></div>
+        <details style="margin-top:14px;">
+          <summary style="cursor:pointer;font-weight:700;font-size:.86rem;color:var(--brand-dark);">Can't find it? Search GolfCore</summary>
+          <div style="margin-top:8px;">
+            <div class="row" style="gap:8px;flex-wrap:nowrap;">
+              <input type="text" id="golfcoreSearchInput" placeholder="e.g. Glenvista Country Club" style="flex:1;">
+              <button id="golfcoreSearchBtn" class="secondary" type="button" style="white-space:nowrap;">Search</button>
+            </div>
+            <div id="golfcoreResults"></div>
+            <p id="golfcoreCredit" class="muted" style="font-size:.78rem;margin:4px 0 0;display:none;"></p>
+          </div>
+        </details>
+      </div>
+    </div>
+  `;
+
+  mountPage({
+    title: "New round",
+    subtitle: "Set up players, scoring and holes.",
+    route: "new-round",
+    bodyHtml: pageHtml,
+    mobileHeroHtml: pageHtml,
   });
 
-  document.getElementById("backToHomeBtn").onclick = () => { location.hash = ""; };
+  document.getElementById("nrBackBtn").onclick = (e) => { e.stopPropagation(); location.hash = ""; };
+  document.getElementById("nrHero").onclick = () => document.getElementById("nrPickerOverlay").classList.add("open");
+  document.getElementById("nrPickerClose").onclick = () => document.getElementById("nrPickerOverlay").classList.remove("open");
 
   golfcoreSourceSelected = null;
   document.getElementById("golfcoreSearchBtn").onclick = () => searchGolfCore();
@@ -2096,16 +2126,12 @@ function renderNewRound(){
     return 2 * R * Math.asin(Math.sqrt(h));
   }
   const heroNameEl = document.getElementById("heroCourseName");
+  const heroSubEl = document.querySelector("#nrHero .nr-hero-sub");
   function updateHeroName(){
     const v = document.getElementById("courseName").value.trim();
     heroNameEl.textContent = v || "Select a course";
+    heroSubEl.textContent = v ? "Tap to choose a different course" : "Tap to search, or pick one found near you";
   }
-  document.getElementById("nrHero").onclick = () => {
-    document.getElementById("panelRoundDetails").open = true;
-    const input = document.getElementById("courseName");
-    input.scrollIntoView({ behavior: "smooth", block: "center" });
-    input.focus();
-  };
 
   loadCoursesList().then(courses => {
     const datalist = document.getElementById("courseNameDatalist");
@@ -2135,10 +2161,18 @@ function renderNewRound(){
         : `\u{1F4CD} GPS: no green pins saved for this course yet — the first Individual-mode round here sets them`;
     });
 
+    function pickCourseByName(name){
+      courseNameInput.value = name;
+      courseNameInput.dispatchEvent(new Event("input"));
+      document.getElementById("nrPickerOverlay").classList.remove("open");
+    }
+
     // Runs automatically as soon as the page loads — no tap needed. Fails silently if
     // location is denied/unavailable, since it's a convenience on top of typing/search,
     // never a requirement. Only courses with a saved lat/lng (132 of 142 as of the last
-    // backfill) can be sorted by distance; the rest just aren't offered here.
+    // backfill) can be sorted by distance; the rest just aren't offered here. The closest
+    // one is auto-selected as the course you're playing — the list below it is there so
+    // you can override that pick without having to search.
     const nearbyBox = document.getElementById("nrNearby");
     if (navigator.geolocation){
       navigator.geolocation.getCurrentPosition(pos => {
@@ -2147,16 +2181,14 @@ function renderNewRound(){
           .filter(c => c.lat != null && c.lng != null)
           .map(c => ({ ...c, km: haversineKm(me, [c.lat, c.lng]) }))
           .sort((a,b) => a.km - b.km)
-          .slice(0, 3);
+          .slice(0, 5);
         if (!nearest.length) return;
+        if (!courseNameInput.value.trim()) pickCourseByName(nearest[0].name);
         nearbyBox.innerHTML = `<div class="nh">Courses near you</div>` + nearest.map(c =>
           `<div class="nr-course-row" data-pick="${escapeHtml(c.name)}"><div><div class="cn">${escapeHtml(c.name)}</div></div><div class="dist">${c.km.toFixed(1)} km</div></div>`
         ).join("");
         nearbyBox.querySelectorAll("[data-pick]").forEach(el => {
-          el.onclick = () => {
-            courseNameInput.value = el.dataset.pick;
-            courseNameInput.dispatchEvent(new Event("input"));
-          };
+          el.onclick = () => pickCourseByName(el.dataset.pick);
         });
       }, () => { /* denied/unavailable — leave nrNearby empty, no error shown */ }, { enableHighAccuracy: true, timeout: 8000 });
     }
