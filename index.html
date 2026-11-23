@@ -17,6 +17,9 @@
 <meta name="theme-color" content="#a11212">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="PK Golf">
+<!-- Leaflet + OpenStreetMap tiles for the "everyone scores their own round" GPS/map view —
+     free, no API key, same choice already made for course import/GPS planning. -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
 <style>
   :root{
     --ink:#1a1a1a;
@@ -361,11 +364,106 @@
   .scorecard-summary div{text-align:center;}
   .scorecard-summary .val{font-size:1.3rem;font-weight:800;color:var(--brand-dark);}
   .scorecard-summary .lbl{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;}
+
+  /* ===== Solo scoring mode ("everyone scores their own round") ===== */
+  .solo-strip{padding:6px 2px;}
+  .solo-strip .strip-row{display:flex;gap:3px;margin-bottom:3px;}
+  .solo-strip .cell{flex:1;text-align:center;border-radius:5px;padding:4px 0;cursor:pointer;background:var(--brand-dim);min-width:0;}
+  .solo-strip .cell .hn{display:block;font-size:.6rem;font-weight:700;color:var(--muted);}
+  .solo-strip .cell .sc{display:block;font-size:.74rem;font-weight:800;color:var(--ink);min-height:13px;}
+  .solo-strip .cell.current{background:var(--gold);}
+  .solo-strip .cell.current .hn{color:var(--brand-dark);}
+  .solo-strip .cell.under .sc{color:#2e8b3d;}
+  .solo-strip .cell.over .sc{color:#b23c3c;}
+  .solo-strip .cell.sub{background:var(--brand-dark);flex:0 0 32px;}
+  .solo-strip .cell.sub .hn{color:rgba(255,255,255,.7);font-size:.56rem;}
+  .solo-strip .cell.sub .sc{color:#fff;}
+  .solo-strip-nav{display:flex;align-items:center;justify-content:space-between;padding:6px 2px;}
+  .solo-strip-nav .arrow-btn{padding:6px 16px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--brand-dark);font-weight:700;font-size:.78rem;cursor:pointer;}
+  .solo-strip-nav .arrow-btn:disabled{opacity:.35;}
+  .solo-hole-focus{text-align:center;padding:10px 4px 0;}
+  .solo-hole-focus .meta{font-size:1.3rem;font-weight:800;color:var(--ink);}
+  .solo-hole-focus .meta b{color:var(--brand-dark);}
+  .solo-hole-focus .yard{font-size:.86rem;color:var(--muted);margin-top:3px;font-weight:600;}
+  .solo-gps-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px 4px;min-height:140px;}
+  .solo-gps-hero .num{font-size:3.4rem;font-weight:800;color:var(--brand-dark);line-height:1;text-align:center;}
+  .solo-gps-hero .unit{font-size:.84rem;color:var(--muted);font-weight:700;margin-top:4px;text-align:center;}
+  .solo-gps-hero.empty .no-pin-text{font-size:.9rem;color:var(--muted);margin-bottom:8px;text-align:center;}
+  .solo-set-pin-link{color:var(--brand);font-weight:800;font-size:.9rem;cursor:pointer;text-align:center;display:block;}
+  .solo-action-row{display:flex;gap:8px;padding:0 4px 14px;justify-content:center;flex-wrap:wrap;}
+  .solo-gps-btn{padding:10px 16px;border-radius:999px;font-size:.78rem;font-weight:700;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;white-space:nowrap;}
+  .solo-gps-btn.primary{background:var(--gold);border-color:var(--gold);color:var(--brand-dark);}
+  .solo-gps-btn.putt{background:#2e8b3d;border-color:#2e8b3d;color:#fff;}
+  .solo-gps-btn.map{background:var(--brand);border-color:var(--brand);color:#fff;}
+  .solo-shots-strip{margin:0 4px 8px;font-size:.72rem;color:var(--muted);min-height:16px;text-align:center;}
+  .solo-shots-strip .chip{display:inline-block;background:var(--gold-dim);color:var(--brand-dark);font-weight:700;padding:2px 8px;border-radius:999px;margin:2px;font-size:.68rem;}
+  .solo-chip-row{display:flex;gap:6px;flex-wrap:nowrap;}
+  .solo-np-chip{flex:1;min-width:0;padding:10px 2px;border-radius:8px;border:1px solid var(--line);background:#fff;text-align:center;cursor:pointer;}
+  .solo-np-chip .v{font-weight:700;font-size:.95rem;color:var(--ink);}
+  .solo-np-chip .lb{font-size:.62rem;opacity:.75;color:var(--muted);}
+  .solo-np-chip .pts{font-size:.6rem;font-weight:700;opacity:.9;color:var(--brand-dark);}
+  .solo-np-chip.selected{background:var(--brand-dark);border-color:var(--brand-dark);}
+  .solo-np-chip.selected .v,.solo-np-chip.selected .lb,.solo-np-chip.selected .pts{color:#fff;}
+  .solo-numpad-foot{display:flex;align-items:center;gap:10px;margin-top:6px;}
+  .solo-other-score-btn{background:none;border:none;color:var(--brand);font-weight:700;font-size:.78rem;padding:4px 10px;cursor:pointer;}
+  .solo-entered-note{font-size:.76rem;color:var(--muted);}
+  .solo-other-stepper{display:none;align-items:center;gap:14px;justify-content:center;padding:10px 0 2px;}
+  .solo-other-stepper.open{display:flex;}
+  .solo-other-stepper .circ-btn{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:#fff;color:var(--brand);font-weight:800;font-size:1.1rem;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .solo-other-stepper .val{font-size:1.3rem;font-weight:800;min-width:30px;text-align:center;}
+  .solo-other-stepper .set-btn{padding:7px 16px;border-radius:999px;background:var(--brand-dark);color:#fff;font-weight:700;font-size:.78rem;cursor:pointer;}
+  .solo-mini-total{text-align:center;font-size:.8rem;color:var(--muted);font-weight:700;padding:10px 0 2px;}
+
+  .solo-whoami-list .wa-btn{display:block;width:100%;text-align:left;padding:14px 16px;margin-bottom:8px;border-radius:10px;border:1px solid var(--line);background:#fff;font-weight:700;cursor:pointer;}
+  .solo-whoami-list .wa-btn:hover{border-color:var(--brand);}
+
+  .solo-map-overlay{position:fixed;inset:0;background:#fff;display:none;flex-direction:column;z-index:500;}
+  .solo-map-overlay.open{display:flex;}
+  .solo-map-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line);}
+  .solo-map-head .x{font-size:1.2rem;color:var(--muted);cursor:pointer;}
+  .solo-map-head .t{font-weight:800;}
+  #soloLeafletMap{flex:1;}
+  .solo-map-dist-banner{padding:10px 16px;text-align:center;font-weight:800;color:var(--brand-dark);background:var(--gold-dim);border-top:1px solid var(--line);}
+  .solo-map-note{padding:10px 16px 16px;font-size:.7rem;color:var(--muted);border-top:1px solid var(--line);}
+  .solo-map-place-hint{padding:10px 16px;text-align:center;font-weight:700;font-size:.82rem;color:var(--brand-dark);background:var(--gold-dim);border-top:1px solid var(--line);}
+  .solo-map-save-btn{margin:10px 16px;padding:13px;border-radius:999px;background:var(--brand-dark);color:#fff;text-align:center;font-weight:800;cursor:pointer;}
+  .solo-map-save-btn.disabled{background:var(--line);color:var(--muted);cursor:default;}
+  .solo-map-toast{position:absolute;left:50%;top:62px;transform:translateX(-50%);background:#2e8b3d;color:#fff;padding:8px 16px;border-radius:999px;font-size:.8rem;font-weight:700;opacity:0;transition:opacity .25s;z-index:40;white-space:nowrap;pointer-events:none;}
+  .solo-map-toast.show{opacity:1;}
+  .solo-pin-label{font-size:.7rem;font-weight:800;background:#fff;padding:2px 7px;border-radius:999px;box-shadow:0 1px 3px rgba(0,0,0,.25);white-space:nowrap;}
+  .solo-pin-label.you{color:var(--brand);}
+  .solo-pin-label.green{color:#2e8b3d;}
+  .solo-pin-label.placing{color:var(--brand-dark);}
+
+  .solo-sheet-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;z-index:600;}
+  .solo-sheet-backdrop.open{display:block;}
+  .solo-sheet{position:fixed;left:0;right:0;bottom:0;background:#fff;border-radius:18px 18px 0 0;box-shadow:0 -4px 20px rgba(0,0,0,.25);transform:translateY(100%);transition:transform .22s ease;z-index:601;max-height:88%;overflow-y:auto;}
+  .solo-sheet.open{transform:translateY(0);}
+  .solo-sheet-grab{width:38px;height:4px;background:var(--line);border-radius:999px;margin:10px auto 4px;}
+  .solo-sheet-title{padding:6px 18px 2px;font-weight:800;font-size:1rem;}
+  .solo-sheet-row-toggle{display:flex;align-items:center;justify-content:space-between;padding:10px 18px;border-bottom:1px solid var(--line);font-size:.78rem;color:var(--muted);}
+  .solo-mini-switch{width:38px;height:22px;border-radius:999px;background:var(--line);position:relative;cursor:pointer;}
+  .solo-mini-switch.on{background:var(--brand);}
+  .solo-mini-switch .knob{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .15s;}
+  .solo-mini-switch.on .knob{left:18px;}
+  .solo-sheet-section-label{padding:16px 18px 8px;font-weight:800;font-size:.68rem;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);}
+  .solo-lie-seg{display:flex;margin:0 18px;border:1.5px solid var(--brand);border-radius:999px;overflow:hidden;}
+  .solo-lie-seg .seg{flex:1;text-align:center;padding:9px 4px;font-size:.72rem;font-weight:700;color:var(--brand-dark);cursor:pointer;border-right:1.5px solid var(--brand);}
+  .solo-lie-seg .seg:last-child{border-right:none;}
+  .solo-lie-seg .seg.selected{background:var(--brand);color:#fff;}
+  .solo-lie-seg .seg .ic{display:block;font-size:1rem;margin-bottom:2px;}
+  .solo-club-group{padding:2px 18px 10px;}
+  .solo-club-group-label{font-size:.66rem;font-weight:800;letter-spacing:.06em;color:var(--gold);margin-bottom:6px;text-transform:uppercase;}
+  .solo-club-chips{display:flex;flex-wrap:wrap;gap:7px;}
+  .solo-club-chip{padding:9px 16px;border-radius:999px;border:1.5px solid var(--line);font-weight:700;font-size:.82rem;color:var(--ink);cursor:pointer;background:#fff;}
+  .solo-club-chip.selected{background:var(--brand-dark);border-color:var(--brand-dark);color:#fff;}
+  .solo-sheet-done{margin:18px;padding:14px;border-radius:999px;background:var(--brand-dark);color:#fff;text-align:center;font-weight:800;letter-spacing:.03em;cursor:pointer;}
 </style>
 </head>
 <body>
 <div class="wrap" id="app"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
 /* ======================= CONFIG =======================
    Firebase config is public-by-design (security lives in
@@ -521,9 +619,10 @@ function fillRatingSlope(tees, flat){
   document.getElementById("slopeRating").value = picked ? picked.slopeRating : "";
 }
 
-// GolfCore course search (api.golfcore.org) — free tier, keyless until 2026-12-04 per their
-// docs. ToS permits caching/displaying this to our own users with attribution + a link back
-// to the source course page, which golfcoreSourceSelected carries through to saveCourseToDatabase.
+// GolfCore course search, proxied via /api/golfcore/* (functions/api/golfcore/[[path]].js)
+// so the API key stays server-side — see that file for why. ToS permits caching/displaying
+// this to our own users with attribution + a link back to the source course page, which
+// golfcoreSourceSelected carries through to saveCourseToDatabase.
 let golfcoreSourceSelected = null;
 async function searchGolfCore(){
   const q = document.getElementById("golfcoreSearchInput").value.trim();
@@ -531,7 +630,7 @@ async function searchGolfCore(){
   if (!q){ resultsEl.innerHTML = ""; return; }
   resultsEl.innerHTML = `<p class="muted" style="font-size:.78rem;">Searching…</p>`;
   try{
-    const res = await fetch(`https://api.golfcore.org/v1/courses?q=${encodeURIComponent(q)}&limit=8`);
+    const res = await fetch(`/api/golfcore/v1/courses?q=${encodeURIComponent(q)}&limit=8`);
     const data = await res.json();
     const courses = data.courses || [];
     resultsEl.innerHTML = courses.length === 0
@@ -552,7 +651,7 @@ async function selectGolfCoreCourse(slug, url){
   const resultsEl = document.getElementById("golfcoreResults");
   resultsEl.innerHTML = `<p class="muted" style="font-size:.78rem;">Loading scorecard…</p>`;
   try{
-    const res = await fetch(`https://api.golfcore.org/v1/courses/${slug}`);
+    const res = await fetch(`/api/golfcore/v1/courses/${slug}`);
     const data = await res.json();
     const layout = (data.layouts || [])[0];
     if (!layout || !layout.holes || layout.holes.length !== 18){
@@ -1880,6 +1979,13 @@ function renderNewRound(){
       </div>
       <p class="muted" style="font-size:.78rem;margin:0 0 16px;">Marking-only rounds won't count as rounds you've played in your history.</p>
 
+      <h2>Scoring mode</h2>
+      <div class="row" style="gap:18px;margin-bottom:4px;">
+        <label class="row" style="gap:6px;"><input type="radio" name="scoringMode" value="shared" checked> One device scores everyone</label>
+        <label class="row" style="gap:6px;"><input type="radio" name="scoringMode" value="individual"> Everyone scores their own round</label>
+      </div>
+      <p class="muted" style="font-size:.78rem;margin:0 0 16px;">Individual mode: each player opens this same round on their own phone and picks their name once — scores sync live either way, so switching later doesn't lose anything.</p>
+
       <div class="row" style="margin-top:16px;">
         <button id="createBtn">Create round</button>
         <span id="createMsg" class="muted"></span>
@@ -2210,6 +2316,7 @@ async function createRound(){
   });
 
   const creatorIsPlaying = (document.querySelector('input[name="creatorRole"]:checked') || {}).value !== "marking";
+  const scoringMode = (document.querySelector('input[name="scoringMode"]:checked') || {}).value || "shared";
 
   msg.textContent = "Creating…";
   try{
@@ -2218,7 +2325,7 @@ async function createRound(){
       const teeTimesByFourball = Array.from({length: fourballCount}, (_, idx) => readTeeTimeForFourball(idx + 1));
       await createCompetition({
         roundName, courseName, roundDate, teeBox, modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
-        teamAName, teamBName, teamColorStyle, teamAColor, teamBColor, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount, creatorIsPlaying, ratingSlope
+        teamAName, teamBName, teamColorStyle, teamAColor, teamBColor, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount, creatorIsPlaying, ratingSlope, scoringMode
       });
       return;
     }
@@ -2227,7 +2334,7 @@ async function createRound(){
 
     const roundRef = await addDoc(collection(db, "golf_rounds"), {
       name: roundName, courseName, roundDate, teeTime, teeBox, gameModes: modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
-      teamAName, teamBName, teamColorStyle, teamAColor, teamBColor, piekfynPairs, spectatorCode, ownerUid: currentUser ? currentUser.uid : null, creatorIsPlaying,
+      teamAName, teamBName, teamColorStyle, teamAColor, teamBColor, piekfynPairs, spectatorCode, ownerUid: currentUser ? currentUser.uid : null, creatorIsPlaying, scoringMode,
       status: "active", deleted: false, startedAt: null, finishedAt: null, createdAt: serverTimestamp()
     });
 
@@ -2263,7 +2370,7 @@ function defaultPairsFor(players){
 async function createCompetition(cfg){
   const {
     roundName, courseName, roundDate, teeBox, modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
-    teamAName, teamBName, teamColorStyle, teamAColor, teamBColor, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount, creatorIsPlaying, ratingSlope
+    teamAName, teamBName, teamColorStyle, teamAColor, teamBColor, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount, creatorIsPlaying, ratingSlope, scoringMode
   } = cfg;
   const isPiekfyn = modes.includes("piekfyn");
 
@@ -2285,7 +2392,7 @@ async function createCompetition(cfg){
       teamColorStyle: isPiekfyn ? teamColorStyle : null,
       teamAColor: isPiekfyn ? teamAColor : null, teamBColor: isPiekfyn ? teamBColor : null,
       piekfynPairs: isPiekfyn ? (isFirst ? piekfynPairs : defaultPairsFor(playersByFourball[fb - 1])) : null,
-      spectatorCode, competitionId: compRef.id, fourballIndex: fb, ownerUid: currentUser ? currentUser.uid : null, creatorIsPlaying,
+      spectatorCode, competitionId: compRef.id, fourballIndex: fb, ownerUid: currentUser ? currentUser.uid : null, creatorIsPlaying, scoringMode,
       status: "active", deleted: false, startedAt: null, finishedAt: null, createdAt: serverTimestamp()
     });
 
@@ -3002,6 +3109,354 @@ function switchScorerTab(which){
 
 const SCORE_LABELS = { "-2":"Eagle", "-1":"Birdie", "0":"Par", "1":"Bogey", "2":"Dbl", "3":"Tpl+" };
 
+/* ======================================================================
+   Solo scoring mode ("everyone scores their own round")
+   One player, one phone, one hole at a time — the two-row hole strip,
+   big GPS-to-green number, Mark shot / Track putt / Map, and the same
+   score-chip row the shared scorer already uses. Green pins are stored
+   once per course+hole on golf_courses/{slug}.greenPins and reused by
+   everyone who plays that hole after — never per-round, never per-player.
+   ====================================================================== */
+
+function soloWhoamiKey(roundId){ return `pk_golf_whoami_${roundId}`; }
+function getSoloPlayerId(){ return localStorage.getItem(soloWhoamiKey(scorerData.round.id)); }
+function setSoloPlayerId(pid){ localStorage.setItem(soloWhoamiKey(scorerData.round.id), pid); }
+
+function haversineMeters(a, b){
+  const R = 6371000, toRad = d => d * Math.PI / 180;
+  const dLat = toRad(b[0] - a[0]), dLng = toRad(b[1] - a[1]);
+  const lat1 = toRad(a[0]), lat2 = toRad(b[0]);
+  const h = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function getCurrentLatLng(){
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation){ reject(new Error("Geolocation not available")); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve([pos.coords.latitude, pos.coords.longitude]),
+      err => reject(err),
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 5000 }
+    );
+  });
+}
+
+let soloGreenPinsCache = null, soloGreenPinsCourseSlug = null;
+async function loadGreenPinsFor(courseName){
+  const slug = slugify(courseName);
+  if (soloGreenPinsCourseSlug === slug && soloGreenPinsCache) return soloGreenPinsCache;
+  const snap = await getDoc(doc(db, "golf_courses", slug));
+  soloGreenPinsCourseSlug = slug;
+  soloGreenPinsCache = (snap.exists() && snap.data().greenPins) ? snap.data().greenPins : {};
+  return soloGreenPinsCache;
+}
+async function saveGreenPinFor(courseName, holeNumber, lat, lng){
+  const slug = slugify(courseName);
+  await setDoc(doc(db, "golf_courses", slug), { greenPins: { [String(holeNumber)]: { lat, lng } } }, { merge: true });
+  if (soloGreenPinsCourseSlug === slug) soloGreenPinsCache[String(holeNumber)] = { lat, lng };
+}
+
+// A shot/putt always counts as a stroke — marking is scoring, same rule the mockup used.
+async function addSoloShot(playerId, holeNumber, shot){
+  const existing = scorerData.scores.find(s => s.playerId === playerId && s.holeNumber === holeNumber);
+  const shots = (existing && existing.shots) ? [...existing.shots, shot] : [shot];
+  const grossStrokes = shots.length;
+  const idx = scorerData.scores.findIndex(s => s.playerId === playerId && s.holeNumber === holeNumber);
+  const rec = { playerId, holeNumber, grossStrokes, shots };
+  if (idx >= 0) scorerData.scores[idx] = rec; else scorerData.scores.push(rec);
+  renderEntry(); renderBoards();
+  return setDoc(doc(db, "golf_rounds", scorerData.round.id, "scores", `${playerId}_${holeNumber}`), {
+    playerId, holeNumber, grossStrokes, shots, updatedAt: serverTimestamp()
+  }, { merge: true }).catch(showScoreError);
+}
+
+let soloLieSelected = "fairway", soloClubSelected = "7i", soloSkipShotPrompt = false, soloPendingShot = null;
+const SOLO_LIES = [
+  {k:"tee",ic:"&#128204;",lb:"Tee"}, {k:"fairway",ic:"&#9678;",lb:"Fairway"}, {k:"sand",ic:"&#127958;",lb:"Sand"},
+  {k:"recovery",ic:"&#127794;",lb:"Recovery"}, {k:"rough",ic:"&#127807;",lb:"Rough"}
+];
+const SOLO_CLUB_GROUPS = [
+  {label:"Woods", clubs:["D","3W","5W"]},
+  {label:"Irons", clubs:["4i","5i","6i","7i","8i","9i"]},
+  {label:"Wedges & putter", clubs:["PW","SW","LW","Putter"]}
+];
+
+function ensureSoloOverlays(){
+  if (document.getElementById("soloMapOverlay")) return;
+  const wrap = document.createElement("div");
+  wrap.innerHTML = `
+    <div class="solo-map-overlay" id="soloMapOverlay">
+      <div class="solo-map-head"><span class="x" id="soloCloseMap">&times;</span><span class="t" id="soloMapTitle">Map</span><span style="width:20px;"></span></div>
+      <div class="solo-map-toast" id="soloMapToast"></div>
+      <div id="soloLeafletMap"></div>
+      <div id="soloMapFooter"></div>
+    </div>
+    <div class="solo-sheet-backdrop" id="soloSheetBackdrop"></div>
+    <div class="solo-sheet" id="soloShotSheet">
+      <div class="solo-sheet-grab"></div>
+      <div class="solo-sheet-title">Got your spot &mdash; what did you hit?</div>
+      <div class="solo-sheet-row-toggle">
+        <span>Skip this next time</span>
+        <div class="solo-mini-switch" id="soloSkipSwitch"><div class="knob"></div></div>
+      </div>
+      <div class="solo-sheet-section-label">Lie</div>
+      <div class="solo-lie-seg" id="soloLieRow"></div>
+      <div class="solo-sheet-section-label">Club</div>
+      <div id="soloClubGrid"></div>
+      <div class="solo-sheet-done" id="soloSheetDone">Save shot</div>
+    </div>`;
+  document.body.appendChild(wrap);
+  document.getElementById("soloCloseMap").onclick = () => document.getElementById("soloMapOverlay").classList.remove("open");
+  document.getElementById("soloSheetBackdrop").onclick = closeSoloSheet;
+  document.getElementById("soloSkipSwitch").onclick = function(){
+    soloSkipShotPrompt = !soloSkipShotPrompt;
+    this.classList.toggle("on", soloSkipShotPrompt);
+  };
+  document.getElementById("soloSheetDone").onclick = () => { commitSoloShot(soloLieSelected, soloClubSelected); closeSoloSheet(); };
+}
+function commitSoloShot(lie, club){
+  if (!soloPendingShot) return;
+  const { dist, holeNumber, player } = soloPendingShot;
+  soloPendingShot = null;
+  addSoloShot(player.id, holeNumber, { dist, lie, club });
+}
+async function startSoloMarkShot(hole, player, pin, finished){
+  if (finished) return;
+  ensureSoloOverlays();
+  let youLL;
+  try { youLL = await getCurrentLatLng(); } catch(e){ alert("Can't get your location right now — check GPS/location permission and try again."); return; }
+  soloPendingShot = { dist: Math.round(haversineMeters(youLL, [pin.lat, pin.lng])), holeNumber: hole.holeNumber, player };
+  if (soloSkipShotPrompt){ commitSoloShot(soloLieSelected, soloClubSelected); return; }
+  renderSoloLieRow(); renderSoloClubGrid();
+  document.getElementById("soloSheetBackdrop").classList.add("open");
+  document.getElementById("soloShotSheet").classList.add("open");
+}
+async function soloTrackPutt(hole, player, pin, finished){
+  if (finished) return;
+  let distVal = null;
+  try {
+    const youLL = await getCurrentLatLng();
+    distVal = Math.round(haversineMeters(youLL, [pin.lat, pin.lng]));
+  } catch(e){ /* putts can still be logged without a distance */ }
+  addSoloShot(player.id, hole.holeNumber, { dist: distVal, lie: "green", club: "Putter" });
+}
+
+let soloGpsToken = 0;
+async function refreshSoloGpsHero(hole, player, finished){
+  const heroEl = document.getElementById("soloGpsHero");
+  const actionEl = document.getElementById("soloActionRow");
+  if (!heroEl || !actionEl) return;
+  const token = ++soloGpsToken;
+  let pins;
+  try { pins = await loadGreenPinsFor(scorerData.round.courseName); } catch(e){ pins = {}; }
+  if (token !== soloGpsToken) return; // hole changed while this was loading — discard
+  const pin = pins[String(hole.holeNumber)];
+  if (!pin){
+    heroEl.innerHTML = `<div class="solo-gps-hero empty"><div class="no-pin-text">No GPS pin saved for this green yet</div><span class="solo-set-pin-link" id="soloSetPinLink">Use the map to set it</span></div>`;
+    actionEl.innerHTML = "";
+    const link = document.getElementById("soloSetPinLink");
+    if (link) link.onclick = () => openSoloMap(hole, player, "place", null);
+    return;
+  }
+  heroEl.innerHTML = `<div class="solo-gps-hero"><div class="num">&hellip;</div><div class="unit">locating&hellip;</div></div>`;
+  actionEl.innerHTML = `
+    <div class="solo-gps-btn primary" id="soloMarkShotBtn">&#9733; Mark shot</div>
+    <div class="solo-gps-btn putt" id="soloTrackPuttBtn">&#8226; Track putt</div>
+    <div class="solo-gps-btn map" id="soloOpenMapBtn">Map</div>`;
+  document.getElementById("soloMarkShotBtn").onclick = () => startSoloMarkShot(hole, player, pin, finished);
+  document.getElementById("soloTrackPuttBtn").onclick = () => soloTrackPutt(hole, player, pin, finished);
+  document.getElementById("soloOpenMapBtn").onclick = () => openSoloMap(hole, player, "view", pin);
+
+  try {
+    const youLL = await getCurrentLatLng();
+    if (token !== soloGpsToken) return;
+    const d = Math.round(haversineMeters(youLL, [pin.lat, pin.lng]));
+    heroEl.innerHTML = `<div class="solo-gps-hero"><div class="num">${d}</div><div class="unit">metres to green centre</div></div>`;
+  } catch(e){
+    if (token !== soloGpsToken) return;
+    heroEl.innerHTML = `<div class="solo-gps-hero empty"><div class="no-pin-text">Can't get your location — check GPS/location permission</div></div>`;
+  }
+}
+
+let soloLeafletMap=null, soloYouMarker=null, soloGreenMarker=null, soloLineLayer=null, soloPlacingMarker=null, soloPlacingLL=null, soloMapClickHandler=null;
+function showSoloMapToast(text){
+  const t = document.getElementById("soloMapToast");
+  t.textContent = text; t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 1600);
+}
+async function openSoloMap(hole, player, mode, pin){
+  ensureSoloOverlays();
+  document.getElementById("soloMapTitle").textContent = mode === "place" ? `Hole ${hole.holeNumber} — set green pin` : `Hole ${hole.holeNumber} — map`;
+  document.getElementById("soloMapOverlay").classList.add("open");
+
+  if (!soloLeafletMap){
+    soloLeafletMap = L.map("soloLeafletMap", { zoomControl:false });
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:20, attribution:"&copy; OpenStreetMap contributors" }).addTo(soloLeafletMap);
+  }
+  [soloGreenMarker, soloYouMarker, soloLineLayer, soloPlacingMarker].forEach(l => { if (l) soloLeafletMap.removeLayer(l); });
+  soloGreenMarker = soloYouMarker = soloLineLayer = soloPlacingMarker = null;
+  if (soloMapClickHandler){ soloLeafletMap.off("click", soloMapClickHandler); soloMapClickHandler = null; }
+
+  if (mode === "view" && pin){
+    const greenLL = [pin.lat, pin.lng];
+    let youLL;
+    try { youLL = await getCurrentLatLng(); } catch(e){ youLL = greenLL; }
+    soloGreenMarker = L.marker(greenLL, { icon: L.divIcon({className:"", html:`<span class="solo-pin-label green">&#127988; Green</span>`, iconSize:[70,20], iconAnchor:[35,10]}) }).addTo(soloLeafletMap);
+    soloYouMarker = L.marker(youLL, { icon: L.divIcon({className:"", html:`<span class="solo-pin-label you">&#128205; You</span>`, iconSize:[50,20], iconAnchor:[25,10]}) }).addTo(soloLeafletMap);
+    soloLineLayer = L.polyline([youLL, greenLL], { color:"#a11212", weight:3, dashArray:"6,6" }).addTo(soloLeafletMap);
+    soloLeafletMap.fitBounds(soloLineLayer.getBounds(), { padding:[50,50] });
+    const realDist = Math.round(soloLeafletMap.distance(youLL, greenLL));
+    document.getElementById("soloMapFooter").innerHTML = `<div class="solo-map-dist-banner">${realDist} m to green</div><div class="solo-map-note">Real OpenStreetMap tiles via Leaflet. This pin was saved once and is reused every round.</div>`;
+  } else {
+    let center;
+    try { center = await getCurrentLatLng(); } catch(e){ center = pin ? [pin.lat, pin.lng] : [-26.2041, 28.0473]; }
+    soloLeafletMap.setView(center, 18);
+    document.getElementById("soloMapFooter").innerHTML = `
+      <div class="solo-map-place-hint">Tap the map where the green centre is</div>
+      <div class="solo-map-save-btn disabled" id="soloSavePinBtn">Save green pin</div>
+      <div class="solo-map-note">Saves to this course's shared data — the next person who plays hole ${hole.holeNumber} here gets live GPS distance too, no setup needed.</div>`;
+    soloMapClickHandler = (e) => {
+      if (soloPlacingMarker) soloLeafletMap.removeLayer(soloPlacingMarker);
+      soloPlacingLL = [e.latlng.lat, e.latlng.lng];
+      soloPlacingMarker = L.marker(soloPlacingLL, { icon: L.divIcon({className:"", html:`<span class="solo-pin-label placing">&#127988; Tap Save to confirm</span>`, iconSize:[140,20], iconAnchor:[70,10]}) }).addTo(soloLeafletMap);
+      const btn = document.getElementById("soloSavePinBtn");
+      if (btn) btn.classList.remove("disabled");
+    };
+    soloLeafletMap.on("click", soloMapClickHandler);
+    const btn = document.getElementById("soloSavePinBtn");
+    if (btn) btn.onclick = async () => {
+      if (!soloPlacingLL) return;
+      await saveGreenPinFor(scorerData.round.courseName, hole.holeNumber, soloPlacingLL[0], soloPlacingLL[1]);
+      showSoloMapToast("Saved — this pin is now used for everyone at this hole");
+      setTimeout(() => { document.getElementById("soloMapOverlay").classList.remove("open"); renderEntry(); }, 700);
+    };
+  }
+  setTimeout(() => soloLeafletMap.invalidateSize(), 50);
+}
+
+function renderSoloEntry(card, hole, finished){
+  ensureSoloOverlays();
+  const playerId = getSoloPlayerId();
+  const player = scorerData.players.find(p => p.id === playerId);
+  if (!player){
+    card.innerHTML = `
+      <div class="card">
+        <strong>Which player are you?</strong>
+        <p class="muted" style="font-size:.82rem;margin:4px 0 12px;">Picked once per device for this round — other players pick themselves on their own phone.</p>
+        <div class="solo-whoami-list">
+          ${scorerData.players.map(p => `<button type="button" class="wa-btn" data-pid="${p.id}">${escapeHtml(p.name)}</button>`).join("")}
+        </div>
+      </div>`;
+    card.querySelectorAll(".wa-btn").forEach(btn => { btn.onclick = () => { setSoloPlayerId(btn.dataset.pid); renderEntry(); }; });
+    return;
+  }
+
+  const existing = scorerData.scores.find(s => s.playerId === player.id && s.holeNumber === scorerHole);
+  const sel = existing ? existing.grossStrokes : null;
+  const shots = (existing && existing.shots) ? existing.shots : [];
+
+  let total = 0, thru = 0, diff = 0;
+  scorerData.holes.forEach(h => {
+    const s = scorerData.scores.find(sc => sc.playerId === player.id && sc.holeNumber === h.holeNumber);
+    if (s && s.grossStrokes != null){ total += s.grossStrokes; thru++; diff += (s.grossStrokes - h.par); }
+  });
+
+  function stripRow(startIdx, label){
+    const set = scorerData.holes.slice(startIdx, startIdx+9);
+    const cells = set.map(h => {
+      const s = scorerData.scores.find(sc => sc.playerId === player.id && sc.holeNumber === h.holeNumber);
+      const v = s ? s.grossStrokes : null;
+      let cls = "cell" + (h.holeNumber === scorerHole ? " current" : "");
+      if (v != null){ if (v < h.par) cls += " under"; else if (v > h.par) cls += " over"; }
+      return `<div class="${cls}" data-n="${h.holeNumber}"><span class="hn">${h.holeNumber}</span><span class="sc">${v ?? ''}</span></div>`;
+    }).join("");
+    const parSum = set.reduce((a,h)=>a+h.par,0);
+    return `<div class="strip-row">${cells}<div class="cell sub"><span class="hn">${label}</span><span class="sc">${parSum}</span></div></div>`;
+  }
+
+  const chipOffsets = [-2,-1,0,1,2,3];
+  const sr = strokesReceived(player.playingHandicap, hole.strokeIndex);
+  const chipsHtml = chipOffsets.map(off => {
+    const val = Math.max(1, hole.par + off);
+    const isActive = sel === val;
+    const pts = stablefordPoints(hole.par, val - sr);
+    return `<div class="solo-np-chip${isActive?' selected':''}" data-s="${val}">
+      <div class="v">${val}</div><div class="lb">${SCORE_LABELS[String(off)]}</div>
+      <div class="pts">${pts} pt${pts===1?'':'s'}</div></div>`;
+  }).join("");
+  const inChipRange = sel != null && chipOffsets.some(off => Math.max(1,hole.par+off) === sel);
+
+  const shotsHtml = shots.map((s,i) => {
+    if (s.dist == null) return `<span class="chip">${escapeHtml(s.club)}</span>`;
+    const prevDist = i === 0 ? (hole.yards ? Math.round(hole.yards * 0.9144) : null) : shots[i-1].dist;
+    const delta = (prevDist != null) ? Math.max(0, prevDist - s.dist) : null;
+    return `<span class="chip">${escapeHtml(s.club)}${delta!=null?' '+delta+'m':''}</span>`;
+  }).join("");
+
+  card.innerHTML = `
+    <div class="solo-strip">${stripRow(0,"OUT")}${stripRow(9,"IN")}</div>
+    ${hole.yards ? `<div class="solo-hole-focus"><div class="yard">${hole.yards} yards</div></div>` : ""}
+    <div class="solo-gps-wrap"><div id="soloGpsHero"><div class="solo-gps-hero"><div class="num">&hellip;</div><div class="unit">loading</div></div></div></div>
+    <div id="soloActionRow" class="solo-action-row"></div>
+    <div class="solo-shots-strip">${shotsHtml}</div>
+    <div class="solo-chip-row">${chipsHtml}</div>
+    <div class="solo-other-stepper" id="soloOtherStepper">
+      <div class="circ-btn" id="soloOtherMinus">&minus;</div>
+      <div class="val" id="soloOtherVal">${sel ?? hole.par}</div>
+      <div class="circ-btn" id="soloOtherPlus">&plus;</div>
+      <div class="set-btn" id="soloOtherSet">Set</div>
+    </div>
+    <div class="solo-numpad-foot">
+      <span class="solo-other-score-btn" id="soloOtherScoreBtn">Other score&hellip;</span>
+      <span class="solo-entered-note">${(sel != null && !inChipRange) ? 'Entered: '+sel : ''}</span>
+    </div>
+    <div class="solo-mini-total">${thru===0 ? 'E thru 0' : (diff===0?'E':(diff>0?'+'+diff:diff)) + ' thru ' + thru}</div>
+  `;
+
+  card.querySelectorAll(".solo-strip .cell[data-n]").forEach(el => {
+    el.onclick = () => { scorerHole = parseInt(el.dataset.n, 10); renderEntry(); };
+  });
+  card.querySelectorAll(".solo-np-chip").forEach(el => {
+    el.onclick = () => {
+      if (finished) return;
+      const val = parseInt(el.dataset.s, 10);
+      if (sel === val) clearScore(player.id); else saveScore(player.id, val);
+    };
+  });
+  const otherStepper = document.getElementById("soloOtherStepper");
+  document.getElementById("soloOtherScoreBtn").onclick = () => { otherStepper.classList.toggle("open"); };
+  document.getElementById("soloOtherMinus").onclick = () => {
+    const v = document.getElementById("soloOtherVal");
+    v.textContent = Math.max(1, parseInt(v.textContent,10) - 1);
+  };
+  document.getElementById("soloOtherPlus").onclick = () => {
+    const v = document.getElementById("soloOtherVal");
+    v.textContent = parseInt(v.textContent,10) + 1;
+  };
+  document.getElementById("soloOtherSet").onclick = () => {
+    if (finished) return;
+    saveScore(player.id, parseInt(document.getElementById("soloOtherVal").textContent, 10));
+  };
+
+  refreshSoloGpsHero(hole, player, finished);
+}
+function closeSoloSheet(){
+  document.getElementById("soloSheetBackdrop").classList.remove("open");
+  document.getElementById("soloShotSheet").classList.remove("open");
+}
+function renderSoloLieRow(){
+  document.getElementById("soloLieRow").innerHTML = SOLO_LIES.map(l =>
+    `<div class="seg${l.k===soloLieSelected?' selected':''}" data-lie="${l.k}"><span class="ic">${l.ic}</span>${l.lb}</div>`).join("");
+  document.querySelectorAll("#soloLieRow .seg").forEach(el => { el.onclick = () => { soloLieSelected = el.dataset.lie; renderSoloLieRow(); }; });
+}
+function renderSoloClubGrid(){
+  document.getElementById("soloClubGrid").innerHTML = SOLO_CLUB_GROUPS.map(g => `
+    <div class="solo-club-group">
+      <div class="solo-club-group-label">${g.label}</div>
+      <div class="solo-club-chips">${g.clubs.map(k => `<div class="solo-club-chip${k===soloClubSelected?' selected':''}" data-club="${k}">${k}</div>`).join("")}</div>
+    </div>`).join("");
+  document.querySelectorAll(".solo-club-chip").forEach(el => { el.onclick = () => { soloClubSelected = el.dataset.club; renderSoloClubGrid(); }; });
+}
+
 function renderEntry(){
   const holeLabel = document.getElementById("holeLabel");
   const card = document.getElementById("entryCard");
@@ -3009,6 +3464,11 @@ function renderEntry(){
   const hole = scorerData.holes.find(h => h.holeNumber === scorerHole);
   const finished = scorerData.round.status === "finished";
   holeLabel.textContent = `Hole ${scorerHole} · Par ${hole.par} · SI ${hole.strokeIndex}`;
+
+  if (scorerData.round.scoringMode === "individual"){
+    renderSoloEntry(card, hole, finished);
+    return;
+  }
 
   const chipOffsets = [-2,-1,0,1,2,3];
 
