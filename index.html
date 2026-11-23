@@ -458,6 +458,30 @@
   .solo-club-chip{padding:9px 16px;border-radius:999px;border:1.5px solid var(--line);font-weight:700;font-size:.82rem;color:var(--ink);cursor:pointer;background:#fff;}
   .solo-club-chip.selected{background:var(--brand-dark);border-color:var(--brand-dark);color:#fff;}
   .solo-sheet-done{margin:18px;padding:14px;border-radius:999px;background:var(--brand-dark);color:#fff;text-align:center;font-weight:800;letter-spacing:.03em;cursor:pointer;}
+
+  /* ===== New Round: hero + collapsible summary panels ===== */
+  .nr-hero{position:relative;height:110px;margin:0 0 10px;border-radius:14px;background:linear-gradient(135deg, var(--brand-dark), var(--brand));display:flex;flex-direction:column;justify-content:flex-end;padding:0 16px 12px;color:#fff;}
+  .nr-hero .nr-hero-title{font-size:1.1rem;font-weight:800;margin:0 0 2px;}
+  .nr-hero .nr-hero-sub{font-size:.76rem;opacity:.85;}
+  .nr-nearby{margin:0 0 12px;}
+  .nr-nearby .nh{font-size:.76rem;font-weight:800;color:var(--brand-dark);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;}
+  .nr-nearby .status{font-size:.78rem;color:var(--muted);padding:4px 0;}
+  .nr-course-row{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;cursor:pointer;background:#fff;}
+  .nr-course-row .cn{font-weight:700;font-size:.86rem;}
+  .nr-course-row .cm{font-size:.74rem;color:var(--muted);margin-top:1px;}
+  .nr-course-row .dist{font-size:.8rem;font-weight:800;color:var(--brand-dark);white-space:nowrap;}
+  .nr-panel{border:1px solid var(--line);border-radius:10px;margin-bottom:10px;overflow:hidden;}
+  .nr-panel summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:14px 14px;}
+  .nr-panel summary::-webkit-details-marker{display:none;}
+  .nr-panel summary .ic{font-size:1.2rem;width:26px;text-align:center;flex:0 0 auto;}
+  .nr-panel summary .txt{flex:1;min-width:0;}
+  .nr-panel summary .txt .label{font-weight:700;font-size:.9rem;color:var(--ink);}
+  .nr-panel summary .txt .val{font-size:.78rem;color:var(--muted);margin-top:1px;}
+  .nr-panel summary .chev{color:var(--muted);transition:transform .15s;}
+  .nr-panel[open] summary .chev{transform:rotate(90deg);}
+  .nr-panel[open] summary{border-bottom:1px solid var(--line);}
+  .nr-panel .nr-panel-body{padding:14px;}
+  .nr-gps-status{font-size:.78rem;color:var(--muted);margin-top:6px;}
 </style>
 </head>
 <body>
@@ -1920,71 +1944,123 @@ function renderNewRound(){
     bodyHtml: `
     <button id="backToHomeBtn" class="secondary" type="button" style="margin-bottom:14px;">← Back to rounds</button>
 
+    <div class="nr-hero" id="nrHero" style="cursor:pointer;">
+      <div class="nr-hero-title" id="heroCourseName">Select a course</div>
+      <div class="nr-hero-sub">Tap to search, or pick one found near you below</div>
+    </div>
+
+    <div class="nr-nearby" id="nrNearby"></div>
+
     <div class="card">
-      <label>Round name</label>
-      <input type="text" id="roundName" placeholder="e.g. Saturday Fourball">
-      <label>Course name</label>
-      <input type="text" id="courseName" placeholder="Start typing — saved courses appear as you type" list="courseNameDatalist" autocomplete="off">
-      <datalist id="courseNameDatalist"></datalist>
-      <p class="muted" style="font-size:.78rem;margin:4px 0 0;">Pick a match to fill in par, stroke index, rating &amp; slope — some saved courses come from OpenStreetMap contributors and may have mistakes, check against the club scorecard.</p>
+      <details class="nr-panel" id="panelRoundDetails" open>
+        <summary>
+          <span class="ic">&#128197;</span>
+          <div class="txt"><div class="label">Round details</div><div class="val" id="summaryRoundDetails">Name, course, date &amp; tee box</div></div>
+          <span class="chev">&rsaquo;</span>
+        </summary>
+        <div class="nr-panel-body">
+          <label>Round name</label>
+          <input type="text" id="roundName" placeholder="e.g. Saturday Fourball">
+          <label>Course name</label>
+          <input type="text" id="courseName" placeholder="Start typing — saved courses appear as you type" list="courseNameDatalist" autocomplete="off">
+          <datalist id="courseNameDatalist"></datalist>
+          <p class="muted" style="font-size:.78rem;margin:4px 0 0;">Pick a match to fill in par, stroke index, rating &amp; slope — some saved courses come from OpenStreetMap contributors and may have mistakes, check against the club scorecard.</p>
+          <div class="nr-gps-status" id="nrGpsStatus"></div>
 
-      <label>Or search GolfCore for a course not saved yet (optional)</label>
-      <div class="row" style="gap:8px;flex-wrap:nowrap;">
-        <input type="text" id="golfcoreSearchInput" placeholder="e.g. Glenvista Country Club" style="flex:1;">
-        <button id="golfcoreSearchBtn" class="secondary" type="button" style="white-space:nowrap;">Search</button>
-      </div>
-      <div id="golfcoreResults"></div>
-      <p id="golfcoreCredit" class="muted" style="font-size:.78rem;margin:4px 0 0;display:none;"></p>
-      <div class="grid-3">
-        <div>
-          <label>Date</label>
-          <input type="text" id="roundDate" placeholder="e.g. 2026-08-29" value="${new Date().toISOString().slice(0,10)}">
+          <label>Or search GolfCore for a course not saved yet (optional)</label>
+          <div class="row" style="gap:8px;flex-wrap:nowrap;">
+            <input type="text" id="golfcoreSearchInput" placeholder="e.g. Glenvista Country Club" style="flex:1;">
+            <button id="golfcoreSearchBtn" class="secondary" type="button" style="white-space:nowrap;">Search</button>
+          </div>
+          <div id="golfcoreResults"></div>
+          <p id="golfcoreCredit" class="muted" style="font-size:.78rem;margin:4px 0 0;display:none;"></p>
+          <div class="grid-3">
+            <div>
+              <label>Date</label>
+              <input type="text" id="roundDate" placeholder="e.g. 2026-08-29" value="${new Date().toISOString().slice(0,10)}">
+            </div>
+            <div>
+              <label id="teeTimeLabel">Tee time</label>
+              <input type="text" id="teeTime" placeholder="e.g. 07:30">
+            </div>
+            <div>
+              <label>Tee box</label>
+              <select id="teeBox">${teeBoxOptions("White")}</select>
+            </div>
+          </div>
+          <div class="grid-3" style="margin-top:8px;">
+            <div>
+              <label>Course rating</label>
+              <input type="number" id="courseRating" step="0.1" placeholder="e.g. 72.3">
+            </div>
+            <div>
+              <label>Slope rating</label>
+              <input type="number" id="slopeRating" placeholder="e.g. 133">
+            </div>
+          </div>
+          <p class="muted" style="font-size:.78rem;margin:4px 0 0;">For the tee box above — edit if the club has re-rated it since this was last saved.</p>
         </div>
-        <div>
-          <label id="teeTimeLabel">Tee time</label>
-          <input type="text" id="teeTime" placeholder="e.g. 07:30">
+      </details>
+
+      <details class="nr-panel" id="panelFormat">
+        <summary>
+          <span class="ic">&#127919;</span>
+          <div class="txt"><div class="label">Scoring format</div><div class="val" id="summaryFormat">Stroke play (gross/net)</div></div>
+          <span class="chev">&rsaquo;</span>
+        </summary>
+        <div class="nr-panel-body"><div id="modesBox"></div></div>
+      </details>
+
+      <details class="nr-panel" id="panelScoringMode">
+        <summary>
+          <span class="ic">&#128241;</span>
+          <div class="txt"><div class="label">Scoring mode</div><div class="val" id="summaryScoringMode">One device scores everyone</div></div>
+          <span class="chev">&rsaquo;</span>
+        </summary>
+        <div class="nr-panel-body">
+          <div class="row" style="gap:18px;margin-bottom:4px;">
+            <label class="row" style="gap:6px;"><input type="radio" name="scoringMode" value="shared" checked> One device scores everyone</label>
+            <label class="row" style="gap:6px;"><input type="radio" name="scoringMode" value="individual"> Everyone scores their own round</label>
+          </div>
+          <p class="muted" style="font-size:.78rem;margin:0;">Individual mode: each player opens this same round on their own phone and picks their name once — scores sync live either way, so switching later doesn't lose anything.</p>
         </div>
-        <div>
-          <label>Tee box</label>
-          <select id="teeBox">${teeBoxOptions("White")}</select>
+      </details>
+
+      <details class="nr-panel" id="panelPlayers">
+        <summary>
+          <span class="ic">&#128101;</span>
+          <div class="txt"><div class="label">Players &amp; handicaps</div><div class="val" id="summaryPlayers">&nbsp;</div></div>
+          <span class="chev">&rsaquo;</span>
+        </summary>
+        <div class="nr-panel-body"><div id="playersBox"></div></div>
+      </details>
+
+      <details class="nr-panel" id="panelHoles">
+        <summary>
+          <span class="ic">&#9971;</span>
+          <div class="txt"><div class="label">Holes — par &amp; stroke index</div><div class="val">18 holes</div></div>
+          <span class="chev">&rsaquo;</span>
+        </summary>
+        <div class="nr-panel-body">
+          <p class="muted">Quick default fills par 4 / sequential SI — edit any cell, or load a saved course above.</p>
+          <div id="holesTable"></div>
         </div>
-      </div>
+      </details>
 
-      <h2>Game mode</h2>
-      <div id="modesBox"></div>
-
-      <h2>Players &amp; handicaps</h2>
-      <div id="playersBox"></div>
-
-      <div class="grid-3">
-        <div>
-          <label>Course rating</label>
-          <input type="number" id="courseRating" step="0.1" placeholder="e.g. 72.3">
+      <details class="nr-panel" id="panelPlaying">
+        <summary>
+          <span class="ic">&#9995;</span>
+          <div class="txt"><div class="label">Are you playing?</div><div class="val" id="summaryPlaying">I'm playing</div></div>
+          <span class="chev">&rsaquo;</span>
+        </summary>
+        <div class="nr-panel-body">
+          <div class="row" style="gap:18px;margin-bottom:4px;">
+            <label class="row" style="gap:6px;"><input type="radio" name="creatorRole" value="playing" checked> I'm playing</label>
+            <label class="row" style="gap:6px;"><input type="radio" name="creatorRole" value="marking"> I'm scoring/marking only</label>
+          </div>
+          <p class="muted" style="font-size:.78rem;margin:0;">Marking-only rounds won't count as rounds you've played in your history.</p>
         </div>
-        <div>
-          <label>Slope rating</label>
-          <input type="number" id="slopeRating" placeholder="e.g. 133">
-        </div>
-      </div>
-      <p class="muted" style="font-size:.78rem;margin:4px 0 12px;">For the tee box above — edit if the club has re-rated it since this was last saved.</p>
-
-      <h2>Holes — par &amp; stroke index</h2>
-      <p class="muted">Quick default fills par 4 / sequential SI — edit any cell, or load a saved course above.</p>
-      <div id="holesTable"></div>
-
-      <h2>Are you playing?</h2>
-      <div class="row" style="gap:18px;margin-bottom:4px;">
-        <label class="row" style="gap:6px;"><input type="radio" name="creatorRole" value="playing" checked> I'm playing</label>
-        <label class="row" style="gap:6px;"><input type="radio" name="creatorRole" value="marking"> I'm scoring/marking only</label>
-      </div>
-      <p class="muted" style="font-size:.78rem;margin:0 0 16px;">Marking-only rounds won't count as rounds you've played in your history.</p>
-
-      <h2>Scoring mode</h2>
-      <div class="row" style="gap:18px;margin-bottom:4px;">
-        <label class="row" style="gap:6px;"><input type="radio" name="scoringMode" value="shared" checked> One device scores everyone</label>
-        <label class="row" style="gap:6px;"><input type="radio" name="scoringMode" value="individual"> Everyone scores their own round</label>
-      </div>
-      <p class="muted" style="font-size:.78rem;margin:0 0 16px;">Individual mode: each player opens this same round on their own phone and picks their name once — scores sync live either way, so switching later doesn't lose anything.</p>
+      </details>
 
       <div class="row" style="margin-top:16px;">
         <button id="createBtn">Create round</button>
@@ -2012,6 +2088,25 @@ function renderNewRound(){
     }
   });
 
+  function haversineKm(a, b){
+    const R = 6371, toRad = d => d * Math.PI / 180;
+    const dLat = toRad(b[0]-a[0]), dLng = toRad(b[1]-a[1]);
+    const lat1 = toRad(a[0]), lat2 = toRad(b[0]);
+    const h = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+  const heroNameEl = document.getElementById("heroCourseName");
+  function updateHeroName(){
+    const v = document.getElementById("courseName").value.trim();
+    heroNameEl.textContent = v || "Select a course";
+  }
+  document.getElementById("nrHero").onclick = () => {
+    document.getElementById("panelRoundDetails").open = true;
+    const input = document.getElementById("courseName");
+    input.scrollIntoView({ behavior: "smooth", block: "center" });
+    input.focus();
+  };
+
   loadCoursesList().then(courses => {
     const datalist = document.getElementById("courseNameDatalist");
     courses.forEach(c => {
@@ -2020,11 +2115,13 @@ function renderNewRound(){
       datalist.appendChild(opt);
     });
     const courseNameInput = document.getElementById("courseName");
+    const gpsStatusEl = document.getElementById("nrGpsStatus");
     courseNameInput.addEventListener("input", () => {
+      updateHeroName();
       golfcoreSourceSelected = null;
       const typed = courseNameInput.value.trim().toLowerCase();
       const course = courses.find(c => c.name.trim().toLowerCase() === typed);
-      if (!course) return;
+      if (!course){ gpsStatusEl.textContent = ""; return; }
       course.holes.forEach(h => {
         const parCell = document.querySelector(`.h-par[data-hole="${h.holeNumber}"]`);
         const siCell = document.querySelector(`.h-si[data-hole="${h.holeNumber}"]`);
@@ -2032,7 +2129,37 @@ function renderNewRound(){
         if (siCell) siCell.value = h.strokeIndex;
       });
       fillRatingSlope(course.tees, course.courseRating != null && course.slopeRating != null ? { courseRating: course.courseRating, slopeRating: course.slopeRating } : null);
+      const pinCount = Object.keys(course.greenPins || {}).length;
+      gpsStatusEl.textContent = pinCount > 0
+        ? `\u{1F4CD} GPS: ${pinCount} of 18 holes have a saved green pin here`
+        : `\u{1F4CD} GPS: no green pins saved for this course yet — the first Individual-mode round here sets them`;
     });
+
+    // Runs automatically as soon as the page loads — no tap needed. Fails silently if
+    // location is denied/unavailable, since it's a convenience on top of typing/search,
+    // never a requirement. Only courses with a saved lat/lng (132 of 142 as of the last
+    // backfill) can be sorted by distance; the rest just aren't offered here.
+    const nearbyBox = document.getElementById("nrNearby");
+    if (navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(pos => {
+        const me = [pos.coords.latitude, pos.coords.longitude];
+        const nearest = courses
+          .filter(c => c.lat != null && c.lng != null)
+          .map(c => ({ ...c, km: haversineKm(me, [c.lat, c.lng]) }))
+          .sort((a,b) => a.km - b.km)
+          .slice(0, 3);
+        if (!nearest.length) return;
+        nearbyBox.innerHTML = `<div class="nh">Courses near you</div>` + nearest.map(c =>
+          `<div class="nr-course-row" data-pick="${escapeHtml(c.name)}"><div><div class="cn">${escapeHtml(c.name)}</div></div><div class="dist">${c.km.toFixed(1)} km</div></div>`
+        ).join("");
+        nearbyBox.querySelectorAll("[data-pick]").forEach(el => {
+          el.onclick = () => {
+            courseNameInput.value = el.dataset.pick;
+            courseNameInput.dispatchEvent(new Event("input"));
+          };
+        });
+      }, () => { /* denied/unavailable — leave nrNearby empty, no error shown */ }, { enableHighAccuracy: true, timeout: 8000 });
+    }
   });
 
   const modesBox = document.getElementById("modesBox");
@@ -2225,6 +2352,33 @@ function renderNewRound(){
   buildHolesTable();
 
   document.getElementById("createBtn").onclick = createRound;
+
+  // Summary-row text for the collapsed panels — purely cosmetic, reads whatever's
+  // already selected rather than tracking its own state.
+  function updateFormatSummary(){
+    const checked = document.querySelector('input[name="gameMode"]:checked');
+    document.getElementById("summaryFormat").textContent = checked ? GAME_MODES.find(m => m.key === checked.value).label : "";
+  }
+  document.querySelectorAll('input[name="gameMode"]').forEach(r => r.addEventListener("change", updateFormatSummary));
+  updateFormatSummary();
+
+  document.querySelectorAll('input[name="scoringMode"]').forEach(r => r.addEventListener("change", () => {
+    document.getElementById("summaryScoringMode").textContent = document.querySelector('input[name="scoringMode"]:checked').value === "individual"
+      ? "Everyone scores their own round" : "One device scores everyone";
+  }));
+
+  document.querySelectorAll('input[name="creatorRole"]').forEach(r => r.addEventListener("change", () => {
+    document.getElementById("summaryPlaying").textContent = document.querySelector('input[name="creatorRole"]:checked').value === "marking"
+      ? "Scoring/marking only" : "I'm playing";
+  }));
+
+  function updatePlayersSummary(){
+    const count = document.querySelectorAll("#playersBox input.p-name").length;
+    document.getElementById("summaryPlayers").textContent = `${count} player${count === 1 ? "" : "s"}`;
+  }
+  document.getElementById("fourballCount").addEventListener("change", updatePlayersSummary);
+  document.querySelectorAll('input[name="gameMode"]').forEach(r => r.addEventListener("change", updatePlayersSummary));
+  updatePlayersSummary();
 }
 
 function readPlayersForFourball(fb, playerCount){
