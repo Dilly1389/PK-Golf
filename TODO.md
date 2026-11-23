@@ -11,6 +11,8 @@
 
 - **Handicap system.** Golfer profiles (`golfers/{uid}`) have a `handicap` field, but it's just a manually-typed number on the Account page right now — no real handicap calculation/tracking. Design this properly later (how it's computed/updated, whether it pulls from round scores). Deferred on purpose (2026-10-26) to keep sign-up simple for now.
 
+- **Scoring format needs correcting for tournaments.** Flagged 2026-11-23 — something about how the Scoring format panel (the 8 game modes) interacts with tournaments/multiple fourballs isn't right. Not detailed yet; needs Ruan to spell out the actual problem before this is actionable.
+
 ## Friends & notifications
 
 - **Friends list.** Prerequisite for push notifications below (nothing to notify without a linked person) and useful on its own (reusable player picker instead of retyping names every round).

@@ -661,6 +661,7 @@ function fillRatingSlope(tees, flat){
 // this to our own users with attribution + a link back to the source course page, which
 // golfcoreSourceSelected carries through to saveCourseToDatabase.
 let golfcoreSourceSelected = null;
+let tournamentLogoFile = null; // held in memory, uploaded only on actual submit — see createCompetition()
 async function searchGolfCore(){
   const q = document.getElementById("golfcoreSearchInput").value.trim();
   const resultsEl = document.getElementById("golfcoreResults");
@@ -2007,7 +2008,18 @@ function renderNewRound(){
           <div class="txt"><div class="label">Tournament / Competition</div><div class="val" id="summaryTournament">How many fourballs?</div></div>
           <span class="chev">&rsaquo;</span>
         </summary>
-        <div class="nr-panel-body"><div id="fourballCountBox"></div></div>
+        <div class="nr-panel-body">
+          <div id="fourballCountBox"></div>
+          <label style="margin-top:10px;">Tournament logo (optional)</label>
+          <div class="row" style="gap:10px;align-items:center;">
+            <div id="tournamentLogoPreview" style="width:48px;height:48px;border-radius:8px;border:1px solid var(--line);background:var(--brand-dim);display:flex;align-items:center;justify-content:center;overflow:hidden;flex:0 0 auto;">
+              <span class="muted" style="font-size:.6rem;text-align:center;">No logo</span>
+            </div>
+            <button type="button" class="secondary" id="tournamentLogoBtn">Add logo</button>
+            <span class="muted" id="tournamentLogoName" style="font-size:.78rem;"></span>
+            <input type="file" id="tournamentLogoInput" accept="image/*" style="display:none;">
+          </div>
+        </div>
       </details>
 
       <details class="nr-panel" id="panelPlayers">
@@ -2300,8 +2312,22 @@ function renderNewRound(){
     return (fb === 1 ? `p${i}` : `fb${fb}-p${i}`) + `-${field}`;
   }
   let playerFieldMemory = {};
+  let currentFourballView = 1;
+  function showFourballView(fb){
+    currentFourballView = fb;
+    document.querySelectorAll("#playersBox .fb-group").forEach(el => {
+      el.style.display = parseInt(el.dataset.fb, 10) === fb ? "" : "none";
+    });
+    const label = document.getElementById("fbViewLabel");
+    if (label) label.textContent = `Fourball ${fb}`;
+    const prevBtn = document.getElementById("fbViewPrev"), nextBtn = document.getElementById("fbViewNext");
+    const total = parseInt(document.getElementById("fourballCount").value, 10) || 1;
+    if (prevBtn) prevBtn.disabled = fb <= 1;
+    if (nextBtn) nextBtn.disabled = fb >= total;
+  }
   function renderPlayersBox(){
     const fourballCount = parseInt(document.getElementById("fourballCount").value, 10) || 1;
+    if (currentFourballView > fourballCount) currentFourballView = fourballCount;
     const selectedMode = document.querySelector('input[name="gameMode"]:checked')?.value;
     const playerCount = playerCountForMode(selectedMode);
     const playerSlots = Array.from({length: playerCount}, (_,i) => i+1);
@@ -2345,18 +2371,31 @@ function renderNewRound(){
         </div>
       </div>`).join("");
 
-    playersBox.innerHTML = Array.from({length: fourballCount}, (_,idx) => {
+    // Every fourball's fields stay in the DOM (just hidden) rather than only rendering the
+    // one being viewed — Piekfyn's pairing picker and the fourball-switching wiring below
+    // both read Fourball 1's plain p{i}-* ids directly, so those elements must always exist.
+    const fbSelectorHtml = fourballCount > 1 ? `
+      <div class="row" style="justify-content:center;align-items:center;gap:14px;margin-bottom:10px;">
+        <button type="button" class="secondary" id="fbViewPrev">&larr;</button>
+        <strong id="fbViewLabel">Fourball ${currentFourballView}</strong>
+        <button type="button" class="secondary" id="fbViewNext">&rarr;</button>
+      </div>` : "";
+
+    playersBox.innerHTML = fbSelectorHtml + Array.from({length: fourballCount}, (_,idx) => {
       const fb = idx + 1;
-      const heading = fourballCount > 1
-        ? `<p class="muted" style="font-weight:700;color:var(--ink);margin:${fb===1?"0":"16px"} 0 4px;">Fourball ${fb}</p>`
-        : "";
-      return heading + oneFourballHtml(fb);
+      return `<div class="fb-group" data-fb="${fb}" style="display:${fb===currentFourballView?"":"none"};">${oneFourballHtml(fb)}</div>`;
     }).join("");
 
     Object.entries(playerFieldMemory).forEach(([id, value]) => {
       const el = document.getElementById(id);
       if (el) el.value = value;
     });
+
+    if (fourballCount > 1){
+      document.getElementById("fbViewPrev").onclick = () => { if (currentFourballView > 1) showFourballView(currentFourballView - 1); };
+      document.getElementById("fbViewNext").onclick = () => { if (currentFourballView < fourballCount) showFourballView(currentFourballView + 1); };
+      showFourballView(currentFourballView);
+    }
 
     playerSlots.forEach(i => {
       document.getElementById(`p${i}-name`).addEventListener("input", refreshPairingOptions);
@@ -2451,6 +2490,22 @@ function renderNewRound(){
   document.querySelectorAll('input[name="roundKind"]').forEach(r => r.addEventListener("change", applyRoundKindGate));
   fourballCountSelect.addEventListener("change", updateTournamentSummary);
   applyRoundKindGate();
+
+  // Logo is only uploaded on actual submit (see createCompetition) — here it's just held
+  // in memory and previewed, so picking a file costs nothing if the round never gets created.
+  const LOGO_MAX_BYTES = 5 * 1024 * 1024;
+  tournamentLogoFile = null;
+  document.getElementById("tournamentLogoBtn").onclick = () => document.getElementById("tournamentLogoInput").click();
+  document.getElementById("tournamentLogoInput").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    const nameEl = document.getElementById("tournamentLogoName");
+    if (!file) return;
+    if (!file.type.startsWith("image/")){ nameEl.textContent = "Please choose an image file."; return; }
+    if (file.size > LOGO_MAX_BYTES){ nameEl.textContent = "Image is too large (max 5MB)."; return; }
+    tournamentLogoFile = file;
+    nameEl.textContent = file.name;
+    document.getElementById("tournamentLogoPreview").innerHTML = `<img src="${URL.createObjectURL(file)}" style="width:100%;height:100%;object-fit:cover;">`;
+  });
 }
 
 function readPlayersForFourball(fb, playerCount){
@@ -2600,12 +2655,24 @@ async function createCompetition(cfg){
   } = cfg;
   const isPiekfyn = modes.includes("piekfyn");
 
+  // Uploaded here, not when the file is picked — nothing lands in Storage unless the
+  // competition is actually created. Path doesn't need the competition's id since Storage
+  // just needs a unique key, not a Firestore relationship.
+  let logoURL = null;
+  if (tournamentLogoFile){
+    const path = `tournament-logos/${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const fileRef = storageRef(storage, path);
+    await uploadBytes(fileRef, tournamentLogoFile, { contentType: tournamentLogoFile.type });
+    logoURL = await getDownloadURL(fileRef);
+  }
+  tournamentLogoFile = null;
+
   const compRef = await addDoc(collection(db, "golf_competitions"), {
     name: roundName, teamAName: isPiekfyn ? teamAName : null, teamBName: isPiekfyn ? teamBName : null,
     teamColorStyle: isPiekfyn ? teamColorStyle : null,
     teamAColor: isPiekfyn ? teamAColor : null, teamBColor: isPiekfyn ? teamBColor : null,
     courseName, roundDate, teeTime: teeTimesByFourball[0] || "", teeBox,
-    fourballCount, gameModes: modes, createdAt: serverTimestamp()
+    fourballCount, gameModes: modes, logoURL, createdAt: serverTimestamp()
   });
 
   for (let fb = 1; fb <= fourballCount; fb++){
