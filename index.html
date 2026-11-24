@@ -2093,6 +2093,7 @@ function renderNewRound(){
         <input type="text" id="courseName" placeholder="Start typing — saved courses appear as you type" list="courseNameDatalist" autocomplete="off">
         <datalist id="courseNameDatalist"></datalist>
         <p class="muted" style="font-size:.78rem;margin:4px 0 0;">Pick a match to fill in par, stroke index, rating &amp; slope — some saved courses come from OpenStreetMap contributors and may have mistakes, check against the club scorecard.</p>
+        <div id="nrSearchResults"></div>
         <div class="nr-gps-status" id="nrGpsStatus"></div>
         <div class="nr-nearby" id="nrNearby" style="margin-top:14px;"></div>
         <details style="margin-top:14px;">
@@ -2162,12 +2163,41 @@ function renderNewRound(){
     });
     const courseNameInput = document.getElementById("courseName");
     const gpsStatusEl = document.getElementById("nrGpsStatus");
+    const searchResultsEl = document.getElementById("nrSearchResults");
+
+    // Native <datalist> autocomplete is unreliable on mobile (no dropdown at all in
+    // some browsers/PWAs) — this is what actually let a half-typed course name through
+    // with no match, silently. A plain tappable list works everywhere.
+    function renderSearchResults(typed){
+      if (typed.length < 2){ searchResultsEl.innerHTML = ""; return; }
+      const matches = courses.filter(c => c.name.toLowerCase().includes(typed)).slice(0, 8);
+      if (!matches.length){ searchResultsEl.innerHTML = `<p class="muted" style="font-size:.78rem;margin:6px 0 0;">No saved course matches "${escapeHtml(courseNameInput.value.trim())}" — try Search GolfCore below.</p>`; return; }
+      searchResultsEl.innerHTML = matches.map(c =>
+        `<div class="nr-course-row" data-pick="${escapeHtml(c.name)}"><div><div class="cn">${escapeHtml(c.name)}</div></div></div>`
+      ).join("");
+      searchResultsEl.querySelectorAll("[data-pick]").forEach(el => {
+        el.onclick = () => { courseNameInput.value = el.dataset.pick; courseNameInput.dispatchEvent(new Event("input")); searchResultsEl.innerHTML = ""; };
+      });
+    }
+
     courseNameInput.addEventListener("input", () => {
       updateHeroName();
       golfcoreSourceSelected = null;
       const typed = courseNameInput.value.trim().toLowerCase();
       const course = courses.find(c => c.name.trim().toLowerCase() === typed);
-      if (!course){ gpsStatusEl.textContent = ""; return; }
+      renderSearchResults(typed);
+      if (course) searchResultsEl.innerHTML = ""; // exact match already filled everything below — no need for a list too
+      if (!course){
+        // No exact match — reset to defaults rather than silently leaving a previously
+        // matched course's par/SI/rating sitting there under a now-different typed name
+        // (that mismatch is exactly how a round can end up scored against the wrong course).
+        gpsStatusEl.textContent = "";
+        buildHolesTable();
+        currentCourseTees = null;
+        document.getElementById("courseRating").value = "";
+        document.getElementById("slopeRating").value = "";
+        return;
+      }
       course.holes.forEach(h => {
         const parCell = document.querySelector(`.h-par[data-hole="${h.holeNumber}"]`);
         const siCell = document.querySelector(`.h-si[data-hole="${h.holeNumber}"]`);
