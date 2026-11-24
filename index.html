@@ -406,6 +406,7 @@
   .wrap.solo-fullscreen{height:100dvh;max-width:480px;padding:0;display:flex;flex-direction:column;overflow:hidden;}
   .wrap.solo-fullscreen .app-header{flex:0 0 auto;order:0;}
   .wrap.solo-fullscreen .content{flex:1;min-height:0;order:1;display:flex;flex-direction:column;padding:10px 16px;overflow:hidden;}
+  .wrap.solo-fullscreen #markOthersTab{flex:1;min-height:0;overflow-y:auto;}
   /* Schedule/Score/Leaderboards moved to the bottom, like a native app's tab bar, now that
      the top header has no hamburger to also anchor a menu off. */
   .wrap.solo-fullscreen .tab-bar{flex:0 0 auto;order:2;}
@@ -429,7 +430,9 @@
   .solo-strip-nav{display:flex;align-items:center;justify-content:space-between;padding:6px 2px;}
   .solo-strip-nav .arrow-btn{padding:6px 16px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--heading);font-weight:700;font-size:.78rem;cursor:pointer;}
   .solo-strip-nav .arrow-btn:disabled{opacity:.35;}
-  .solo-hole-focus{text-align:center;padding:10px 4px 0;}
+  .solo-hole-focus-row{display:flex;align-items:center;justify-content:center;gap:6px;padding:4px 4px 0;}
+  .solo-focus-arrow{flex:0 0 auto;padding:8px 12px;}
+  .solo-hole-focus{text-align:center;padding:10px 4px 0;flex:0 1 auto;min-width:0;}
   .solo-hole-focus .meta{font-size:1.3rem;font-weight:800;color:var(--ink);}
   .solo-hole-focus .meta b{color:var(--heading);}
   .solo-hole-focus .yard{font-size:.86rem;color:var(--muted);margin-top:3px;font-weight:600;}
@@ -2321,6 +2324,13 @@ function renderNewRound(){
             <label class="row" style="gap:6px;"><input type="radio" name="scoringMode" value="individual"> Everyone scores their own round</label>
           </div>
           <p class="muted" style="font-size:.78rem;margin:0;">Individual mode: each player opens this same round on their own phone and picks their name once — scores sync live either way, so switching later doesn't lose anything.</p>
+          <div id="markOthersWrap" style="display:none;margin-top:10px;">
+            <div class="checkbox-row">
+              <input type="checkbox" id="markOthersCb">
+              <label style="margin:0;" for="markOthersCb">I'll also enter scores for the rest of my group</label>
+            </div>
+            <p class="muted" style="font-size:.78rem;margin:4px 0 0;">Adds a "Mark others" button to the bottom bar on your phone — a simple tap-a-score view for everyone else, separate from your own GPS/shot-tracking screen.</p>
+          </div>
         </div>
       </details>
 
@@ -2749,8 +2759,11 @@ function renderNewRound(){
   updateFormatSummary();
 
   document.querySelectorAll('input[name="scoringMode"]').forEach(r => r.addEventListener("change", () => {
-    document.getElementById("summaryScoringMode").textContent = document.querySelector('input[name="scoringMode"]:checked').value === "individual"
+    const isIndividual = document.querySelector('input[name="scoringMode"]:checked').value === "individual";
+    document.getElementById("summaryScoringMode").textContent = isIndividual
       ? "Everyone scores their own round" : "One device scores everyone";
+    document.getElementById("markOthersWrap").style.display = isIndividual ? "" : "none";
+    if (!isIndividual) document.getElementById("markOthersCb").checked = false;
   }));
 
   // Scoring/marking-only means you're not one of the players, so there's no "which player
@@ -2918,6 +2931,7 @@ async function createRound(){
 
   const creatorIsPlaying = (document.querySelector('input[name="creatorRole"]:checked') || {}).value !== "marking";
   const scoringMode = (document.querySelector('input[name="scoringMode"]:checked') || {}).value || "shared";
+  const markOthersEnabled = scoringMode === "individual" && !!document.getElementById("markOthersCb").checked;
 
   msg.textContent = "Creating…";
   try{
@@ -2926,7 +2940,7 @@ async function createRound(){
       const teeTimesByFourball = Array.from({length: fourballCount}, (_, idx) => readTeeTimeForFourball(idx + 1));
       await createCompetition({
         roundName, courseName, roundDate, teeBox, modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
-        teamAName, teamBName, teamColorStyle, teamAColor, teamBColor, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount, creatorIsPlaying, ratingSlope, scoringMode
+        teamAName, teamBName, teamColorStyle, teamAColor, teamBColor, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount, creatorIsPlaying, ratingSlope, scoringMode, markOthersEnabled
       });
       return;
     }
@@ -2935,7 +2949,7 @@ async function createRound(){
 
     const roundRef = await addDoc(collection(db, "golf_rounds"), {
       name: roundName, courseName, roundDate, teeTime, teeBox, gameModes: modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
-      teamAName, teamBName, teamColorStyle, teamAColor, teamBColor, piekfynPairs, spectatorCode, ownerUid: currentUser ? currentUser.uid : null, creatorIsPlaying, scoringMode,
+      teamAName, teamBName, teamColorStyle, teamAColor, teamBColor, piekfynPairs, spectatorCode, ownerUid: currentUser ? currentUser.uid : null, creatorIsPlaying, scoringMode, markOthersEnabled,
       status: "active", deleted: false, startedAt: null, finishedAt: null, createdAt: serverTimestamp()
     });
 
@@ -2971,7 +2985,7 @@ function defaultPairsFor(players){
 async function createCompetition(cfg){
   const {
     roundName, courseName, roundDate, teeBox, modes, allianceCount, scrambleDrive, scrambleDriveParTypes,
-    teamAName, teamBName, teamColorStyle, teamAColor, teamBColor, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount, creatorIsPlaying, ratingSlope, scoringMode
+    teamAName, teamBName, teamColorStyle, teamAColor, teamBColor, piekfynPairs, playersByFourball, teeTimesByFourball, holes, fourballCount, creatorIsPlaying, ratingSlope, scoringMode, markOthersEnabled
   } = cfg;
   const isPiekfyn = modes.includes("piekfyn");
 
@@ -3005,7 +3019,7 @@ async function createCompetition(cfg){
       teamColorStyle: isPiekfyn ? teamColorStyle : null,
       teamAColor: isPiekfyn ? teamAColor : null, teamBColor: isPiekfyn ? teamBColor : null,
       piekfynPairs: isPiekfyn ? (isFirst ? piekfynPairs : defaultPairsFor(playersByFourball[fb - 1])) : null,
-      spectatorCode, competitionId: compRef.id, fourballIndex: fb, ownerUid: currentUser ? currentUser.uid : null, creatorIsPlaying, scoringMode,
+      spectatorCode, competitionId: compRef.id, fourballIndex: fb, ownerUid: currentUser ? currentUser.uid : null, creatorIsPlaying, scoringMode, markOthersEnabled,
       status: "active", deleted: false, startedAt: null, finishedAt: null, createdAt: serverTimestamp()
     });
 
@@ -3173,6 +3187,7 @@ async function renderScorer(roundId){
     ${renderScoringDrawer(`<button type="button" id="drawerScheduleLink" class="drawer-link">${svgIcon("clock")} Round settings</button>`, !needsStart && !finished)}
     <div class="tab-bar">
       <button class="tab-btn active" id="tabScoreBtn">Score</button>
+      ${isSolo && scorerData.round.markOthersEnabled ? `<button class="tab-btn" id="tabMarkOthersBtn">Mark others</button>` : ""}
       <button class="tab-btn" id="tabBoardsBtn" aria-label="Leaderboards" style="font-size:1.3rem;">${svgIcon("trophy")}</button>
     </div>
     <div class="content">
@@ -3208,6 +3223,8 @@ async function renderScorer(roundId){
       <div id="entryCard"></div>`)}
     </div>
 
+    ${isSolo && scorerData.round.markOthersEnabled ? `<div id="markOthersTab" style="display:none;"></div>` : ""}
+
     <div id="boardsTab" style="display:none;">
       <h2>Leaderboards</h2>
       <div id="boards"></div>
@@ -3217,6 +3234,8 @@ async function renderScorer(roundId){
 
   document.getElementById("tabScoreBtn").onclick = () => switchScorerTab("score");
   document.getElementById("tabBoardsBtn").onclick = () => switchScorerTab("boards");
+  const tabMarkOthersBtnEl = document.getElementById("tabMarkOthersBtn");
+  if (tabMarkOthersBtnEl) tabMarkOthersBtnEl.onclick = () => switchScorerTab("markothers");
   if (!needsStart){
     const prevHole = document.getElementById("prevHole");
     const nextHole = document.getElementById("nextHole");
@@ -3312,6 +3331,7 @@ async function renderScoringOnly(roundId){
     ${renderScoringDrawer("", !needsStart && !finished)}
     <div class="tab-bar">
       <button class="tab-btn active" id="tabScoreBtn">Score</button>
+      ${isSolo && scorerData.round.markOthersEnabled ? `<button class="tab-btn" id="tabMarkOthersBtn">Mark others</button>` : ""}
       <button class="tab-btn" id="tabBoardsBtn" aria-label="Leaderboards" style="font-size:1.3rem;">${svgIcon("trophy")}</button>
     </div>
     <div class="content">
@@ -3350,6 +3370,8 @@ async function renderScoringOnly(roundId){
       <div id="entryCard"></div>`)}
     </div>
 
+    ${isSolo && scorerData.round.markOthersEnabled ? `<div id="markOthersTab" style="display:none;"></div>` : ""}
+
     <div id="boardsTab" style="display:none;">
       <h2>Leaderboards</h2>
       <div id="boards"></div>
@@ -3359,6 +3381,8 @@ async function renderScoringOnly(roundId){
 
   document.getElementById("tabScoreBtn").onclick = () => switchScorerTab("score");
   document.getElementById("tabBoardsBtn").onclick = () => switchScorerTab("boards");
+  const tabMarkOthersBtnEl = document.getElementById("tabMarkOthersBtn");
+  if (tabMarkOthersBtnEl) tabMarkOthersBtnEl.onclick = () => switchScorerTab("markothers");
   if (!needsStart){
     const prevHole = document.getElementById("prevHole");
     const nextHole = document.getElementById("nextHole");
@@ -3741,10 +3765,55 @@ function switchScorerTab(which){
   if (scheduleTab) scheduleTab.style.display = which === "schedule" ? "" : "none";
   document.getElementById("scoreTab").style.display = which === "score" ? "" : "none";
   document.getElementById("boardsTab").style.display = which === "boards" ? "" : "none";
+  const markOthersTab = document.getElementById("markOthersTab");
+  if (markOthersTab){
+    markOthersTab.style.display = which === "markothers" ? "" : "none";
+    if (which === "markothers") renderMarkOthers();
+  }
   const tabScheduleBtn = document.getElementById("tabScheduleBtn");
   if (tabScheduleBtn) tabScheduleBtn.classList.toggle("active", which === "schedule");
+  const tabMarkOthersBtn = document.getElementById("tabMarkOthersBtn");
+  if (tabMarkOthersBtn) tabMarkOthersBtn.classList.toggle("active", which === "markothers");
   document.getElementById("tabScoreBtn").classList.toggle("active", which === "score");
   document.getElementById("tabBoardsBtn").classList.toggle("active", which === "boards");
+}
+// "Mark others" — for the one person in an individual-scoring round who's also entering
+// scores for the rest of their group, on the same device. Deliberately simple (no GPS/shot
+// tracking, just tap a score) and keyed to the SAME scorerHole as their own solo screen —
+// the whole group is assumed to be playing that hole together in real life. Writes through
+// saveScore(), the exact same path the shared/marking scorer already uses.
+function renderMarkOthers(){
+  const tab = document.getElementById("markOthersTab");
+  if (!tab) return;
+  const myId = getSoloPlayerId();
+  const others = scorerData.players.filter(p => p.id !== myId);
+  const hole = scorerData.holes.find(h => h.holeNumber === scorerHole);
+  if (!hole){ tab.innerHTML = ""; return; }
+  const chipOffsets = [-2,-1,0,1,2,3];
+  tab.innerHTML = `
+    <p class="muted" style="font-size:.8rem;margin:0 0 10px;">Hole ${hole.holeNumber} &middot; Par ${hole.par} &middot; S.I. ${hole.strokeIndex} &mdash; same hole as your own screen.</p>
+    ${others.map(p => {
+      const existing = scorerData.scores.find(s => s.playerId === p.id && s.holeNumber === scorerHole);
+      const sel = existing ? existing.grossStrokes : null;
+      const sr = strokesReceived(p.playingHandicap, hole.strokeIndex);
+      const chipsHtml = chipOffsets.map(off => {
+        const val = Math.max(1, hole.par + off);
+        const isActive = sel === val;
+        const pts = stablefordPoints(hole.par, val - sr);
+        return `<div class="solo-np-chip${isActive?' selected':''}" data-pid="${p.id}" data-s="${val}">
+          <div class="v">${val}</div><div class="lb">${SCORE_LABELS[String(off)]}</div>
+          <div class="pts">${pts} pt${pts===1?'':'s'}</div></div>`;
+      }).join("");
+      return `<div class="card">
+        <strong>${escapeHtml(p.name)}</strong>
+        <div class="solo-chip-row" style="margin-top:8px;">${chipsHtml}</div>
+      </div>`;
+    }).join("")}
+    ${others.length === 0 ? `<p class="muted">No other players in this round.</p>` : ""}
+  `;
+  tab.querySelectorAll(".solo-np-chip[data-pid]").forEach(el => {
+    el.onclick = () => { saveScore(el.dataset.pid, parseInt(el.dataset.s, 10)); renderMarkOthers(); };
+  });
 }
 
 const SCORE_LABELS = { "-2":"Eagle", "-1":"Birdie", "0":"Par", "1":"Bogey", "2":"Dbl", "3":"Tpl+" };
@@ -4101,9 +4170,13 @@ function renderSoloEntry(card, hole, finished){
 
   card.innerHTML = `
     <div class="solo-strip">${stripRow(0,"OUT")}${stripRow(9,"IN")}</div>
-    <div class="solo-hole-focus">
-      <div class="meta">Hole <b>${hole.holeNumber}</b> &middot; Par <b>${hole.par}</b> &middot; S.I. <b>${hole.strokeIndex}</b></div>
-      ${hole.yards ? `<div class="yard">${formatYardage(hole.yards).value} ${formatYardage(hole.yards).unit} to middle</div>` : ""}
+    <div class="solo-hole-focus-row">
+      <button type="button" class="secondary solo-focus-arrow" id="soloPrevHole" ${scorerHole===1?"disabled":""}>&larr;</button>
+      <div class="solo-hole-focus">
+        <div class="meta">Hole <b>${hole.holeNumber}</b> &middot; Par <b>${hole.par}</b> &middot; S.I. <b>${hole.strokeIndex}</b></div>
+        ${hole.yards ? `<div class="yard">${formatYardage(hole.yards).value} ${formatYardage(hole.yards).unit} to middle</div>` : ""}
+      </div>
+      <button type="button" class="secondary solo-focus-arrow" id="soloNextHole" ${scorerHole===18?"disabled":""}>&rarr;</button>
     </div>
     <div class="solo-gps-wrap"><div id="soloGpsHero"><div class="solo-gps-hero"><div class="num">&hellip;</div><div class="unit">loading</div></div></div></div>
     <div class="solo-chip-row">${chipsHtml}</div>
@@ -4121,6 +4194,10 @@ function renderSoloEntry(card, hole, finished){
     <div class="solo-shots-strip">${shotsHtml}</div>
   `;
 
+  const soloPrevHole = card.querySelector("#soloPrevHole");
+  const soloNextHole = card.querySelector("#soloNextHole");
+  if (soloPrevHole) soloPrevHole.onclick = () => { scorerHole = Math.max(1, scorerHole-1); renderEntry(); };
+  if (soloNextHole) soloNextHole.onclick = () => { scorerHole = Math.min(18, scorerHole+1); renderEntry(); };
   card.querySelectorAll(".solo-strip .cell[data-n]").forEach(el => {
     el.onclick = () => { scorerHole = parseInt(el.dataset.n, 10); renderEntry(); };
   });

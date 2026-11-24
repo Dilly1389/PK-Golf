@@ -13,6 +13,8 @@
 
 - **Scoring format needs correcting for tournaments.** Flagged 2026-11-23 — something about how the Scoring format panel (the 8 game modes) interacts with tournaments/multiple fourballs isn't right. Not detailed yet; needs Ruan to spell out the actual problem before this is actionable.
 
+- **Player stats (driving distance, putts, etc.).** Flagged 2026-11-24 — solo scoring's Mark shot/Track putt already captures distance/club/lie per shot (`shots` array on each score doc), but nothing reads it back except the current hole's little chip row. Deliberately deferred: (1) fix first — tapping a score chip and shot-tracking both write the same `grossStrokes` field and can silently overwrite each other, so stats built on that data could be wrong; (2) no signal yet that people actually use shot-tracking enough to make stats worth showing. Revisit once usage shows up and the score-conflict is fixed, not before.
+
 ## Friends & notifications
 
 - **Friends list.** Prerequisite for push notifications below (nothing to notify without a linked person) and useful on its own (reusable player picker instead of retyping names every round).
