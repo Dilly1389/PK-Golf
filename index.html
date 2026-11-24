@@ -369,9 +369,11 @@
      scrolling page, same as a native scoring screen. The GPS/yardage area is the only part
      that flexes, so everything else (header, strip, action/chip rows) stays put. */
   .wrap.solo-fullscreen{height:100dvh;max-width:480px;padding:0;display:flex;flex-direction:column;overflow:hidden;}
-  .wrap.solo-fullscreen .app-header{flex:0 0 auto;}
-  .wrap.solo-fullscreen .tab-bar{flex:0 0 auto;}
-  .wrap.solo-fullscreen .content{flex:1;min-height:0;display:flex;flex-direction:column;padding:10px 16px;overflow:hidden;}
+  .wrap.solo-fullscreen .app-header{flex:0 0 auto;order:0;}
+  .wrap.solo-fullscreen .content{flex:1;min-height:0;order:1;display:flex;flex-direction:column;padding:10px 16px;overflow:hidden;}
+  /* Schedule/Score/Leaderboards moved to the bottom, like a native app's tab bar, now that
+     the top header has no hamburger to also anchor a menu off. */
+  .wrap.solo-fullscreen .tab-bar{flex:0 0 auto;order:2;}
   .wrap.solo-fullscreen #scoreTab{flex:1;min-height:0;display:flex;flex-direction:column;}
   .wrap.solo-fullscreen #entryCard{flex:1;min-height:0;display:flex;flex-direction:column;}
   .wrap.solo-fullscreen .solo-gps-wrap{flex:1;min-height:60px;}
@@ -1082,7 +1084,7 @@ function renderScoringHeader(courseName, roundName){
   courseName = escapeHtml(courseName || "");
   roundName = escapeHtml(roundName || "");
   return `
-    <div class="app-header">
+    <div class="app-header" style="text-align:center;">
       <h1 style="margin:0 0 2px;">${courseName}</h1>
       ${roundName ? `<p class="subtitle">${roundName}</p>` : ""}
     </div>`;
@@ -3788,7 +3790,10 @@ function renderSoloEntry(card, hole, finished){
 
   card.innerHTML = `
     <div class="solo-strip">${stripRow(0,"OUT")}${stripRow(9,"IN")}</div>
-    ${hole.yards ? `<div class="solo-hole-focus"><div class="yard">${hole.yards} yds to green centre</div></div>` : ""}
+    <div class="solo-hole-focus">
+      <div class="meta">Hole <b>${hole.holeNumber}</b> &middot; Par <b>${hole.par}</b> &middot; S.I. <b>${hole.strokeIndex}</b></div>
+      ${hole.yards ? `<div class="yard">${hole.yards} yds to green centre</div>` : ""}
+    </div>
     <div class="solo-gps-wrap"><div id="soloGpsHero"><div class="solo-gps-hero"><div class="num">&hellip;</div><div class="unit">loading</div></div></div></div>
     <div class="solo-chip-row">${chipsHtml}</div>
     <div class="solo-other-stepper" id="soloOtherStepper">
@@ -3857,7 +3862,9 @@ function renderEntry(){
   if (!holeLabel || !card) return;   // the "Start round" gate is showing instead — nothing to fill in yet
   const hole = scorerData.holes.find(h => h.holeNumber === scorerHole);
   const finished = scorerData.round.status === "finished";
-  holeLabel.textContent = `Hole ${scorerHole} · Par ${hole.par} · SI ${hole.strokeIndex}`;
+  // Solo mode shows its own bigger "Hole · Par · S.I." line inside the card itself
+  // (renderSoloEntry's .solo-hole-focus), so the compact nav row stays arrows-only here.
+  holeLabel.textContent = scorerData.round.scoringMode === "individual" ? "" : `Hole ${scorerHole} · Par ${hole.par} · SI ${hole.strokeIndex}`;
 
   if (scorerData.round.scoringMode === "individual"){
     renderSoloEntry(card, hole, finished);
