@@ -615,11 +615,23 @@ function slugify(name){
 }
 async function saveCourseToDatabase(courseName, holes, source, extra, ratingSlope){
   const slug = slugify(courseName);
+  const ref = doc(db, "golf_courses", slug);
+  // Re-saved every time a round is created with this course, so we have to merge rather than
+  // overwrite — a bare setDoc() here was silently wiping lat/lng, greenPins and per-hole yards
+  // whenever a round was created from a form that didn't happen to carry them, since setDoc
+  // without merge replaces the whole document with only the fields listed below.
+  const existingSnap = await getDoc(ref);
+  const existingHolesByNum = {};
+  if (existingSnap.exists()){
+    (existingSnap.data().holes || []).forEach(h => { existingHolesByNum[h.holeNumber] = h; });
+  }
   const data = {
     name: courseName,
     holes: holes.map(h => {
       const hole = { holeNumber: h.holeNumber, par: h.par, strokeIndex: h.strokeIndex };
-      if (h.yards) hole.yards = h.yards;
+      const existingHole = existingHolesByNum[h.holeNumber];
+      const yards = h.yards || (existingHole && existingHole.yards);
+      if (yards) hole.yards = yards;
       return hole;
     }),
     updatedAt: serverTimestamp()
@@ -635,7 +647,7 @@ async function saveCourseToDatabase(courseName, holes, source, extra, ratingSlop
     if (ratingSlope.courseRating != null) data.courseRating = ratingSlope.courseRating;
     if (ratingSlope.slopeRating != null) data.slopeRating = ratingSlope.slopeRating;
   }
-  await setDoc(doc(db, "golf_courses", slug), data);
+  await setDoc(ref, data, { merge: true });
 }
 function matchTeeRatingSlope(tees, teeBoxName){
   if (!tees || !tees.length) return null;
