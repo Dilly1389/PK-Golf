@@ -2204,6 +2204,15 @@ function renderNewRound(){
         if (parCell) parCell.value = h.par;
         if (siCell) siCell.value = h.strokeIndex;
       });
+      // createRound() only ever pulls yardage from golfcoreSourceSelected.holesYards — that's
+      // normally set by the live GolfCore search path (selectGolfCoreCourse), which this isn't.
+      // Without this, picking a saved course here loses its yardage entirely even though the
+      // course doc itself has it, and the solo-scoring GPS screen silently shows no distance.
+      const holesYards = {};
+      course.holes.forEach(h => { if (h.yards) holesYards[h.holeNumber] = h.yards; });
+      if (Object.keys(holesYards).length){
+        golfcoreSourceSelected = { name: course.source || null, url: course.sourceUrl || null, parTotal: course.parTotal || null, tees: course.tees || null, holesYards };
+      }
       fillRatingSlope(course.tees, course.courseRating != null && course.slopeRating != null ? { courseRating: course.courseRating, slopeRating: course.slopeRating } : null);
       const pinCount = Object.keys(course.greenPins || {}).length;
       gpsStatusEl.textContent = pinCount > 0
