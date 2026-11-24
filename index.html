@@ -24,6 +24,7 @@
   :root{
     --ink:#1a1a1a;
     --paper:#ffffff;
+    --surface:#ffffff;
     --line:#e0d5d5;
     --brand-dark:#7a0f0f;
     --brand:#a11212;
@@ -33,6 +34,44 @@
     --gold-dim:#fdf6e3;
     --danger:#3a3a3a;
     --muted:#7a7a7a;
+    --under:#2e8b3d;
+    --over:#b23c3c;
+  }
+  /* Dark mode — "System" (the default) follows the OS via prefers-color-scheme; explicitly
+     picking Light or Dark in Preferences sets data-theme on <html> and overrides that. */
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#ece6e6;
+      --paper:#161010;
+      --surface:#241c1c;
+      --line:#3d2f2f;
+      --brand-dark:#f29a9a;
+      --brand:#c41818;
+      --brand-light:#e14b4b;
+      --brand-dim:#3a2424;
+      --gold:#d9b94a;
+      --gold-dim:#3a3320;
+      --danger:#d8d8d8;
+      --muted:#a89d9d;
+      --under:#5fd576;
+      --over:#ff6b6b;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ink:#ece6e6;
+    --paper:#161010;
+    --surface:#241c1c;
+    --line:#3d2f2f;
+    --brand-dark:#f29a9a;
+    --brand:#c41818;
+    --brand-light:#e14b4b;
+    --brand-dim:#3a2424;
+    --gold:#d9b94a;
+    --gold-dim:#3a3320;
+    --danger:#d8d8d8;
+    --muted:#a89d9d;
+    --under:#5fd576;
+    --over:#ff6b6b;
   }
   *{box-sizing:border-box;}
   body{
@@ -57,7 +96,7 @@
   label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:4px;margin-top:12px;}
   input[type=text], input[type=number], select{
     width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;
-    background:#fff;font-size:1rem;color:var(--ink);
+    background:var(--surface);font-size:1rem;color:var(--ink);
   }
   input:focus, select:focus{outline:2px solid var(--brand-light);outline-offset:1px;}
   /* Buttons/links default to the browser's native focus ring, which can be low-contrast against
@@ -79,7 +118,7 @@
   .btn-pill-secondary{display:block;width:100%;padding:14px 16px;font-size:.95rem;font-weight:700;border-radius:999px;background:var(--gold-dim);color:var(--brand-dark);border:1px solid var(--line);margin-bottom:22px;}
   button:disabled{opacity:.4;cursor:not-allowed;}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
-  .card{border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:12px;background:#fff;box-shadow:0 1px 3px rgba(26,10,10,.06), 0 1px 2px rgba(26,10,10,.04);}
+  .card{border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:12px;background:var(--surface);box-shadow:0 1px 3px rgba(26,10,10,.06), 0 1px 2px rgba(26,10,10,.04);}
   table{width:100%;border-collapse:collapse;font-size:.85rem;}
   th,td{border:1px solid var(--line);padding:5px 6px;text-align:center;}
   th{background:var(--brand-dark);font-weight:600;font-size:.75rem;color:#fff;}
@@ -100,7 +139,7 @@
   .checkbox-row{display:flex;align-items:center;gap:8px;margin:8px 0;}
   .checkbox-row input{width:auto;}
   .link-box{display:flex;gap:8px;align-items:center;background:var(--gold-dim);border:1px solid var(--gold);border-radius:8px;padding:10px 12px;margin-top:8px;}
-  .link-box input{background:#fff;font-size:.8rem;}
+  .link-box input{background:var(--surface);font-size:.8rem;}
   .muted{color:var(--muted);font-size:.82rem;}
   .team-a{color:var(--brand-light);font-weight:600;}
   .team-b{color:var(--ink);font-weight:700;}
@@ -165,10 +204,11 @@
   .menu-btn:active{background:rgba(255,255,255,.18);}
   .app-drawer-overlay{position:fixed;inset:0;background:rgba(26,10,10,.45);z-index:40;opacity:0;pointer-events:none;transition:opacity .2s;}
   .app-drawer-overlay.open{opacity:1;pointer-events:auto;}
-  .app-drawer{position:fixed;top:0;left:0;bottom:0;width:78vw;max-width:300px;background:#fff;z-index:41;box-shadow:2px 0 18px rgba(0,0,0,.25);transform:translateX(-100%);transition:transform .22s ease;display:flex;flex-direction:column;padding:10px 0;overflow-y:auto;}
+  .app-drawer{position:fixed;top:0;left:0;bottom:0;width:78vw;max-width:300px;background:var(--surface);z-index:41;box-shadow:2px 0 18px rgba(0,0,0,.25);transform:translateX(-100%);transition:transform .22s ease;display:flex;flex-direction:column;padding:10px 0;overflow-y:auto;}
   .app-drawer.open{transform:translateX(0);}
   .app-drawer-head{display:flex;align-items:center;padding:10px 18px 16px;border-bottom:1px solid var(--line);margin-bottom:8px;font-size:1.05rem;font-weight:800;color:var(--brand-dark);}
   .drawer-link{display:flex;align-items:center;gap:12px;padding:14px 18px;color:var(--ink);text-decoration:none;font-size:1rem;font-weight:600;}
+  button.drawer-link{background:none;border:none;border-radius:0;width:100%;text-align:left;cursor:pointer;font-family:inherit;}
   .drawer-link:active{background:var(--gold-dim);color:var(--brand-dark);}
 
   /* Account screen's profile header, GolfPad-style - a real photo when one's been uploaded,
@@ -188,7 +228,7 @@
   /* GolfPad-style round card for Playing history: course/date on the left, up to 3 circular
      stat badges on the right. */
   .round-card{
-    border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;background:#fff;
+    border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;background:var(--surface);
     box-shadow:0 1px 3px rgba(26,10,10,.06), 0 1px 2px rgba(26,10,10,.04);
     display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
   }
@@ -231,7 +271,7 @@
     display:flex;align-items:center;justify-content:center;padding:24px 16px;
   }
   .auth-gate-card{
-    background:#fff;border-radius:14px;max-width:420px;width:100%;
+    background:var(--surface);border-radius:14px;max-width:420px;width:100%;
     padding:28px 24px 24px;box-shadow:0 10px 40px rgba(0,0,0,.25);
   }
   .auth-gate-logo{width:96px;height:96px;border-radius:20px;margin:0 auto 14px;display:block;box-shadow:0 4px 14px rgba(0,0,0,.2);}
@@ -243,7 +283,7 @@
   .password-checklist li.met .pw-check-icon{background:#1f9254;border-color:#1f9254;color:#fff;}
   input[type=email], input[type=password]{
     width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;
-    background:#fff;font-size:1rem;color:var(--ink);
+    background:var(--surface);font-size:1rem;color:var(--ink);
   }
   .auth-switch-link{background:none;border:none;color:var(--brand-light);font-weight:700;cursor:pointer;font-family:inherit;font-size:inherit;padding:0;text-decoration:underline;}
   @keyframes pulse{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
@@ -386,13 +426,13 @@
   .solo-strip .cell .sc{display:block;font-size:.74rem;font-weight:800;color:var(--ink);min-height:13px;}
   .solo-strip .cell.current{background:var(--gold);}
   .solo-strip .cell.current .hn{color:var(--brand-dark);}
-  .solo-strip .cell.under .sc{color:#2e8b3d;}
-  .solo-strip .cell.over .sc{color:#b23c3c;}
+  .solo-strip .cell.under .sc{color:var(--under);}
+  .solo-strip .cell.over .sc{color:var(--over);}
   .solo-strip .cell.sub{background:var(--brand-dark);flex:0 0 32px;}
   .solo-strip .cell.sub .hn{color:rgba(255,255,255,.7);font-size:.56rem;}
   .solo-strip .cell.sub .sc{color:#fff;}
   .solo-strip-nav{display:flex;align-items:center;justify-content:space-between;padding:6px 2px;}
-  .solo-strip-nav .arrow-btn{padding:6px 16px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--brand-dark);font-weight:700;font-size:.78rem;cursor:pointer;}
+  .solo-strip-nav .arrow-btn{padding:6px 16px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--brand-dark);font-weight:700;font-size:.78rem;cursor:pointer;}
   .solo-strip-nav .arrow-btn:disabled{opacity:.35;}
   .solo-hole-focus{text-align:center;padding:10px 4px 0;}
   .solo-hole-focus .meta{font-size:1.3rem;font-weight:800;color:var(--ink);}
@@ -404,14 +444,14 @@
   .solo-gps-hero.empty .no-pin-text{font-size:.9rem;color:var(--muted);margin-bottom:8px;text-align:center;}
   .solo-set-pin-link{color:var(--brand);font-weight:800;font-size:.9rem;cursor:pointer;text-align:center;display:block;}
   .solo-action-row{display:flex;gap:8px;padding:0 4px 14px;justify-content:center;flex-wrap:wrap;}
-  .solo-gps-btn{padding:10px 16px;border-radius:999px;font-size:.78rem;font-weight:700;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;white-space:nowrap;}
+  .solo-gps-btn{padding:10px 16px;border-radius:999px;font-size:.78rem;font-weight:700;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap;}
   .solo-gps-btn.primary{background:var(--gold);border-color:var(--gold);color:var(--brand-dark);}
   .solo-gps-btn.putt{background:#2e8b3d;border-color:#2e8b3d;color:#fff;}
   .solo-gps-btn.map{background:var(--brand);border-color:var(--brand);color:#fff;}
   .solo-shots-strip{margin:0 4px 8px;font-size:.72rem;color:var(--muted);min-height:16px;text-align:center;}
   .solo-shots-strip .chip{display:inline-block;background:var(--gold-dim);color:var(--brand-dark);font-weight:700;padding:2px 8px;border-radius:999px;margin:2px;font-size:.68rem;}
   .solo-chip-row{display:flex;gap:6px;flex-wrap:nowrap;}
-  .solo-np-chip{flex:1;min-width:0;padding:10px 2px;border-radius:8px;border:1px solid var(--line);background:#fff;text-align:center;cursor:pointer;}
+  .solo-np-chip{flex:1;min-width:0;padding:10px 2px;border-radius:8px;border:1px solid var(--line);background:var(--surface);text-align:center;cursor:pointer;}
   .solo-np-chip .v{font-weight:700;font-size:.95rem;color:var(--ink);}
   .solo-np-chip .lb{font-size:.62rem;opacity:.75;color:var(--muted);}
   .solo-np-chip .pts{font-size:.6rem;font-weight:700;opacity:.9;color:var(--brand-dark);}
@@ -422,15 +462,15 @@
   .solo-entered-note{font-size:.76rem;color:var(--muted);}
   .solo-other-stepper{display:none;align-items:center;gap:14px;justify-content:center;padding:10px 0 2px;}
   .solo-other-stepper.open{display:flex;}
-  .solo-other-stepper .circ-btn{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:#fff;color:var(--brand);font-weight:800;font-size:1.1rem;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .solo-other-stepper .circ-btn{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--brand);font-weight:800;font-size:1.1rem;display:flex;align-items:center;justify-content:center;cursor:pointer;}
   .solo-other-stepper .val{font-size:1.3rem;font-weight:800;min-width:30px;text-align:center;}
   .solo-other-stepper .set-btn{padding:7px 16px;border-radius:999px;background:var(--brand-dark);color:#fff;font-weight:700;font-size:.78rem;cursor:pointer;}
   .solo-mini-total{text-align:center;font-size:.8rem;color:var(--muted);font-weight:700;padding:10px 0 2px;}
 
-  .solo-whoami-list .wa-btn{display:block;width:100%;text-align:left;padding:14px 16px;margin-bottom:8px;border-radius:10px;border:1px solid var(--line);background:#fff;font-weight:700;cursor:pointer;}
+  .solo-whoami-list .wa-btn{display:block;width:100%;text-align:left;padding:14px 16px;margin-bottom:8px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font-weight:700;cursor:pointer;}
   .solo-whoami-list .wa-btn:hover{border-color:var(--brand);}
 
-  .solo-map-overlay{position:fixed;inset:0;background:#fff;display:none;flex-direction:column;z-index:500;}
+  .solo-map-overlay{position:fixed;inset:0;background:var(--surface);display:none;flex-direction:column;z-index:500;}
   .solo-map-overlay.open{display:flex;}
   .solo-map-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line);}
   .solo-map-head .x{font-size:1.2rem;color:var(--muted);cursor:pointer;}
@@ -450,7 +490,7 @@
 
   .solo-sheet-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;z-index:600;}
   .solo-sheet-backdrop.open{display:block;}
-  .solo-sheet{position:fixed;left:0;right:0;bottom:0;background:#fff;border-radius:18px 18px 0 0;box-shadow:0 -4px 20px rgba(0,0,0,.25);transform:translateY(100%);transition:transform .22s ease;z-index:601;max-height:88%;overflow-y:auto;}
+  .solo-sheet{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-radius:18px 18px 0 0;box-shadow:0 -4px 20px rgba(0,0,0,.25);transform:translateY(100%);transition:transform .22s ease;z-index:601;max-height:88%;overflow-y:auto;}
   .solo-sheet.open{transform:translateY(0);}
   .solo-sheet-grab{width:38px;height:4px;background:var(--line);border-radius:999px;margin:10px auto 4px;}
   .solo-sheet-title{padding:6px 18px 2px;font-weight:800;font-size:1rem;}
@@ -468,9 +508,14 @@
   .solo-club-group{padding:2px 18px 10px;}
   .solo-club-group-label{font-size:.66rem;font-weight:800;letter-spacing:.06em;color:var(--gold);margin-bottom:6px;text-transform:uppercase;}
   .solo-club-chips{display:flex;flex-wrap:wrap;gap:7px;}
-  .solo-club-chip{padding:9px 16px;border-radius:999px;border:1.5px solid var(--line);font-weight:700;font-size:.82rem;color:var(--ink);cursor:pointer;background:#fff;}
+  .solo-club-chip{padding:9px 16px;border-radius:999px;border:1.5px solid var(--line);font-weight:700;font-size:.82rem;color:var(--ink);cursor:pointer;background:var(--surface);}
   .solo-club-chip.selected{background:var(--brand-dark);border-color:var(--brand-dark);color:#fff;}
   .solo-sheet-done{margin:18px;padding:14px;border-radius:999px;background:var(--brand-dark);color:#fff;text-align:center;font-weight:800;letter-spacing:.03em;cursor:pointer;}
+  .solo-more-item{padding:16px 18px;font-size:1rem;font-weight:700;color:var(--ink);border-bottom:1px solid var(--line);cursor:pointer;}
+  .solo-more-item:last-child{border-bottom:none;}
+  .solo-more-item.danger{color:var(--brand);}
+  .solo-more-item.muted{color:var(--muted);}
+  .solo-gps-btn.more{background:var(--surface);border-color:var(--line);color:var(--muted);flex:0 0 auto;padding:10px 14px;}
 
   /* ===== New Round: hero + collapsible summary panels ===== */
   .nr-hero{position:relative;height:110px;margin:0 0 10px;border-radius:14px;background:linear-gradient(135deg, var(--brand-dark), var(--brand));display:flex;flex-direction:column;justify-content:flex-end;padding:0 16px 12px;color:#fff;}
@@ -479,7 +524,7 @@
   .nr-nearby{margin:0 0 12px;}
   .nr-nearby .nh{font-size:.76rem;font-weight:800;color:var(--brand-dark);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;}
   .nr-nearby .status{font-size:.78rem;color:var(--muted);padding:4px 0;}
-  .nr-course-row{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;cursor:pointer;background:#fff;}
+  .nr-course-row{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;cursor:pointer;background:var(--surface);}
   .nr-course-row .cn{font-weight:700;font-size:.86rem;}
   .nr-course-row .cm{font-size:.74rem;color:var(--muted);margin-top:1px;}
   .nr-course-row .dist{font-size:.8rem;font-weight:800;color:var(--brand-dark);white-space:nowrap;}
@@ -501,7 +546,7 @@
   .nr-hero-top .nr-hero-sub{font-size:.78rem;opacity:.85;}
   .nr-content{padding:14px 16px 24px;}
 
-  .nr-picker-overlay{position:fixed;inset:0;background:#fff;display:none;flex-direction:column;z-index:500;}
+  .nr-picker-overlay{position:fixed;inset:0;background:var(--surface);display:none;flex-direction:column;z-index:500;}
   .nr-picker-overlay.open{display:flex;}
   .nr-picker-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);flex:0 0 auto;}
   .nr-picker-head .back{font-size:1.2rem;color:var(--brand-dark);cursor:pointer;}
@@ -788,6 +833,53 @@ async function restoreCompetition(competitionId){
   roundsSnap.docs.forEach(d => batch.update(doc(db, "golf_rounds", d.id), { deleted: false, deletedAt: null }));
   await batch.commit();
 }
+
+/* ---------- Preferences — device-local display/behaviour settings, not round data,
+   so these live in localStorage rather than Firestore. ---------- */
+const PREFS_KEY = "pk_golf_prefs";
+const PREFS_DEFAULTS = { units: "yards", screenAlwaysOn: false, shotTracking: true, theme: "system" };
+function getPrefs(){
+  try { return { ...PREFS_DEFAULTS, ...JSON.parse(localStorage.getItem(PREFS_KEY) || "{}") }; }
+  catch(e){ return { ...PREFS_DEFAULTS }; }
+}
+function setPrefs(patch){
+  const next = { ...getPrefs(), ...patch };
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify(next)); } catch(e){}
+  if ("screenAlwaysOn" in patch) applyWakeLockPref(next.screenAlwaysOn);
+  if ("theme" in patch) applyThemePref(next.theme);
+  return next;
+}
+// "system" removes the attribute entirely so the prefers-color-scheme media query decides;
+// "light"/"dark" force it regardless of the device's own setting.
+function applyThemePref(theme){
+  if (theme === "light" || theme === "dark") document.documentElement.setAttribute("data-theme", theme);
+  else document.documentElement.removeAttribute("data-theme");
+}
+// Scorecard yardage is stored in yards; GPS/Leaflet distances come out in metres - converting
+// at display time (rather than storing a user's chosen unit) means switching units never
+// touches saved round data.
+function formatYardage(yards){
+  return getPrefs().units === "metres" ? { value: Math.round(yards * 0.9144), unit: "m" } : { value: yards, unit: "yds" };
+}
+function formatMetres(metres){
+  return getPrefs().units === "yards" ? { value: Math.round(metres / 0.9144), unit: "yards" } : { value: metres, unit: "metres" };
+}
+let wakeLockSentinel = null;
+async function applyWakeLockPref(on){
+  try {
+    if (on && "wakeLock" in navigator){
+      wakeLockSentinel = await navigator.wakeLock.request("screen");
+    } else if (!on && wakeLockSentinel){
+      await wakeLockSentinel.release();
+      wakeLockSentinel = null;
+    }
+  } catch(e){ /* denied or unsupported — screen-on is a nice-to-have, fail silently */ }
+}
+// The Wake Lock is released by the browser whenever the tab is hidden (switching apps,
+// locking the phone) - re-request it once the player comes back if they still want it.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && getPrefs().screenAlwaysOn) applyWakeLockPref(true);
+});
 
 /* ---------- Auth & golfer profiles ---------- */
 let currentUser = null;
@@ -1099,6 +1191,7 @@ function renderScoringDrawer(scheduleLinkHtml, showFinish){
     <nav id="scoringDrawer" class="app-drawer">
       <div class="app-drawer-head">Round menu</div>
       ${scheduleLinkHtml}
+      <a href="#/preferences" class="drawer-link">${svgIcon("gear")} Preferences</a>
       ${showFinish ? `<div style="padding:16px 18px;margin-top:auto;border-top:1px solid var(--line);"><button id="finishBtn" type="button" style="width:100%;background:var(--danger);border-color:var(--danger);">Finish round</button></div>` : ""}
     </nav>`;
 }
@@ -1239,6 +1332,7 @@ async function render(){
   if (parts[0] === "competition" && parts[1]) return renderCompetition(parts[1]);
   if (parts[0] === "standings" && parts[1]) return renderStandings(parts[1]);
   if (parts[0] === "account") return renderAccount();
+  if (parts[0] === "preferences") return renderPreferences();
 
   // Home screen requires sign-in, same as PK Fishing's gate — shared round/spectator/
   // scoring links above stay open to anyone with the link regardless of auth state.
@@ -1264,6 +1358,126 @@ function renderAccount(){
     bodyHtml: `<div class="card" id="accountCard"></div>`,
   });
   renderAccountCard();
+}
+
+/* ============================================================
+   PREFERENCES — device-local display/behaviour settings (localStorage,
+   not Firestore), reachable from the scoring screen's hamburger menu.
+   ============================================================ */
+function renderPreferences(){
+  const profile = currentGolferProfile || {};
+  const prefs = getPrefs();
+  mountPage({
+    title: "Preferences",
+    subtitle: "",
+    route: null,
+    bodyHtml: `
+      <button id="backFromPrefsBtn" class="secondary" type="button" style="margin-bottom:14px;">&larr; Back</button>
+
+      ${currentUser ? `
+      <a href="#/account" class="card" style="display:block;text-decoration:none;color:inherit;">
+        <div class="profile-header" style="padding:4px 0;">
+          <div class="profile-avatar" style="width:48px;height:48px;font-size:1.1rem;">${profile.photoURL ? `<img src="${escapeHtml(profile.photoURL)}" alt="">` : escapeHtml((profile.name || currentUser.email || "?").trim().charAt(0).toUpperCase())}</div>
+          <h2 class="profile-name" style="margin:8px 0 0;font-size:1rem;">${escapeHtml(profile.name || "My account")}</h2>
+          <p class="muted" style="margin:2px 0 0;font-size:.82rem;">${escapeHtml(currentUser.email || "")}</p>
+          <p class="profile-handicap" style="margin:2px 0 0;font-size:.85rem;">Handicap index: ${profile.handicap != null ? profile.handicap : "–"}</p>
+        </div>
+      </a>` : ""}
+
+      <h2>GPS &amp; shot tracking</h2>
+      <div class="card">
+        <div class="checkbox-row">
+          <input type="checkbox" id="prefShotTracking" ${prefs.shotTracking ? "checked" : ""}>
+          <label style="margin:0;" for="prefShotTracking">Shot tracking (Mark shot / Track putt)</label>
+        </div>
+        <p class="muted" style="font-size:.78rem;margin:2px 0 0 24px;">Turn off to hide Mark shot and Track putt on the scoring screen — the map and yardage still show.</p>
+      </div>
+
+      <h2>Display</h2>
+      <div class="card">
+        <label style="margin-top:0;">Units</label>
+        <div class="row" style="gap:8px;">
+          <button type="button" id="prefUnitsYards" class="${prefs.units === "yards" ? "" : "secondary"}" style="flex:1;">Yards</button>
+          <button type="button" id="prefUnitsMetres" class="${prefs.units === "metres" ? "" : "secondary"}" style="flex:1;">Metres</button>
+        </div>
+        <div class="checkbox-row" style="margin-top:16px;">
+          <input type="checkbox" id="prefScreenOn" ${prefs.screenAlwaysOn ? "checked" : ""}>
+          <label style="margin:0;" for="prefScreenOn">Keep screen on while scoring</label>
+        </div>
+        <p class="muted" style="font-size:.78rem;margin:2px 0 0 24px;">Stops your phone locking mid-round. Uses more battery.</p>
+
+        <label>Appearance</label>
+        <div class="row" style="gap:8px;">
+          <button type="button" id="prefThemeSystem" class="${prefs.theme === "system" ? "" : "secondary"}" style="flex:1;">System</button>
+          <button type="button" id="prefThemeLight" class="${prefs.theme === "light" ? "" : "secondary"}" style="flex:1;">Light</button>
+          <button type="button" id="prefThemeDark" class="${prefs.theme === "dark" ? "" : "secondary"}" style="flex:1;">Dark</button>
+        </div>
+      </div>
+
+      ${currentUser ? `
+      <h2>Your data</h2>
+      <div class="card">
+        <button type="button" id="exportHistoryBtn" class="secondary" style="width:100%;">Download round history (CSV)</button>
+      </div>` : ""}
+    `,
+  });
+
+  document.getElementById("backFromPrefsBtn").onclick = () => history.back();
+  document.getElementById("prefShotTracking").onchange = (e) => setPrefs({ shotTracking: e.target.checked });
+  document.getElementById("prefScreenOn").onchange = (e) => setPrefs({ screenAlwaysOn: e.target.checked });
+  document.getElementById("prefUnitsYards").onclick = () => { setPrefs({ units: "yards" }); renderPreferences(); };
+  document.getElementById("prefUnitsMetres").onclick = () => { setPrefs({ units: "metres" }); renderPreferences(); };
+  document.getElementById("prefThemeSystem").onclick = () => { setPrefs({ theme: "system" }); renderPreferences(); };
+  document.getElementById("prefThemeLight").onclick = () => { setPrefs({ theme: "light" }); renderPreferences(); };
+  document.getElementById("prefThemeDark").onclick = () => { setPrefs({ theme: "dark" }); renderPreferences(); };
+  const exportBtn = document.getElementById("exportHistoryBtn");
+  if (exportBtn) exportBtn.onclick = () => exportPlayingHistoryCsv(exportBtn);
+}
+
+async function exportPlayingHistoryCsv(btn){
+  if (!currentUser) return;
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Preparing…";
+  try {
+    const roundsSnap = await getDocs(query(collection(db, "golf_rounds"), where("ownerUid", "==", currentUser.uid)));
+    const rows = [["Round date", "Course", "Player", "Hole", "Par", "Gross strokes"]];
+    for (const roundDoc of roundsSnap.docs){
+      const round = roundDoc.data();
+      const [playersSnap, scoresSnap, holesSnap] = await Promise.all([
+        getDocs(collection(db, "golf_rounds", roundDoc.id, "players")),
+        getDocs(collection(db, "golf_rounds", roundDoc.id, "scores")),
+        getDocs(collection(db, "golf_rounds", roundDoc.id, "holes")),
+      ]);
+      const playersById = {};
+      playersSnap.docs.forEach(p => { playersById[p.id] = p.data().name || p.id; });
+      const parByHole = {};
+      holesSnap.docs.forEach(h => { parByHole[h.data().holeNumber] = h.data().par; });
+      scoresSnap.docs.forEach(s => {
+        const sc = s.data();
+        rows.push([
+          round.roundDate || "",
+          round.courseName || "",
+          playersById[sc.playerId] || sc.playerId,
+          sc.holeNumber,
+          parByHole[sc.holeNumber] ?? "",
+          sc.grossStrokes != null ? sc.grossStrokes : "",
+        ]);
+      });
+    }
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "pk-golf-playing-history.csv";
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } catch(e){
+    alert("Couldn't export your history right now — try again in a moment.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
 }
 
 // Full-screen sign-in gate shown on the home screen when nobody's signed in, matching
@@ -2945,7 +3159,7 @@ async function renderScorer(roundId){
 
   app.innerHTML = `
     ${renderScoringHeader(scorerData.round.courseName, scorerData.round.name)}
-    ${renderScoringDrawer(`<a href="#" id="drawerScheduleLink" class="drawer-link">${svgIcon("clock")} Round settings</a>`, !needsStart && !finished)}
+    ${renderScoringDrawer(`<button type="button" id="drawerScheduleLink" class="drawer-link">${svgIcon("clock")} Round settings</button>`, !needsStart && !finished)}
     <div class="tab-bar">
       <button class="tab-btn active" id="tabScoreBtn">Score</button>
       <button class="tab-btn" id="tabBoardsBtn" aria-label="Leaderboards" style="font-size:1.3rem;">${svgIcon("trophy")}</button>
@@ -3570,6 +3784,30 @@ async function addSoloShot(playerId, holeNumber, shot){
     playerId, holeNumber, grossStrokes, shots, updatedAt: serverTimestamp()
   }, { merge: true }).catch(showScoreError);
 }
+// A penalty is just another shot entry with no distance/lie/club — it still counts as a
+// stroke (shots.length drives grossStrokes same as any other shot). "Re-hit" is a label only:
+// our GPS hero is always live-position-based, not shot-history-based, so there's no prior
+// distance to roll back to - the distinction just shows up in the shots-strip chip.
+function addSoloPenalty(playerId, holeNumber, rehit){
+  return addSoloShot(playerId, holeNumber, { penalty: true, rehit: !!rehit });
+}
+async function undoLastSoloShot(playerId, holeNumber){
+  const existing = scorerData.scores.find(s => s.playerId === playerId && s.holeNumber === holeNumber);
+  if (!existing || !existing.shots || !existing.shots.length) return;
+  const shots = existing.shots.slice(0, -1);
+  const grossStrokes = shots.length;
+  const idx = scorerData.scores.findIndex(s => s.playerId === playerId && s.holeNumber === holeNumber);
+  if (!shots.length){
+    scorerData.scores.splice(idx, 1);
+    renderEntry(); renderBoards();
+    return deleteDoc(doc(db, "golf_rounds", scorerData.round.id, "scores", `${playerId}_${holeNumber}`)).catch(showScoreError);
+  }
+  scorerData.scores[idx] = { playerId, holeNumber, grossStrokes, shots };
+  renderEntry(); renderBoards();
+  return setDoc(doc(db, "golf_rounds", scorerData.round.id, "scores", `${playerId}_${holeNumber}`), {
+    playerId, holeNumber, grossStrokes, shots, updatedAt: serverTimestamp()
+  }, { merge: true }).catch(showScoreError);
+}
 
 let soloLieSelected = "fairway", soloClubSelected = "7i", soloSkipShotPrompt = false, soloPendingShot = null;
 const SOLO_LIES = [
@@ -3605,6 +3843,14 @@ function ensureSoloOverlays(){
       <div class="solo-sheet-section-label">Club</div>
       <div id="soloClubGrid"></div>
       <div class="solo-sheet-done" id="soloSheetDone">Save shot</div>
+    </div>
+    <div class="solo-sheet-backdrop" id="soloMoreSheetBackdrop"></div>
+    <div class="solo-sheet" id="soloMoreSheet">
+      <div class="solo-sheet-grab"></div>
+      <div class="solo-sheet-title">More</div>
+      <div class="solo-more-item danger" id="soloAddPenaltyBtn">Add penalty</div>
+      <div class="solo-more-item danger" id="soloAddPenaltyRehitBtn">Add penalty &amp; re-hit</div>
+      <div class="solo-more-item muted" id="soloUndoShotBtn">Undo last shot</div>
     </div>`;
   document.body.appendChild(wrap);
   document.getElementById("soloCloseMap").onclick = () => document.getElementById("soloMapOverlay").classList.remove("open");
@@ -3614,6 +3860,11 @@ function ensureSoloOverlays(){
     this.classList.toggle("on", soloSkipShotPrompt);
   };
   document.getElementById("soloSheetDone").onclick = () => { commitSoloShot(soloLieSelected, soloClubSelected); closeSoloSheet(); };
+  document.getElementById("soloMoreSheetBackdrop").onclick = closeSoloMoreSheet;
+}
+function closeSoloMoreSheet(){
+  document.getElementById("soloMoreSheetBackdrop").classList.remove("open");
+  document.getElementById("soloMoreSheet").classList.remove("open");
 }
 function commitSoloShot(lie, club){
   if (!soloPendingShot) return;
@@ -3660,19 +3911,32 @@ async function refreshSoloGpsHero(hole, player, finished){
     return;
   }
   heroEl.innerHTML = `<div class="solo-gps-hero"><div class="num">&hellip;</div><div class="unit">locating&hellip;</div></div>`;
+  const shotTrackingOn = getPrefs().shotTracking;
   actionEl.innerHTML = `
-    <div class="solo-gps-btn primary" id="soloMarkShotBtn">&#9733; Mark shot</div>
-    <div class="solo-gps-btn putt" id="soloTrackPuttBtn">&#8226; Track putt</div>
-    <div class="solo-gps-btn map" id="soloOpenMapBtn">Map</div>`;
-  document.getElementById("soloMarkShotBtn").onclick = () => startSoloMarkShot(hole, player, pin, finished);
-  document.getElementById("soloTrackPuttBtn").onclick = () => soloTrackPutt(hole, player, pin, finished);
+    ${shotTrackingOn ? `<div class="solo-gps-btn primary" id="soloMarkShotBtn">&#9733; Mark shot</div>` : ""}
+    ${shotTrackingOn ? `<div class="solo-gps-btn putt" id="soloTrackPuttBtn">&#8226; Track putt</div>` : ""}
+    <div class="solo-gps-btn map" id="soloOpenMapBtn">Map</div>
+    ${shotTrackingOn ? `<div class="solo-gps-btn more" id="soloMoreBtn" aria-label="More">&#8942;</div>` : ""}`;
+  if (shotTrackingOn){
+    document.getElementById("soloMarkShotBtn").onclick = () => startSoloMarkShot(hole, player, pin, finished);
+    document.getElementById("soloTrackPuttBtn").onclick = () => soloTrackPutt(hole, player, pin, finished);
+    document.getElementById("soloMoreBtn").onclick = () => {
+      if (finished) return;
+      document.getElementById("soloAddPenaltyBtn").onclick = () => { closeSoloMoreSheet(); addSoloPenalty(player.id, hole.holeNumber, false); };
+      document.getElementById("soloAddPenaltyRehitBtn").onclick = () => { closeSoloMoreSheet(); addSoloPenalty(player.id, hole.holeNumber, true); };
+      document.getElementById("soloUndoShotBtn").onclick = () => { closeSoloMoreSheet(); undoLastSoloShot(player.id, hole.holeNumber); };
+      document.getElementById("soloMoreSheetBackdrop").classList.add("open");
+      document.getElementById("soloMoreSheet").classList.add("open");
+    };
+  }
   document.getElementById("soloOpenMapBtn").onclick = () => openSoloMap(hole, player, "view", pin);
 
   try {
     const youLL = await getCurrentLatLng();
     if (token !== soloGpsToken) return;
-    const d = Math.round(haversineMeters(youLL, [pin.lat, pin.lng]));
-    heroEl.innerHTML = `<div class="solo-gps-hero"><div class="num">${d}</div><div class="unit">metres to green centre</div></div>`;
+    const dMetres = Math.round(haversineMeters(youLL, [pin.lat, pin.lng]));
+    const d = formatMetres(dMetres);
+    heroEl.innerHTML = `<div class="solo-gps-hero"><div class="num">${d.value}</div><div class="unit">${d.unit} to green centre</div></div>`;
   } catch(e){
     if (token !== soloGpsToken) return;
     heroEl.innerHTML = `<div class="solo-gps-hero empty"><div class="no-pin-text">Can't get your location — check GPS/location permission</div></div>`;
@@ -3799,6 +4063,7 @@ function renderSoloEntry(card, hole, finished){
   const inChipRange = sel != null && chipOffsets.some(off => Math.max(1,hole.par+off) === sel);
 
   const shotsHtml = shots.map((s,i) => {
+    if (s.penalty) return `<span class="chip" style="background:var(--brand-dim);color:var(--brand-dark);">${s.rehit ? 'Penalty + re-hit' : 'Penalty'}</span>`;
     if (s.dist == null) return `<span class="chip">${escapeHtml(s.club)}</span>`;
     const prevDist = i === 0 ? (hole.yards ? Math.round(hole.yards * 0.9144) : null) : shots[i-1].dist;
     const delta = (prevDist != null) ? Math.max(0, prevDist - s.dist) : null;
@@ -3809,7 +4074,7 @@ function renderSoloEntry(card, hole, finished){
     <div class="solo-strip">${stripRow(0,"OUT")}${stripRow(9,"IN")}</div>
     <div class="solo-hole-focus">
       <div class="meta">Hole <b>${hole.holeNumber}</b> &middot; Par <b>${hole.par}</b> &middot; S.I. <b>${hole.strokeIndex}</b></div>
-      ${hole.yards ? `<div class="yard">${hole.yards} yds to green centre</div>` : ""}
+      ${hole.yards ? `<div class="yard">${formatYardage(hole.yards).value} ${formatYardage(hole.yards).unit} to green centre</div>` : ""}
     </div>
     <div class="solo-gps-wrap"><div id="soloGpsHero"><div class="solo-gps-hero"><div class="num">&hellip;</div><div class="unit">loading</div></div></div></div>
     <div class="solo-chip-row">${chipsHtml}</div>
@@ -6275,6 +6540,8 @@ if ("serviceWorker" in navigator){
   });
 }
 
+applyThemePref(getPrefs().theme);
+if (getPrefs().screenAlwaysOn) applyWakeLockPref(true);
 render();
 </script>
 </body>
