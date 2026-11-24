@@ -36,25 +36,26 @@
     --muted:#7a7a7a;
     --under:#2e8b3d;
     --over:#b23c3c;
+    --heading:#7a0f0f;
   }
   /* Dark mode — "System" (the default) follows the OS via prefers-color-scheme; explicitly
-     picking Light or Dark in Preferences sets data-theme on <html> and overrides that. */
+     picking Light or Dark in Preferences sets data-theme on <html> and overrides that.
+     Deliberately NOT touching brand-dark/brand/brand-light/gold/gold-dim/brand-dim/danger here:
+     those are reused throughout as self-contained bg+text pairs (e.g. button{background:
+     brand-dark;color:gold-dim}, .tab-btn.active{background:gold;color:brand-dark}) that are
+     already internally consistent — brightening one half of a pair without the other breaks
+     contrast (that's what happened the first time: the active tab and selected score chip
+     both went light-text-on-light-background). Only the true neutral surface colors change. */
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
       --ink:#ece6e6;
       --paper:#161010;
       --surface:#241c1c;
       --line:#3d2f2f;
-      --brand-dark:#f29a9a;
-      --brand:#c41818;
-      --brand-light:#e14b4b;
-      --brand-dim:#3a2424;
-      --gold:#d9b94a;
-      --gold-dim:#3a3320;
-      --danger:#d8d8d8;
       --muted:#a89d9d;
       --under:#5fd576;
       --over:#ff6b6b;
+      --heading:#ff9292;
     }
   }
   :root[data-theme="dark"]{
@@ -62,16 +63,10 @@
     --paper:#161010;
     --surface:#241c1c;
     --line:#3d2f2f;
-    --brand-dark:#f29a9a;
-    --brand:#c41818;
-    --brand-light:#e14b4b;
-    --brand-dim:#3a2424;
-    --gold:#d9b94a;
-    --gold-dim:#3a3320;
-    --danger:#d8d8d8;
     --muted:#a89d9d;
     --under:#5fd576;
     --over:#ff6b6b;
+    --heading:#ff9292;
   }
   *{box-sizing:border-box;}
   body{
@@ -92,7 +87,7 @@
   .app-header h1{color:#fff;margin:0 0 2px;font-size:1.2rem;letter-spacing:-0.01em;}
   .app-header .subtitle{color:var(--gold-dim);opacity:.85;margin:0;font-size:.8rem;}
   .app-header .top-bar{margin-bottom:8px;}
-  h2{font-size:1.02rem;margin:22px 0 10px;color:var(--brand-dark);border-bottom:2px solid var(--gold-dim);padding-bottom:6px;font-weight:700;}
+  h2{font-size:1.02rem;margin:22px 0 10px;color:var(--heading);border-bottom:2px solid var(--gold-dim);padding-bottom:6px;font-weight:700;}
   label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:4px;margin-top:12px;}
   input[type=text], input[type=number], select{
     width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;
@@ -112,7 +107,7 @@
     border:1px solid var(--brand-dark);background:var(--brand-dark);color:var(--gold-dim);
     padding:9px 16px;border-radius:6px;cursor:pointer;
   }
-  button.secondary{background:transparent;color:var(--brand-dark);}
+  button.secondary{background:transparent;color:var(--heading);border-color:var(--heading);}
   .cta-new-round{display:block;width:100%;padding:16px 16px;font-size:1.05rem;font-weight:700;border-radius:999px;margin:14px 0 14px;box-shadow:0 4px 14px rgba(122,15,15,.22);}
   button.ghost{background:transparent;color:var(--muted);border-color:var(--line);}
   .btn-pill-secondary{display:block;width:100%;padding:14px 16px;font-size:.95rem;font-weight:700;border-radius:999px;background:var(--gold-dim);color:var(--brand-dark);border:1px solid var(--line);margin-bottom:22px;}
@@ -206,7 +201,7 @@
   .app-drawer-overlay.open{opacity:1;pointer-events:auto;}
   .app-drawer{position:fixed;top:0;left:0;bottom:0;width:78vw;max-width:300px;background:var(--surface);z-index:41;box-shadow:2px 0 18px rgba(0,0,0,.25);transform:translateX(-100%);transition:transform .22s ease;display:flex;flex-direction:column;padding:10px 0;overflow-y:auto;}
   .app-drawer.open{transform:translateX(0);}
-  .app-drawer-head{display:flex;align-items:center;padding:10px 18px 16px;border-bottom:1px solid var(--line);margin-bottom:8px;font-size:1.05rem;font-weight:800;color:var(--brand-dark);}
+  .app-drawer-head{display:flex;align-items:center;padding:10px 18px 16px;border-bottom:1px solid var(--line);margin-bottom:8px;font-size:1.05rem;font-weight:800;color:var(--heading);}
   .drawer-link{display:flex;align-items:center;gap:12px;padding:14px 18px;color:var(--ink);text-decoration:none;font-size:1rem;font-weight:600;}
   button.drawer-link{background:none;border:none;border-radius:0;width:100%;text-align:left;cursor:pointer;font-family:inherit;}
   .drawer-link:active{background:var(--gold-dim);color:var(--brand-dark);}
@@ -222,7 +217,7 @@
   }
   .profile-avatar img{width:100%;height:100%;object-fit:cover;}
   .profile-name{margin:0;font-size:1.3rem;font-weight:800;color:var(--ink);border:none;padding:0;}
-  .profile-handicap{margin:4px 0 0;font-size:.85rem;color:var(--brand-dark);font-weight:700;}
+  .profile-handicap{margin:4px 0 0;font-size:.85rem;color:var(--heading);font-weight:700;}
   .profile-photo-btn{background:none;border:none;color:var(--brand-light);font-weight:700;font-size:.82rem;cursor:pointer;font-family:inherit;padding:0;text-decoration:underline;}
 
   /* GolfPad-style round card for Playing history: course/date on the left, up to 3 circular
@@ -289,7 +284,7 @@
   @keyframes pulse{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
   .hole-nav{display:flex;align-items:center;gap:10px;margin:10px 0;}
   .hole-nav button{padding:6px 10px;}
-  .hole-nav .current{font-weight:700;font-size:1.05rem;min-width:110px;text-align:center;color:var(--brand-dark);}
+  .hole-nav .current{font-weight:700;font-size:1.05rem;min-width:110px;text-align:center;color:var(--heading);}
   .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
   @media (max-width:600px){.grid-2{grid-template-columns:1fr;}}
   .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
@@ -432,14 +427,14 @@
   .solo-strip .cell.sub .hn{color:rgba(255,255,255,.7);font-size:.56rem;}
   .solo-strip .cell.sub .sc{color:#fff;}
   .solo-strip-nav{display:flex;align-items:center;justify-content:space-between;padding:6px 2px;}
-  .solo-strip-nav .arrow-btn{padding:6px 16px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--brand-dark);font-weight:700;font-size:.78rem;cursor:pointer;}
+  .solo-strip-nav .arrow-btn{padding:6px 16px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--heading);font-weight:700;font-size:.78rem;cursor:pointer;}
   .solo-strip-nav .arrow-btn:disabled{opacity:.35;}
   .solo-hole-focus{text-align:center;padding:10px 4px 0;}
   .solo-hole-focus .meta{font-size:1.3rem;font-weight:800;color:var(--ink);}
-  .solo-hole-focus .meta b{color:var(--brand-dark);}
+  .solo-hole-focus .meta b{color:var(--heading);}
   .solo-hole-focus .yard{font-size:.86rem;color:var(--muted);margin-top:3px;font-weight:600;}
   .solo-gps-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px 4px;min-height:140px;}
-  .solo-gps-hero .num{font-size:3.4rem;font-weight:800;color:var(--brand-dark);line-height:1;text-align:center;}
+  .solo-gps-hero .num{font-size:3.4rem;font-weight:800;color:var(--heading);line-height:1;text-align:center;}
   .solo-gps-hero .unit{font-size:.84rem;color:var(--muted);font-weight:700;margin-top:4px;text-align:center;}
   .solo-gps-hero.empty .no-pin-text{font-size:.9rem;color:var(--muted);margin-bottom:8px;text-align:center;}
   .solo-set-pin-link{color:var(--brand);font-weight:800;font-size:.9rem;cursor:pointer;text-align:center;display:block;}
@@ -454,7 +449,7 @@
   .solo-np-chip{flex:1;min-width:0;padding:10px 2px;border-radius:8px;border:1px solid var(--line);background:var(--surface);text-align:center;cursor:pointer;}
   .solo-np-chip .v{font-weight:700;font-size:.95rem;color:var(--ink);}
   .solo-np-chip .lb{font-size:.62rem;opacity:.75;color:var(--muted);}
-  .solo-np-chip .pts{font-size:.6rem;font-weight:700;opacity:.9;color:var(--brand-dark);}
+  .solo-np-chip .pts{font-size:.6rem;font-weight:700;opacity:.9;color:var(--heading);}
   .solo-np-chip.selected{background:var(--brand-dark);border-color:var(--brand-dark);}
   .solo-np-chip.selected .v,.solo-np-chip.selected .lb,.solo-np-chip.selected .pts{color:#fff;}
   .solo-numpad-foot{display:flex;align-items:center;gap:10px;margin-top:6px;}
@@ -466,6 +461,8 @@
   .solo-other-stepper .val{font-size:1.3rem;font-weight:800;min-width:30px;text-align:center;}
   .solo-other-stepper .set-btn{padding:7px 16px;border-radius:999px;background:var(--brand-dark);color:#fff;font-weight:700;font-size:.78rem;cursor:pointer;}
   .solo-mini-total{text-align:center;font-size:.8rem;color:var(--muted);font-weight:700;padding:10px 0 2px;}
+  .solo-status-bar{display:flex;justify-content:space-around;align-items:center;gap:4px;padding:8px 4px;margin:2px 0 0;border-bottom:1px solid var(--line);}
+  .solo-status-bar span{flex:1;text-align:center;font-size:.76rem;color:var(--muted);font-weight:600;}
 
   .solo-whoami-list .wa-btn{display:block;width:100%;text-align:left;padding:14px 16px;margin-bottom:8px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font-weight:700;cursor:pointer;}
   .solo-whoami-list .wa-btn:hover{border-color:var(--brand);}
@@ -3076,6 +3073,18 @@ function finishedDurationText(round){
   const start = toDateMaybe(round.startedAt), end = toDateMaybe(round.finishedAt);
   return (start && end) ? ` · Round time: ${formatDuration(end.getTime() - start.getTime())}` : "";
 }
+// Set by renderSoloEntry every time it runs, so the timer tick (which has no reason to know
+// which hole is current) can still keep the pace-based finish estimate up to date between
+// renders. Harmless/unused on the shared multiplayer scorer, which has no #estFinishTime.
+let soloLastThru = 0;
+function updateEstFinish(start){
+  const el = document.getElementById("estFinishTime");
+  if (!el) return;
+  if (!soloLastThru){ el.textContent = "Est. finish: –"; return; }
+  const perHoleMs = (Date.now() - start.getTime()) / soloLastThru;
+  const finish = new Date(Date.now() + perHoleMs * (18 - soloLastThru));
+  el.textContent = "Est. finish: " + finish.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
 let elapsedTimerInterval = null;
 function startElapsedTimer(elId, startedAt){
   if (elapsedTimerInterval) clearInterval(elapsedTimerInterval);
@@ -3086,6 +3095,7 @@ function startElapsedTimer(elId, startedAt){
     const target = document.getElementById(elId);
     if (!target){ clearInterval(elapsedTimerInterval); return; }   // navigated away — stop ticking
     target.textContent = "Elapsed: " + formatDuration(Date.now() - start.getTime());
+    updateEstFinish(start);
   }
   tick();
   elapsedTimerInterval = setInterval(tick, 30000);
@@ -3155,7 +3165,8 @@ async function renderScorer(roundId){
   const spectatorUrl = location.origin + location.pathname + `#/spectate/${scorerData.round.spectatorCode}`;
   const finished = scorerData.round.status === "finished";
   const needsStart = !finished && !scorerData.round.startedAt && scorerData.scores.length === 0;
-  app.classList.toggle("solo-fullscreen", scorerData.round.scoringMode === "individual");
+  const isSolo = scorerData.round.scoringMode === "individual";
+  app.classList.toggle("solo-fullscreen", isSolo);
 
   app.innerHTML = `
     ${renderScoringHeader(scorerData.round.courseName, scorerData.round.name)}
@@ -3183,14 +3194,18 @@ async function renderScorer(roundId){
         ? `<div class="card" style="text-align:center;border-color:var(--brand);"><strong>Round finished</strong><p class="muted" style="margin:4px 0 0;">Scores are locked. See the Leaderboards tab for final results.${finishedDurationText(scorerData.round)}</p></div>`
         : needsStart
           ? buildStartGateHtml(scorerData.players)
-          : `<div class="row" style="margin:10px 0;justify-content:center;"><span id="elapsedTimer" class="muted" style="font-size:.85rem;"></span></div>`}
-      ${needsStart ? "" : `
+          : (isSolo
+            ? `<div class="solo-status-bar"><span id="elapsedTimer"></span><span id="estFinishTime"></span><span id="roundScoreToPar"></span></div>`
+            : `<div class="row" style="margin:10px 0;justify-content:center;"><span id="elapsedTimer" class="muted" style="font-size:.85rem;"></span></div>`)}
+      ${needsStart ? "" : (isSolo ? `
+      <span id="holeLabel" style="display:none;"></span>
+      <div id="entryCard"></div>` : `
       <div class="hole-nav">
         <button id="prevHole" class="secondary">&larr;</button>
         <div class="current" id="holeLabel"></div>
         <button id="nextHole" class="secondary">&rarr;</button>
       </div>
-      <div id="entryCard"></div>`}
+      <div id="entryCard"></div>`)}
     </div>
 
     <div id="boardsTab" style="display:none;">
@@ -3203,8 +3218,10 @@ async function renderScorer(roundId){
   document.getElementById("tabScoreBtn").onclick = () => switchScorerTab("score");
   document.getElementById("tabBoardsBtn").onclick = () => switchScorerTab("boards");
   if (!needsStart){
-    document.getElementById("prevHole").onclick = () => { scorerHole = Math.max(1, scorerHole-1); renderEntry(); };
-    document.getElementById("nextHole").onclick = () => { scorerHole = Math.min(18, scorerHole+1); renderEntry(); };
+    const prevHole = document.getElementById("prevHole");
+    const nextHole = document.getElementById("nextHole");
+    if (prevHole) prevHole.onclick = () => { scorerHole = Math.max(1, scorerHole-1); renderEntry(); };
+    if (nextHole) nextHole.onclick = () => { scorerHole = Math.min(18, scorerHole+1); renderEntry(); };
   }
   const finishBtn = document.getElementById("finishBtn");
   if (finishBtn) finishBtn.onclick = () => { closeScoringDrawer(); finishRound(roundId); };
@@ -3287,7 +3304,8 @@ async function renderScoringOnly(roundId){
   const spectatorUrl = location.origin + location.pathname + `#/spectate/${scorerData.round.spectatorCode}`;
   const finished = scorerData.round.status === "finished";
   const needsStart = !finished && !scorerData.round.startedAt && scorerData.scores.length === 0;
-  app.classList.toggle("solo-fullscreen", scorerData.round.scoringMode === "individual");
+  const isSolo = scorerData.round.scoringMode === "individual";
+  app.classList.toggle("solo-fullscreen", isSolo);
 
   app.innerHTML = `
     ${renderScoringHeader(scorerData.round.courseName, scorerData.round.name)}
@@ -3318,14 +3336,18 @@ async function renderScoringOnly(roundId){
         ? `<div class="card" style="text-align:center;border-color:var(--brand);"><strong>Round finished</strong><p class="muted" style="margin:4px 0 0;">Scores are locked. See the Leaderboards tab for final results.${finishedDurationText(scorerData.round)}</p></div>`
         : needsStart
           ? buildStartGateHtml(scorerData.players)
-          : `<div class="row" style="margin:10px 0;justify-content:center;"><span id="elapsedTimer" class="muted" style="font-size:.85rem;"></span></div>`}
-      ${needsStart ? "" : `
+          : (isSolo
+            ? `<div class="solo-status-bar"><span id="elapsedTimer"></span><span id="estFinishTime"></span><span id="roundScoreToPar"></span></div>`
+            : `<div class="row" style="margin:10px 0;justify-content:center;"><span id="elapsedTimer" class="muted" style="font-size:.85rem;"></span></div>`)}
+      ${needsStart ? "" : (isSolo ? `
+      <span id="holeLabel" style="display:none;"></span>
+      <div id="entryCard"></div>` : `
       <div class="hole-nav">
         <button id="prevHole" class="secondary">&larr;</button>
         <div class="current" id="holeLabel"></div>
         <button id="nextHole" class="secondary">&rarr;</button>
       </div>
-      <div id="entryCard"></div>`}
+      <div id="entryCard"></div>`)}
     </div>
 
     <div id="boardsTab" style="display:none;">
@@ -3338,8 +3360,10 @@ async function renderScoringOnly(roundId){
   document.getElementById("tabScoreBtn").onclick = () => switchScorerTab("score");
   document.getElementById("tabBoardsBtn").onclick = () => switchScorerTab("boards");
   if (!needsStart){
-    document.getElementById("prevHole").onclick = () => { scorerHole = Math.max(1, scorerHole-1); renderEntry(); };
-    document.getElementById("nextHole").onclick = () => { scorerHole = Math.min(18, scorerHole+1); renderEntry(); };
+    const prevHole = document.getElementById("prevHole");
+    const nextHole = document.getElementById("nextHole");
+    if (prevHole) prevHole.onclick = () => { scorerHole = Math.max(1, scorerHole-1); renderEntry(); };
+    if (nextHole) nextHole.onclick = () => { scorerHole = Math.min(18, scorerHole+1); renderEntry(); };
   }
   const copyBtn = document.getElementById("copyBtn");
   if (copyBtn) copyBtn.onclick = () => navigator.clipboard.writeText(spectatorUrl);
@@ -3936,7 +3960,7 @@ async function refreshSoloGpsHero(hole, player, finished){
     if (token !== soloGpsToken) return;
     const dMetres = Math.round(haversineMeters(youLL, [pin.lat, pin.lng]));
     const d = formatMetres(dMetres);
-    heroEl.innerHTML = `<div class="solo-gps-hero"><div class="num">${d.value}</div><div class="unit">${d.unit} to green centre</div></div>`;
+    heroEl.innerHTML = `<div class="solo-gps-hero"><div class="num">${d.value}</div><div class="unit">${d.unit} to middle</div></div>`;
   } catch(e){
     if (token !== soloGpsToken) return;
     heroEl.innerHTML = `<div class="solo-gps-hero empty"><div class="no-pin-text">Can't get your location — check GPS/location permission</div></div>`;
@@ -4036,18 +4060,23 @@ function renderSoloEntry(card, hole, finished){
     const s = scorerData.scores.find(sc => sc.playerId === player.id && sc.holeNumber === h.holeNumber);
     if (s && s.grossStrokes != null){ total += s.grossStrokes; thru++; diff += (s.grossStrokes - h.par); }
   });
+  soloLastThru = thru;
+  const scoreToParEl = document.getElementById("roundScoreToPar");
+  if (scoreToParEl) scoreToParEl.textContent = thru === 0 ? "E thru 0" : (diff===0?'E':(diff>0?'+'+diff:diff)) + ' thru ' + thru;
+  updateEstFinish(toDateMaybe(scorerData.round.startedAt) || new Date());
 
   function stripRow(startIdx, label){
     const set = scorerData.holes.slice(startIdx, startIdx+9);
+    let scoreSum = 0, anyScored = false;
     const cells = set.map(h => {
       const s = scorerData.scores.find(sc => sc.playerId === player.id && sc.holeNumber === h.holeNumber);
       const v = s ? s.grossStrokes : null;
+      if (v != null){ scoreSum += v; anyScored = true; }
       let cls = "cell" + (h.holeNumber === scorerHole ? " current" : "");
       if (v != null){ if (v < h.par) cls += " under"; else if (v > h.par) cls += " over"; }
       return `<div class="${cls}" data-n="${h.holeNumber}"><span class="hn">${h.holeNumber}</span><span class="sc">${v ?? ''}</span></div>`;
     }).join("");
-    const parSum = set.reduce((a,h)=>a+h.par,0);
-    return `<div class="strip-row">${cells}<div class="cell sub"><span class="hn">${label}</span><span class="sc">${parSum}</span></div></div>`;
+    return `<div class="strip-row">${cells}<div class="cell sub"><span class="hn">${label}</span><span class="sc">${anyScored ? scoreSum : ''}</span></div></div>`;
   }
 
   const chipOffsets = [-2,-1,0,1,2,3];
@@ -4074,7 +4103,7 @@ function renderSoloEntry(card, hole, finished){
     <div class="solo-strip">${stripRow(0,"OUT")}${stripRow(9,"IN")}</div>
     <div class="solo-hole-focus">
       <div class="meta">Hole <b>${hole.holeNumber}</b> &middot; Par <b>${hole.par}</b> &middot; S.I. <b>${hole.strokeIndex}</b></div>
-      ${hole.yards ? `<div class="yard">${formatYardage(hole.yards).value} ${formatYardage(hole.yards).unit} to green centre</div>` : ""}
+      ${hole.yards ? `<div class="yard">${formatYardage(hole.yards).value} ${formatYardage(hole.yards).unit} to middle</div>` : ""}
     </div>
     <div class="solo-gps-wrap"><div id="soloGpsHero"><div class="solo-gps-hero"><div class="num">&hellip;</div><div class="unit">loading</div></div></div></div>
     <div class="solo-chip-row">${chipsHtml}</div>
@@ -4090,7 +4119,6 @@ function renderSoloEntry(card, hole, finished){
     </div>
     <div id="soloActionRow" class="solo-action-row"></div>
     <div class="solo-shots-strip">${shotsHtml}</div>
-    <div class="solo-mini-total">${thru===0 ? 'E thru 0' : (diff===0?'E':(diff>0?'+'+diff:diff)) + ' thru ' + thru}</div>
   `;
 
   card.querySelectorAll(".solo-strip .cell[data-n]").forEach(el => {
