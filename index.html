@@ -1084,10 +1084,29 @@ function renderScoringHeader(courseName, roundName){
   courseName = escapeHtml(courseName || "");
   roundName = escapeHtml(roundName || "");
   return `
-    <div class="app-header" style="text-align:center;">
+    <div class="app-header" style="text-align:center;position:relative;">
+      <button id="scoringMenuBtn" class="menu-btn" type="button" aria-label="Round menu" style="position:absolute;left:16px;top:50%;transform:translateY(-50%);">${svgIcon("menu")}</button>
       <h1 style="margin:0 0 2px;">${courseName}</h1>
       ${roundName ? `<p class="subtitle">${roundName}</p>` : ""}
     </div>`;
+}
+// Round settings + Finish round — the scoring screen's own hamburger menu, separate from the
+// main app drawer (which isn't rendered on scoring screens at all). scheduleLinkHtml is "" on
+// the spectator/"play" route, which has no Schedule tab to jump to.
+function renderScoringDrawer(scheduleLinkHtml, showFinish){
+  return `
+    <div id="scoringDrawerOverlay" class="app-drawer-overlay"></div>
+    <nav id="scoringDrawer" class="app-drawer">
+      <div class="app-drawer-head">Round menu</div>
+      ${scheduleLinkHtml}
+      ${showFinish ? `<div style="padding:16px 18px;margin-top:auto;border-top:1px solid var(--line);"><button id="finishBtn" type="button" style="width:100%;background:var(--danger);border-color:var(--danger);">Finish round</button></div>` : ""}
+    </nav>`;
+}
+function closeScoringDrawer(){
+  const drawer = document.getElementById("scoringDrawer");
+  const overlay = document.getElementById("scoringDrawerOverlay");
+  if (drawer) drawer.classList.remove("open");
+  if (overlay) overlay.classList.remove("open");
 }
 
 /* ---------- desktop sidebar dashboard shell ----------
@@ -2926,10 +2945,10 @@ async function renderScorer(roundId){
 
   app.innerHTML = `
     ${renderScoringHeader(scorerData.round.courseName, scorerData.round.name)}
+    ${renderScoringDrawer(`<a href="#" id="drawerScheduleLink" class="drawer-link">${svgIcon("clock")} Round settings</a>`, !needsStart && !finished)}
     <div class="tab-bar">
-      <button class="tab-btn" id="tabScheduleBtn">Schedule</button>
       <button class="tab-btn active" id="tabScoreBtn">Score</button>
-      <button class="tab-btn" id="tabBoardsBtn">Leaderboards</button>
+      <button class="tab-btn" id="tabBoardsBtn" aria-label="Leaderboards" style="font-size:1.3rem;">${svgIcon("trophy")}</button>
     </div>
     <div class="content">
 
@@ -2946,12 +2965,11 @@ async function renderScorer(roundId){
     <div id="scheduleTab" style="display:none;"></div>
 
     <div id="scoreTab">
-      <div>${scorerData.round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
       ${finished
         ? `<div class="card" style="text-align:center;border-color:var(--brand);"><strong>Round finished</strong><p class="muted" style="margin:4px 0 0;">Scores are locked. See the Leaderboards tab for final results.${finishedDurationText(scorerData.round)}</p></div>`
         : needsStart
           ? buildStartGateHtml(scorerData.players)
-          : `<div class="row" style="margin:10px 0;justify-content:space-between;align-items:center;"><button id="finishBtn" style="background:var(--danger);border-color:var(--danger);">Finish round</button><span id="elapsedTimer" class="muted" style="font-size:.85rem;"></span></div>`}
+          : `<div class="row" style="margin:10px 0;justify-content:center;"><span id="elapsedTimer" class="muted" style="font-size:.85rem;"></span></div>`}
       ${needsStart ? "" : `
       <div class="hole-nav">
         <button id="prevHole" class="secondary">&larr;</button>
@@ -2968,7 +2986,6 @@ async function renderScorer(roundId){
     </div>
   `;
 
-  document.getElementById("tabScheduleBtn").onclick = () => switchScorerTab("schedule");
   document.getElementById("tabScoreBtn").onclick = () => switchScorerTab("score");
   document.getElementById("tabBoardsBtn").onclick = () => switchScorerTab("boards");
   if (!needsStart){
@@ -2976,7 +2993,7 @@ async function renderScorer(roundId){
     document.getElementById("nextHole").onclick = () => { scorerHole = Math.min(18, scorerHole+1); renderEntry(); };
   }
   const finishBtn = document.getElementById("finishBtn");
-  if (finishBtn) finishBtn.onclick = () => finishRound(roundId);
+  if (finishBtn) finishBtn.onclick = () => { closeScoringDrawer(); finishRound(roundId); };
   const startRoundBtn = document.getElementById("startRoundBtn");
   if (startRoundBtn) startRoundBtn.onclick = async () => { await startRound(roundId); renderScorer(roundId); };
   if (needsStart) wireHandicapInputs(roundId, ".hcp-edit-input");
@@ -3060,9 +3077,10 @@ async function renderScoringOnly(roundId){
 
   app.innerHTML = `
     ${renderScoringHeader(scorerData.round.courseName, scorerData.round.name)}
+    ${renderScoringDrawer("", !needsStart && !finished)}
     <div class="tab-bar">
       <button class="tab-btn active" id="tabScoreBtn">Score</button>
-      <button class="tab-btn" id="tabBoardsBtn">Leaderboards</button>
+      <button class="tab-btn" id="tabBoardsBtn" aria-label="Leaderboards" style="font-size:1.3rem;">${svgIcon("trophy")}</button>
     </div>
     <div class="content">
 
@@ -3077,7 +3095,6 @@ async function renderScoringOnly(roundId){
     ` : ""}
 
     <div id="scoreTab">
-      <div>${scorerData.round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
       <div class="link-box">
         <span class="muted">Spectator link:</span>
         <input type="text" readonly value="${spectatorUrl}" onclick="this.select()">
@@ -3087,7 +3104,7 @@ async function renderScoringOnly(roundId){
         ? `<div class="card" style="text-align:center;border-color:var(--brand);"><strong>Round finished</strong><p class="muted" style="margin:4px 0 0;">Scores are locked. See the Leaderboards tab for final results.${finishedDurationText(scorerData.round)}</p></div>`
         : needsStart
           ? buildStartGateHtml(scorerData.players)
-          : `<div class="row" style="margin:10px 0;justify-content:space-between;align-items:center;"><button id="finishBtn" style="background:var(--danger);border-color:var(--danger);">Finish round</button><span id="elapsedTimer" class="muted" style="font-size:.85rem;"></span></div>`}
+          : `<div class="row" style="margin:10px 0;justify-content:center;"><span id="elapsedTimer" class="muted" style="font-size:.85rem;"></span></div>`}
       ${needsStart ? "" : `
       <div class="hole-nav">
         <button id="prevHole" class="secondary">&larr;</button>
@@ -3113,7 +3130,7 @@ async function renderScoringOnly(roundId){
   const copyBtn = document.getElementById("copyBtn");
   if (copyBtn) copyBtn.onclick = () => navigator.clipboard.writeText(spectatorUrl);
   const finishBtn = document.getElementById("finishBtn");
-  if (finishBtn) finishBtn.onclick = () => finishRound(roundId);
+  if (finishBtn) finishBtn.onclick = () => { closeScoringDrawer(); finishRound(roundId); };
   const startRoundBtn = document.getElementById("startRoundBtn");
   if (startRoundBtn) startRoundBtn.onclick = async () => { await startRound(roundId); renderScoringOnly(roundId); };
   if (needsStart) wireHandicapInputs(roundId, ".hcp-edit-input");
@@ -6147,6 +6164,22 @@ document.addEventListener("click", (e) => {
   if (e.target.closest("#appDrawerOverlay") || e.target.closest(".drawer-link")){
     closeAppDrawer();
     if (!e.target.closest(".drawer-link")) return;
+  }
+  if (e.target.closest("#scoringMenuBtn")){
+    const drawer = document.getElementById("scoringDrawer");
+    const overlay = document.getElementById("scoringDrawerOverlay");
+    if (drawer) drawer.classList.toggle("open");
+    if (overlay) overlay.classList.toggle("open");
+    return;
+  }
+  if (e.target.closest("#scoringDrawerOverlay")){
+    closeScoringDrawer();
+    return;
+  }
+  if (e.target.closest("#drawerScheduleLink")){
+    switchScorerTab("schedule");
+    closeScoringDrawer();
+    return;
   }
   const swatch = e.target.closest(".pf-swatch[data-for]");
   if (swatch){
