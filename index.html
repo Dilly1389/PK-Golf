@@ -365,6 +365,17 @@
   .scorecard-summary .val{font-size:1.3rem;font-weight:800;color:var(--brand-dark);}
   .scorecard-summary .lbl{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;}
 
+  /* Solo scoring, full-screen app-like layout — fills the viewport instead of the normal
+     scrolling page, same as a native scoring screen. The GPS/yardage area is the only part
+     that flexes, so everything else (header, strip, action/chip rows) stays put. */
+  .wrap.solo-fullscreen{height:100dvh;max-width:480px;padding:0;display:flex;flex-direction:column;overflow:hidden;}
+  .wrap.solo-fullscreen .app-header{flex:0 0 auto;}
+  .wrap.solo-fullscreen .tab-bar{flex:0 0 auto;}
+  .wrap.solo-fullscreen .content{flex:1;min-height:0;display:flex;flex-direction:column;padding:10px 16px;overflow:hidden;}
+  .wrap.solo-fullscreen #scoreTab{flex:1;min-height:0;display:flex;flex-direction:column;}
+  .wrap.solo-fullscreen #entryCard{flex:1;min-height:0;display:flex;flex-direction:column;}
+  .wrap.solo-fullscreen .solo-gps-wrap{flex:1;min-height:60px;}
+
   /* ===== Solo scoring mode ("everyone scores their own round") ===== */
   .solo-strip{padding:6px 2px;}
   .solo-strip .strip-row{display:flex;gap:3px;margin-bottom:3px;}
@@ -1172,6 +1183,7 @@ async function render(){
   // mountPage() re-adds it right after, for the routes that do want it.
   app.classList.remove("app-desktop");
   app.classList.remove("app-hero");
+  app.classList.remove("solo-fullscreen");
 
   if (!configured){
     app.innerHTML = `
@@ -2896,6 +2908,7 @@ async function renderScorer(roundId){
   const spectatorUrl = location.origin + location.pathname + `#/spectate/${scorerData.round.spectatorCode}`;
   const finished = scorerData.round.status === "finished";
   const needsStart = !finished && !scorerData.round.startedAt && scorerData.scores.length === 0;
+  app.classList.toggle("solo-fullscreen", scorerData.round.scoringMode === "individual");
 
   app.innerHTML = `
     ${renderAppHeader(scorerData.round.name, scorerData.round.courseName, finished ? "final" : "live")}
@@ -3029,6 +3042,7 @@ async function renderScoringOnly(roundId){
   const spectatorUrl = location.origin + location.pathname + `#/spectate/${scorerData.round.spectatorCode}`;
   const finished = scorerData.round.status === "finished";
   const needsStart = !finished && !scorerData.round.startedAt && scorerData.scores.length === 0;
+  app.classList.toggle("solo-fullscreen", scorerData.round.scoringMode === "individual");
 
   app.innerHTML = `
     ${renderAppHeader(scorerData.round.name, scorerData.round.courseName, finished ? "final" : "live")}
@@ -3764,8 +3778,6 @@ function renderSoloEntry(card, hole, finished){
     <div class="solo-strip">${stripRow(0,"OUT")}${stripRow(9,"IN")}</div>
     ${hole.yards ? `<div class="solo-hole-focus"><div class="yard">${hole.yards} yds to green centre</div></div>` : ""}
     <div class="solo-gps-wrap"><div id="soloGpsHero"><div class="solo-gps-hero"><div class="num">&hellip;</div><div class="unit">loading</div></div></div></div>
-    <div id="soloActionRow" class="solo-action-row"></div>
-    <div class="solo-shots-strip">${shotsHtml}</div>
     <div class="solo-chip-row">${chipsHtml}</div>
     <div class="solo-other-stepper" id="soloOtherStepper">
       <div class="circ-btn" id="soloOtherMinus">&minus;</div>
@@ -3777,6 +3789,8 @@ function renderSoloEntry(card, hole, finished){
       <span class="solo-other-score-btn" id="soloOtherScoreBtn">Other score&hellip;</span>
       <span class="solo-entered-note">${(sel != null && !inChipRange) ? 'Entered: '+sel : ''}</span>
     </div>
+    <div id="soloActionRow" class="solo-action-row"></div>
+    <div class="solo-shots-strip">${shotsHtml}</div>
     <div class="solo-mini-total">${thru===0 ? 'E thru 0' : (diff===0?'E':(diff>0?'+'+diff:diff)) + ' thru ' + thru}</div>
   `;
 
