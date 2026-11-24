@@ -407,6 +407,7 @@
   .wrap.solo-fullscreen .app-header{flex:0 0 auto;order:0;}
   .wrap.solo-fullscreen .content{flex:1;min-height:0;order:1;display:flex;flex-direction:column;padding:10px 16px;overflow:hidden;}
   .wrap.solo-fullscreen #markOthersTab{flex:1;min-height:0;overflow-y:auto;}
+  .wrap.solo-fullscreen #scheduleTab{flex:1;min-height:0;overflow-y:auto;}
   /* Schedule/Score/Leaderboards moved to the bottom, like a native app's tab bar, now that
      the top header has no hamburger to also anchor a menu off. */
   .wrap.solo-fullscreen .tab-bar{flex:0 0 auto;order:2;}
@@ -3285,7 +3286,12 @@ async function renderScorer(roundId){
 function renderScheduleTab(spectatorUrl){
   currentBundle = scorerData;
   const tab = document.getElementById("scheduleTab");
-  tab.innerHTML = scheduleEditMode ? buildScheduleEditHtml(scorerData) : buildScheduleViewHtml(scorerData, spectatorUrl);
+  // Schedule/Round settings is only reachable via the hamburger now, not a bottom tab, so it
+  // needs its own explicit way back rather than relying on tapping a "Score" tab that's hidden
+  // while this is showing.
+  tab.innerHTML = `<button id="backToScoreBtn" class="secondary" type="button" style="margin-bottom:14px;">&larr; Back to scoring</button>`
+    + (scheduleEditMode ? buildScheduleEditHtml(scorerData) : buildScheduleViewHtml(scorerData, spectatorUrl));
+  document.getElementById("backToScoreBtn").onclick = () => switchScorerTab("score");
 
   if (!scheduleEditMode){
     const copyBtn = document.getElementById("copyBtn");
@@ -3776,6 +3782,10 @@ function switchScorerTab(which){
   if (tabMarkOthersBtn) tabMarkOthersBtn.classList.toggle("active", which === "markothers");
   document.getElementById("tabScoreBtn").classList.toggle("active", which === "score");
   document.getElementById("tabBoardsBtn").classList.toggle("active", which === "boards");
+  // Round settings is reached from the hamburger menu, not the bottom bar - showing a tab
+  // bar whose tabs don't include "where you are right now" was confusing, so hide it there.
+  const tabBar = document.querySelector(".tab-bar");
+  if (tabBar) tabBar.style.display = which === "schedule" ? "none" : "";
 }
 // "Mark others" — for the one person in an individual-scoring round who's also entering
 // scores for the rest of their group, on the same device. Deliberately simple (no GPS/shot
