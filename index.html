@@ -3647,7 +3647,10 @@ async function openSoloMap(hole, player, mode, pin){
 
   if (!soloLeafletMap){
     soloLeafletMap = L.map("soloLeafletMap", { zoomControl:false });
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:20, attribution:"&copy; OpenStreetMap contributors" }).addTo(soloLeafletMap);
+    // Esri World Imagery — real satellite imagery (trees, bunkers, actual green shape visible),
+    // vs OSM's street-map style tiles which only show whatever's been manually traced. No API
+    // key needed for this tile service, unlike Google's equivalent which requires billed access.
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom:20, attribution:"Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community" }).addTo(soloLeafletMap);
   }
   [soloGreenMarker, soloYouMarker, soloLineLayer, soloPlacingMarker].forEach(l => { if (l) soloLeafletMap.removeLayer(l); });
   soloGreenMarker = soloYouMarker = soloLineLayer = soloPlacingMarker = null;
