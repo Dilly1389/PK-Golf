@@ -3664,9 +3664,20 @@ async function openSoloMap(hole, player, mode, pin){
     const realDist = Math.round(soloLeafletMap.distance(youLL, greenLL));
     document.getElementById("soloMapFooter").innerHTML = `<div class="solo-map-dist-banner">${realDist} m to green</div><div class="solo-map-note">Real OpenStreetMap tiles via Leaflet. This pin was saved once and is reused every round.</div>`;
   } else {
-    let center;
-    try { center = await getCurrentLatLng(); } catch(e){ center = pin ? [pin.lat, pin.lng] : [-26.2041, 28.0473]; }
-    soloLeafletMap.setView(center, 18);
+    // Centre on the course itself, not the device's live GPS — testing/placing a pin away
+    // from the actual green (or with location denied) used to drop you in Johannesburg's
+    // city centre by default, which was useless. The course's own saved lat/lng is a much
+    // better starting point; live GPS is still shown via the "You" marker in view mode.
+    let center = null;
+    try {
+      const courseSnap = await getDoc(doc(db, "golf_courses", slugify(scorerData.round.courseName)));
+      if (courseSnap.exists()){
+        const c = courseSnap.data();
+        if (c.lat != null && c.lng != null) center = [c.lat, c.lng];
+      }
+    } catch(e){ /* fall through to GPS/default below */ }
+    if (!center){ try { center = await getCurrentLatLng(); } catch(e){ center = pin ? [pin.lat, pin.lng] : [-26.2041, 28.0473]; } }
+    soloLeafletMap.setView(center, 17);
     document.getElementById("soloMapFooter").innerHTML = `
       <div class="solo-map-place-hint">Tap the map where the green centre is</div>
       <div class="solo-map-save-btn disabled" id="soloSavePinBtn">Save green pin</div>
