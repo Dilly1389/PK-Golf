@@ -1075,6 +1075,18 @@ function renderAppHeader(title, subtitle, badge){
     </div>
     ${renderAppDrawer()}`;
 }
+// Scoring screens only — no hamburger (so no drawer either, since nothing else opens it),
+// no account/profile link, no PK Golf logo: just the course and round/tournament name,
+// kept out of the way while actually playing.
+function renderScoringHeader(courseName, roundName){
+  courseName = escapeHtml(courseName || "");
+  roundName = escapeHtml(roundName || "");
+  return `
+    <div class="app-header">
+      <h1 style="margin:0 0 2px;">${courseName}</h1>
+      ${roundName ? `<p class="subtitle">${roundName}</p>` : ""}
+    </div>`;
+}
 
 /* ---------- desktop sidebar dashboard shell ----------
    Same URLs and page content as the phone layout, just a different wrapper above
@@ -2911,7 +2923,7 @@ async function renderScorer(roundId){
   app.classList.toggle("solo-fullscreen", scorerData.round.scoringMode === "individual");
 
   app.innerHTML = `
-    ${renderAppHeader(scorerData.round.name, scorerData.round.courseName, finished ? "final" : "live")}
+    ${renderScoringHeader(scorerData.round.courseName, scorerData.round.name)}
     <div class="tab-bar">
       <button class="tab-btn" id="tabScheduleBtn">Schedule</button>
       <button class="tab-btn active" id="tabScoreBtn">Score</button>
@@ -3045,7 +3057,7 @@ async function renderScoringOnly(roundId){
   app.classList.toggle("solo-fullscreen", scorerData.round.scoringMode === "individual");
 
   app.innerHTML = `
-    ${renderAppHeader(scorerData.round.name, scorerData.round.courseName, finished ? "final" : "live")}
+    ${renderScoringHeader(scorerData.round.courseName, scorerData.round.name)}
     <div class="tab-bar">
       <button class="tab-btn active" id="tabScoreBtn">Score</button>
       <button class="tab-btn" id="tabBoardsBtn">Leaderboards</button>
