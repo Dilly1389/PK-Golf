@@ -3440,46 +3440,72 @@ async function renderScoringOnly(roundId){
 function buildScheduleViewHtml(bundle, spectatorUrl){
   const { round, holes, players } = bundle;
   return `
-    <div class="row" style="justify-content:flex-end;gap:8px;margin-top:8px;">
+    <div class="row" style="justify-content:flex-end;gap:8px;margin-bottom:10px;">
       <button class="secondary" id="editScheduleBtn">Edit</button>
       ${!round.deleted ? `<button id="deleteRoundBtn" style="background:var(--danger);border-color:var(--danger);">Delete round</button>` : ""}
     </div>
 
-    <h2>Round details</h2>
-    <div class="card">
-      <div class="grid-3">
-        <div><span class="muted">Course</span><br><strong>${escapeHtml(round.courseName)}</strong></div>
-        <div><span class="muted">Date</span><br><strong>${escapeHtml(round.roundDate) || "-"}${round.teeTime ? " · " + escapeHtml(round.teeTime) : ""}</strong></div>
-        <div><span class="muted">Tee box</span><br><strong>${round.teeBox || "-"}</strong></div>
+    <details class="nr-panel" id="panelViewRoundDetails" open>
+      <summary>
+        <span class="ic">&#128197;</span>
+        <div class="txt"><div class="label">Round details</div><div class="val">${escapeHtml(round.courseName)}</div></div>
+        <span class="chev">&rsaquo;</span>
+      </summary>
+      <div class="nr-panel-body">
+        <div class="grid-3">
+          <div><span class="muted">Course</span><br><strong>${escapeHtml(round.courseName)}</strong></div>
+          <div><span class="muted">Date</span><br><strong>${escapeHtml(round.roundDate) || "-"}${round.teeTime ? " · " + escapeHtml(round.teeTime) : ""}</strong></div>
+          <div><span class="muted">Tee box</span><br><strong>${round.teeBox || "-"}</strong></div>
+        </div>
+        <div style="margin-top:10px;">${round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
+        ${round.gameModes.includes("piekfyn") ? `<div class="muted" style="margin-top:8px;font-size:.85rem;">Piekfyn teams: <strong style="color:var(--ink);">${escapeHtml(round.teamAName) || "Team A"}</strong> vs <strong style="color:var(--ink);">${escapeHtml(round.teamBName) || "Team B"}</strong></div>` : ""}
       </div>
-      <div style="margin-top:10px;">${round.gameModes.map(m => `<span class="pill mode">${GAME_MODES.find(g=>g.key===m).label}</span>`).join("")}</div>
-      ${round.gameModes.includes("piekfyn") ? `<div class="muted" style="margin-top:8px;font-size:.85rem;">Piekfyn teams: <strong style="color:var(--ink);">${escapeHtml(round.teamAName) || "Team A"}</strong> vs <strong style="color:var(--ink);">${escapeHtml(round.teamBName) || "Team B"}</strong></div>` : ""}
-    </div>
+    </details>
 
-    <div class="link-box">
-      <span class="muted">Scoring link (share this to score):</span>
-      <input type="text" readonly value="${location.origin + location.pathname}#/play/${round.id}" onclick="this.select()">
-      <button class="ghost" id="copyScoreLinkBtn" data-url="${location.origin + location.pathname}#/play/${round.id}">Copy</button>
-    </div>
+    <details class="nr-panel" id="panelViewLinks">
+      <summary>
+        <span class="ic">&#128279;</span>
+        <div class="txt"><div class="label">Links</div><div class="val">Scoring &amp; spectator</div></div>
+        <span class="chev">&rsaquo;</span>
+      </summary>
+      <div class="nr-panel-body">
+        <div class="link-box">
+          <span class="muted">Scoring link (share this to score):</span>
+          <input type="text" readonly value="${location.origin + location.pathname}#/play/${round.id}" onclick="this.select()">
+          <button class="ghost" id="copyScoreLinkBtn" data-url="${location.origin + location.pathname}#/play/${round.id}">Copy</button>
+        </div>
+        <div class="link-box">
+          <span class="muted">Spectator link:</span>
+          <input type="text" readonly value="${spectatorUrl}" onclick="this.select()">
+          <button class="ghost" id="copyBtn">Copy</button>
+        </div>
+      </div>
+    </details>
 
-    <div class="link-box">
-      <span class="muted">Spectator link:</span>
-      <input type="text" readonly value="${spectatorUrl}" onclick="this.select()">
-      <button class="ghost" id="copyBtn">Copy</button>
-    </div>
+    <details class="nr-panel" id="panelViewPlayers">
+      <summary>
+        <span class="ic">&#128101;</span>
+        <div class="txt"><div class="label">Players</div><div class="val">${players.length} player${players.length===1?"":"s"}</div></div>
+        <span class="chev">&rsaquo;</span>
+      </summary>
+      <div class="nr-panel-body">
+        <table>
+          <tr><th class="name-col">Name</th><th>Handicap</th><th>Team</th></tr>
+          ${players.map(p => `<tr><td class="name-col">${playerLink(p)}</td><td>${p.playingHandicap}</td><td>${p.team || "-"}</td></tr>`).join("")}
+        </table>
+      </div>
+    </details>
 
-    <h2>Players</h2>
-    <div class="card">
-      <table>
-        <tr><th class="name-col">Name</th><th>Handicap</th><th>Team</th></tr>
-        ${players.map(p => `<tr><td class="name-col">${playerLink(p)}</td><td>${p.playingHandicap}</td><td>${p.team || "-"}</td></tr>`).join("")}
-      </table>
-    </div>
-
-    <h2>Holes — par &amp; stroke index</h2>
-    <div class="card">
-      ${holesReadOnlyHtml(holes)}
-    </div>
+    <details class="nr-panel" id="panelViewHoles">
+      <summary>
+        <span class="ic">&#9971;</span>
+        <div class="txt"><div class="label">Holes — par &amp; stroke index</div><div class="val">18 holes</div></div>
+        <span class="chev">&rsaquo;</span>
+      </summary>
+      <div class="nr-panel-body">
+        ${holesReadOnlyHtml(holes)}
+      </div>
+    </details>
   `;
 }
 
@@ -3520,8 +3546,13 @@ function buildPiekfynEditSection(bundle){
   if (!round.gameModes.includes("piekfyn")) return "";
   const positions = players.map(p => ({ sortOrder: p.sortOrder, name: p.name, team: p.team }));
   return `
-    <h2>Piekfyn Kompetisie</h2>
-    <div class="card">
+    <details class="nr-panel" id="panelEditPiekfyn">
+      <summary>
+        <span class="ic">&#127942;</span>
+        <div class="txt"><div class="label">Piekfyn Kompetisie</div><div class="val">${escapeHtml(round.teamAName) || "Team A"} vs ${escapeHtml(round.teamBName) || "Team B"}</div></div>
+        <span class="chev">&rsaquo;</span>
+      </summary>
+      <div class="nr-panel-body">
       <div class="grid-2">
         <div><label>Team A name</label><input type="text" id="editTeamAName" value="${escapeHtml(round.teamAName) || "Team A"}"></div>
         <div><label>Team B name</label><input type="text" id="editTeamBName" value="${escapeHtml(round.teamBName) || "Team B"}"></div>
@@ -3534,15 +3565,21 @@ function buildPiekfynEditSection(bundle){
       <label>Individual match pairings</label>
       <div id="editPairingBox">${buildEditPairingRadios(positions, round.piekfynPairs)}</div>
       <p class="muted" style="font-size:.75rem;margin-top:6px;">Pairings update automatically if you change player teams below.</p>
-    </div>`;
+      </div>
+    </details>`;
 }
 
 function buildPlayersEditSection(bundle){
   const { round, players } = bundle;
   const isTeamMode = round.gameModes.includes("matchplay") || round.gameModes.includes("piekfyn") || round.gameModes.includes("betterball");
   return `
-    <h2>Players</h2>
-    <div class="card">
+    <details class="nr-panel" id="panelEditPlayers">
+      <summary>
+        <span class="ic">&#128101;</span>
+        <div class="txt"><div class="label">Players</div><div class="val">${players.length} player${players.length===1?"":"s"}</div></div>
+        <span class="chev">&rsaquo;</span>
+      </summary>
+      <div class="nr-panel-body">
       ${players.map(p => `
         <div class="grid-2" style="margin-bottom:8px;">
           <div>
@@ -3563,15 +3600,21 @@ function buildPlayersEditSection(bundle){
             </div>
           </div>
         </div>`).join("")}
-    </div>`;
+      </div>
+    </details>`;
 }
 
 function buildAllianceEditSection(bundle){
   const { round } = bundle;
   if (!round.gameModes.includes("alliance")) return "";
   return `
-    <h2>Alliance</h2>
-    <div class="card">
+    <details class="nr-panel" id="panelEditAlliance">
+      <summary>
+        <span class="ic">&#127919;</span>
+        <div class="txt"><div class="label">Alliance</div><div class="val">Scores per hole</div></div>
+        <span class="chev">&rsaquo;</span>
+      </summary>
+      <div class="nr-panel-body">
       <label>Scores to count per hole</label>
       <select id="editAllianceCount">
         <option value="1" ${round.allianceCount===1?"selected":""}>Best 1 of 4</option>
@@ -3579,7 +3622,8 @@ function buildAllianceEditSection(bundle){
         <option value="3" ${round.allianceCount===3?"selected":""}>Best 3 of 4</option>
         <option value="4" ${round.allianceCount===4?"selected":""}>Best 4 of 4 (all)</option>
       </select>
-    </div>`;
+      </div>
+    </details>`;
 }
 
 function buildScrambleDriveEditSection(bundle){
@@ -3587,8 +3631,13 @@ function buildScrambleDriveEditSection(bundle){
   if (!round.gameModes.includes("alliance") && !round.gameModes.includes("betterball")) return "";
   const parTypes = round.scrambleDriveParTypes || [];
   return `
-    <h2>Scramble drive</h2>
-    <div class="card">
+    <details class="nr-panel" id="panelEditScramble">
+      <summary>
+        <span class="ic">&#127919;</span>
+        <div class="txt"><div class="label">Scramble drive</div><div class="val">${round.scrambleDrive ? "On" : "Off"}</div></div>
+        <span class="chev">&rsaquo;</span>
+      </summary>
+      <div class="nr-panel-body">
       <div class="checkbox-row">
         <input type="checkbox" id="editScrambleDriveCb" ${round.scrambleDrive ? "checked" : ""}>
         <label style="margin:0" for="editScrambleDriveCb">Scramble drive</label>
@@ -3608,14 +3657,20 @@ function buildScrambleDriveEditSection(bundle){
           <label style="margin:0" for="editScramblePar5">Par 5</label>
         </div>
       </div>
-    </div>`;
+      </div>
+    </details>`;
 }
 
 function buildScheduleEditHtml(bundle){
   const { round, holes } = bundle;
   return `
-    <h2>Edit round details</h2>
-    <div class="card">
+    <details class="nr-panel" id="panelEditRoundDetails" open>
+      <summary>
+        <span class="ic">&#128197;</span>
+        <div class="txt"><div class="label">Round details</div><div class="val">${escapeHtml(round.courseName)}</div></div>
+        <span class="chev">&rsaquo;</span>
+      </summary>
+      <div class="nr-panel-body">
       <label>Course name</label>
       <input type="text" id="editCourseName" value="${escapeHtml(round.courseName)}">
       <div class="grid-3">
@@ -3638,16 +3693,22 @@ function buildScheduleEditHtml(bundle){
         <label class="row" style="gap:6px;"><input type="radio" name="editCreatorRole" value="marking" ${round.creatorIsPlaying === false ? "checked" : ""}> I'm scoring/marking only</label>
       </div>
       <p class="muted" style="font-size:.78rem;margin:4px 0 0;">Marking-only rounds won't count as rounds you've played in your history.</p>
-    </div>
+      </div>
+    </details>
 
     ${buildPlayersEditSection(bundle)}
     ${buildAllianceEditSection(bundle)}
     ${buildScrambleDriveEditSection(bundle)}
     ${buildPiekfynEditSection(bundle)}
 
-    <h2>Holes — par &amp; stroke index</h2>
-    <p class="muted">Saving updates this round and your saved course database.</p>
-    <div class="card">
+    <details class="nr-panel" id="panelEditHoles">
+      <summary>
+        <span class="ic">&#9971;</span>
+        <div class="txt"><div class="label">Holes — par &amp; stroke index</div><div class="val">18 holes</div></div>
+        <span class="chev">&rsaquo;</span>
+      </summary>
+      <div class="nr-panel-body">
+      <p class="muted">Saving updates this round and your saved course database.</p>
       ${(() => {
         const byHole = {};
         holes.forEach(h => { byHole[h.holeNumber] = h; });
@@ -3655,7 +3716,8 @@ function buildScheduleEditHtml(bundle){
           n => (byHole[n] ? byHole[n].par : 4),
           n => (byHole[n] ? byHole[n].strokeIndex : n));
       })()}
-    </div>
+      </div>
+    </details>
 
     <div class="row" style="margin:16px 0;">
       <button id="saveScheduleBtn">Save changes</button>
