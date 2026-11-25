@@ -3545,6 +3545,7 @@ function buildPiekfynEditSection(bundle){
   const { round, players } = bundle;
   if (!round.gameModes.includes("piekfyn")) return "";
   const positions = players.map(p => ({ sortOrder: p.sortOrder, name: p.name, team: p.team }));
+  const locked = !!round.competitionId;
   return `
     <details class="nr-panel" id="panelEditPiekfyn">
       <summary>
@@ -3553,6 +3554,14 @@ function buildPiekfynEditSection(bundle){
         <span class="chev">&rsaquo;</span>
       </summary>
       <div class="nr-panel-body">
+      ${locked ? `
+      <p class="muted" style="font-size:.78rem;margin:0 0 10px;">Set for the whole tournament by the organiser — edit from the Competition page, not here.</p>
+      <div class="grid-2">
+        <div><span class="muted">Team A</span><br><strong>${escapeHtml(round.teamAName) || "Team A"}</strong></div>
+        <div><span class="muted">Team B</span><br><strong>${escapeHtml(round.teamBName) || "Team B"}</strong></div>
+      </div>
+      <p style="margin-top:10px;"><span class="muted">Matches:</span><br>${buildPairingSummaryHtml(positions, round.piekfynPairs)}</p>
+      ` : `
       <div class="grid-2">
         <div><label>Team A name</label><input type="text" id="editTeamAName" value="${escapeHtml(round.teamAName) || "Team A"}"></div>
         <div><label>Team B name</label><input type="text" id="editTeamBName" value="${escapeHtml(round.teamBName) || "Team B"}"></div>
@@ -3565,13 +3574,27 @@ function buildPiekfynEditSection(bundle){
       <label>Individual match pairings</label>
       <div id="editPairingBox">${buildEditPairingRadios(positions, round.piekfynPairs)}</div>
       <p class="muted" style="font-size:.75rem;margin-top:6px;">Pairings update automatically if you change player teams below.</p>
+      `}
       </div>
     </details>`;
+}
+// Plain-text version of the pairings for a locked (competition) round — same matchups
+// buildEditPairingRadios would show, just not editable.
+function buildPairingSummaryHtml(positions, currentPairs){
+  const teamA = positions.filter(p => p.team === "A");
+  const teamB = positions.filter(p => p.team === "B");
+  if (teamA.length !== 2 || teamB.length !== 2) return `<span class="muted">Not set yet.</span>`;
+  const [a1,a2] = teamA, [b1,b2] = teamB;
+  const opt1 = [{a:a1.sortOrder,b:b1.sortOrder},{a:a2.sortOrder,b:b2.sortOrder}];
+  const useOpt1 = currentPairs ? JSON.stringify(currentPairs) === JSON.stringify(opt1) : true;
+  const [first, second] = useOpt1 ? [[a1,b1],[a2,b2]] : [[a1,b2],[a2,b1]];
+  return `<strong>${escapeHtml(first[0].name)}</strong> vs <strong>${escapeHtml(first[1].name)}</strong> &nbsp;&middot;&nbsp; <strong>${escapeHtml(second[0].name)}</strong> vs <strong>${escapeHtml(second[1].name)}</strong>`;
 }
 
 function buildPlayersEditSection(bundle){
   const { round, players } = bundle;
   const isTeamMode = round.gameModes.includes("matchplay") || round.gameModes.includes("piekfyn") || round.gameModes.includes("betterball");
+  const teamsLocked = isTeamMode && !!round.competitionId;
   return `
     <details class="nr-panel" id="panelEditPlayers">
       <summary>
@@ -3580,6 +3603,7 @@ function buildPlayersEditSection(bundle){
         <span class="chev">&rsaquo;</span>
       </summary>
       <div class="nr-panel-body">
+      ${teamsLocked ? `<p class="muted" style="font-size:.78rem;margin:0 0 10px;">Team assignments are set for the whole tournament — edit from the Competition page, not here.</p>` : ""}
       ${players.map(p => `
         <div class="grid-2" style="margin-bottom:8px;">
           <div>
@@ -3593,10 +3617,12 @@ function buildPlayersEditSection(bundle){
             </div>
             <div style="flex:1;${isTeamMode ? "" : "display:none;"}">
               <label>Team</label>
-              <select class="edit-p-team" data-id="${p.id}">
+              ${teamsLocked
+                ? `<div style="padding:9px 0;font-weight:700;">${p.team === "A" ? "A" : p.team === "B" ? "B" : "-"}</div>`
+                : `<select class="edit-p-team" data-id="${p.id}">
                 <option value="A" ${p.team==="A"?"selected":""}>A</option>
                 <option value="B" ${p.team==="B"?"selected":""}>B</option>
-              </select>
+              </select>`}
             </div>
           </div>
         </div>`).join("")}
@@ -3607,6 +3633,8 @@ function buildPlayersEditSection(bundle){
 function buildAllianceEditSection(bundle){
   const { round } = bundle;
   if (!round.gameModes.includes("alliance")) return "";
+  const locked = !!round.competitionId;
+  const countLabel = { 1: "Best 1 of 4", 2: "Best 2 of 4", 3: "Best 3 of 4", 4: "Best 4 of 4 (all)" }[round.allianceCount || 2];
   return `
     <details class="nr-panel" id="panelEditAlliance">
       <summary>
@@ -3615,6 +3643,10 @@ function buildAllianceEditSection(bundle){
         <span class="chev">&rsaquo;</span>
       </summary>
       <div class="nr-panel-body">
+      ${locked ? `
+      <p class="muted" style="font-size:.78rem;margin:0 0 6px;">Set for the whole tournament by the organiser — edit from the Competition page, not here.</p>
+      <strong>${countLabel}</strong>
+      ` : `
       <label>Scores to count per hole</label>
       <select id="editAllianceCount">
         <option value="1" ${round.allianceCount===1?"selected":""}>Best 1 of 4</option>
@@ -3622,6 +3654,7 @@ function buildAllianceEditSection(bundle){
         <option value="3" ${round.allianceCount===3?"selected":""}>Best 3 of 4</option>
         <option value="4" ${round.allianceCount===4?"selected":""}>Best 4 of 4 (all)</option>
       </select>
+      `}
       </div>
     </details>`;
 }
@@ -3630,6 +3663,7 @@ function buildScrambleDriveEditSection(bundle){
   const { round } = bundle;
   if (!round.gameModes.includes("alliance") && !round.gameModes.includes("betterball")) return "";
   const parTypes = round.scrambleDriveParTypes || [];
+  const locked = !!round.competitionId;
   return `
     <details class="nr-panel" id="panelEditScramble">
       <summary>
@@ -3638,6 +3672,10 @@ function buildScrambleDriveEditSection(bundle){
         <span class="chev">&rsaquo;</span>
       </summary>
       <div class="nr-panel-body">
+      ${locked ? `
+      <p class="muted" style="font-size:.78rem;margin:0 0 6px;">Set for the whole tournament by the organiser — edit from the Competition page, not here.</p>
+      <strong>${round.scrambleDrive ? `On — ${parTypes.length ? parTypes.map(p=>"Par "+p).join(", ") : "no par types chosen"}` : "Off"}</strong>
+      ` : `
       <div class="checkbox-row">
         <input type="checkbox" id="editScrambleDriveCb" ${round.scrambleDrive ? "checked" : ""}>
         <label style="margin:0" for="editScrambleDriveCb">Scramble drive</label>
@@ -3657,6 +3695,7 @@ function buildScrambleDriveEditSection(bundle){
           <label style="margin:0" for="editScramblePar5">Par 5</label>
         </div>
       </div>
+      `}
       </div>
     </details>`;
 }
@@ -3744,7 +3783,8 @@ async function saveSchedule(spectatorUrl){
     id: p.id,
     name: document.querySelector(`.edit-p-name[data-id="${p.id}"]`).value.trim() || p.name,
     playingHandicap: parseInt(document.querySelector(`.edit-p-hcp[data-id="${p.id}"]`).value || p.playingHandicap, 10),
-    team: document.querySelector(`.edit-p-team[data-id="${p.id}"]`).value,
+    // Team select doesn't exist when it's locked for a tournament round (read-only text instead) - keep the player's current team then.
+    team: (document.querySelector(`.edit-p-team[data-id="${p.id}"]`) || {}).value || p.team,
   }));
 
   const updates = { courseName, roundDate, teeTime, teeBox, creatorIsPlaying };
